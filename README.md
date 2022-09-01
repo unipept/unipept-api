@@ -5,6 +5,7 @@ This package is an implementation of the Unipept API that's being used by the Un
 This is an exhaustive list of all endpoints that are exposed by this API
 
 ### Public endpoints
+#### API v1
 * `/api/v1/pept2taxa`
 * `/api/v1/pept2lca`
 * `/api/v1/taxa2lca`
@@ -18,6 +19,7 @@ This is an exhaustive list of all endpoints that are exposed by this API
 * `/api/v1/taxonomy`
 * `/api/v1/messages`
 
+#### API v2
 * `/api/v2/pept2taxa`
 * `/api/v2/pept2lca`
 * `/api/v2/taxa2lca`

@@ -1,0 +1,13 @@
+# == Schema Information
+#
+# Table name: ec_cross_references
+#
+#  id               :integer          unsigned, not null, primary key
+#  uniprot_entry_id :integer          unsigned, not null
+#  ec_number_code   :string(15)       not null
+#
+
+eccrossreference1:
+    id: 1
+    uniprot_entry_id: 1
+    ec_number_code: "1.2.3.4"

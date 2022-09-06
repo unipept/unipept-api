@@ -13,7 +13,7 @@ gem "mysql2", "~> 0.5"
 gem "puma", "~> 5.0"
 
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
-# gem "jbuilder"
+gem "jbuilder"
 
 # Use Redis adapter to run Action Cable in production
 # gem "redis", "~> 4.0"
@@ -46,3 +46,14 @@ group :development do
   # gem "spring"
 end
 
+gem "octokit", "~> 5.4"
+
+gem "stathat", "~> 0.1.7"
+
+gem "responders", "~> 3.0"
+
+gem "rails-controller-testing", "~> 1.0", :group => :test
+
+gem "oj", "~> 3.13"
+
+gem 'multi_json',  '~> 1.15.0'

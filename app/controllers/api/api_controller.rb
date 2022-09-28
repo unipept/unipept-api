@@ -276,7 +276,7 @@ class Api::ApiController < ApplicationController
   def log
     return unless Rails.application.config.unipept_API_logging
 
-    StatHat::API.ez_post_count('API - ' + action_name, Rails.application.config.unipept_stathat_key, 1)
+    StatHat::API.ez_post_count("API - #{action_name}", Rails.application.config.unipept_stathat_key, 1)
   end
 
   # enable cross origin requests
@@ -294,9 +294,10 @@ class Api::ApiController < ApplicationController
     @v1 = request.env['PATH_INFO'].include? 'v1'
     unsafe_hash = params.to_unsafe_h
     @input = unsafe_hash[:input]
-    if @input.is_a? Hash        # hash
+    case @input
+    when Hash # hash
       @input = @input.values
-    elsif @input.is_a? String   # string
+    when String # string
       @input = if @input[0] == '[' # parse json
                  JSON.parse @input
                else # comma separated
@@ -384,13 +385,13 @@ class Api::ApiController < ApplicationController
         total: fa['num']['all'],
         ec: ecs.map do |k, v|
               {
-                ec_number: k[3..-1],
+                ec_number: k[3..],
                 protein_count: v
               }
             end
       }
 
-      ec_numbers.push(*(ecs.map { |k, _v| k[3..-1] }))
+      ec_numbers.push(*(ecs.map { |k, _v| k[3..] }))
     end
 
     if @extra_info
@@ -490,13 +491,13 @@ class Api::ApiController < ApplicationController
         total: fa['num']['all'],
         ipr: iprs.map do |k, v|
                {
-                 code: k[4..-1],
+                 code: k[4..],
                  protein_count: v
                }
              end
       }
 
-      ipr_entries.push(*(iprs.map { |k, _v| k[4..-1] }))
+      ipr_entries.push(*(iprs.map { |k, _v| k[4..] }))
     end
 
     if @extra_info || @domains

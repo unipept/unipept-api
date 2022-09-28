@@ -23,7 +23,7 @@ class Sequence < ApplicationRecord
   belongs_to :lca_il_t, foreign_key: 'lca_il', primary_key: 'id', class_name: 'Taxon'
 
   alias generated_peptides peptides
-  def peptides(equate_il = true)
+  def peptides(equate_il: true)
     if equate_il
       generated_peptides
     else
@@ -31,7 +31,7 @@ class Sequence < ApplicationRecord
     end
   end
 
-  def lineages(equate_il = true, eager = false)
+  def lineages(equate_il: true, eager: false)
     raise(ArgumentError, ':equate_il must be a boolean') unless Sequence.boolean?(equate_il)
     raise(ArgumentError, ':eager must be a boolean') unless Sequence.boolean?(eager)
 
@@ -46,7 +46,7 @@ class Sequence < ApplicationRecord
   end
 
   # Calculates the lowest common ancestor for this sequence
-  def calculate_lca(equate_il = true, return_taxon = false)
+  def calculate_lca(equate_il: true, return_taxon: false)
     if equate_il
       return lca_il_t if return_taxon
 
@@ -67,7 +67,7 @@ class Sequence < ApplicationRecord
   end
 
   # Calculates thefor this sequence
-  def calculate_fa(equate_il = true)
+  def calculate_fa(equate_il: true)
     equate_il ? fa_il : fa
   end
 
@@ -122,7 +122,7 @@ class Sequence < ApplicationRecord
 
     if equate_il
       Sequence.new(
-        sequence: sequence,
+        sequence:,
         lca_il: lca.id,
         lca_il_t: lca,
         fa: false,
@@ -130,7 +130,7 @@ class Sequence < ApplicationRecord
       )
     else
       Sequence.new(
-        sequence: sequence,
+        sequence:,
         lca: lca.id,
         lca_t: lca,
         fa: fadata,
@@ -152,18 +152,18 @@ class Sequence < ApplicationRecord
   end
 
   # search for a single sequence, include information through join tables
-  def self.single_search(sequence, equate_il = true)
+  def self.single_search(sequence, equate_il: true)
     raise(ArgumentError, ':equate_il must be a boolean') unless boolean?(equate_il)
     raise SequenceTooShortError if sequence.length < 5
 
     sequence = sequence.tr('I', 'L') if equate_il
     # this solves the N+1 query problem
     includes(peptides_relation_name(equate_il) => { uniprot_entry: %i[taxon ec_cross_references go_cross_references] })
-      .find_by(sequence: sequence)
+      .find_by(sequence:)
   end
 
   # try to find multiple matches for a single sequence
-  def self.advanced_single_search(sequence, equate_il = true)
+  def self.advanced_single_search(sequence, equate_il: true)
     raise(ArgumentError, ':equate_il must be a boolean') unless boolean?(equate_il)
     # sanity check
     raise(NoMatchesFoundError, sequence) if sequence.index(/([KR])([^P])/).nil?

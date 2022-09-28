@@ -1,17 +1,7 @@
 class MpaController < HandleOptionsController
-  before_action :set_headers, only: %i[pept2data]
-  before_action :default_format_json, except: ['analyze']
-  skip_before_action :verify_authenticity_token
-
-  def analyze
-    @header_class = 'MPA'
-    @title = 'Metaproteomics analysis result'
-    @peptides = (params[:qs] || '')
-    @name = params[:search_name]
-    @il = params[:il].present?
-    @dupes = params[:dupes].present?
-    @missed = params[:missed].present?
-  end
+  before_action :set_headers
+  before_action :default_format_json
+  skip_before_action :verify_authenticity_token, :raise => false
 
   def pept2data
     peptides = params[:peptides] || []

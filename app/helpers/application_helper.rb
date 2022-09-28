@@ -1,5 +1,5 @@
 module ApplicationHelper
-  def lineage_info(lineage, include_names = false)
+  def lineage_info(lineage, include_names: false)
     order = if @v1
               Lineage::ORDER_V1
             else
@@ -15,8 +15,8 @@ module ApplicationHelper
       lineage_arr = lineage.to_a
       # repair array to be consistent with ranks that have been added or deleted in v2 of the API
       if @v1
-        lineage_arr = lineage_arr.insert(9, '')
-        lineage_arr = lineage_arr.insert(14, '')
+        lineage_arr.insert(9, '')
+        lineage_arr.insert(14, '')
         lineage_arr.delete_at(26)
       end
       a = names.zip(lineage_arr)

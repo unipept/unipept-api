@@ -61,7 +61,7 @@ class Node
 
   # used by Oj.dump to exclude the root
   def to_hash
-    hash = Hash[instance_variables.map { |var| [var[1..-1].to_sym, instance_variable_get(var)] }]
+    hash = Hash[instance_variables.map { |var| [var[1..].to_sym, instance_variable_get(var)] }]
     hash.delete(:root)
     hash.delete(:nodes)
     hash.delete(:sequences)

@@ -1,17 +1,7 @@
 class MpaController < HandleOptionsController
-  before_action :set_headers, only: %i[pept2data]
-  before_action :default_format_json, except: ['analyze']
-  skip_before_action :verify_authenticity_token
-
-  def analyze
-    @header_class = 'MPA'
-    @title = 'Metaproteomics analysis result'
-    @peptides = (params[:qs] || '')
-    @name = params[:search_name]
-    @il = params[:il].present?
-    @dupes = params[:dupes].present?
-    @missed = params[:missed].present?
-  end
+  before_action :set_headers, only: %i[pept2data, pept2gm]
+  before_action :default_format_json
+  skip_before_action :verify_authenticity_token, :raise => false
 
   def pept2data
     peptides = params[:peptides] || []
@@ -32,6 +22,23 @@ class MpaController < HandleOptionsController
     @peptides.each do |sequence|
       @results_fa[sequence.sequence] = sequence.calculate_fa(@equate_il)
     end
+  end
+
+  def pept2filtered
+    peptides = params[:peptides] || []
+    missed = params[:missed] || false
+    taxa_filter_ids = (params[:taxa] || []).map(&:to_i)
+
+    @equate_il = params[:equate_il].nil? ? true : params[:equate_il]
+
+    @sequences = Sequence
+                  .joins(peptides: [:uniprot_entry])
+                  .includes(peptides: [:uniprot_entry])
+                  .where(sequence: peptides)
+                  .where(uniprot_entry: { taxon_id: taxa_filter_ids })
+                  .uniq
+
+    @seq_entries = @sequences.map { |s| [s, s.peptides.map { |p| p.uniprot_entry }.select { |e| taxa_filter_ids.include? e.taxon_id }]  }
   end
 
   private

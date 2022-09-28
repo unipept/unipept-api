@@ -187,9 +187,6 @@ class Api::ApiControllerTest < ActionController::TestCase
     get :pept2taxa, params: { input: %w[AAIER AAILER], format: 'json', extra: 'true', names: 'true' }
     assert_response :success
     assert_equal '*', @response.headers['Access-Control-Allow-Origin']
-
-    puts @response.inspect
-
     assert @response.body.include? 'AAIER'
     assert @response.body.include? 'AAILER'
     assert_not @response.body.include? 'AALLER'

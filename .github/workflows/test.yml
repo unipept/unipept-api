@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mysql:
-        image: mariadb:10.5
+        image: mariadb:10.9
         env:
           MYSQL_DATABASE: "unipept_test"
           MYSQL_ROOT_PASSWORD: "unipept"

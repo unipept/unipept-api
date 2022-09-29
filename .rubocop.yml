@@ -48,3 +48,5 @@ Naming/PredicateName:
   Enabled: false
 Naming/MethodParameterName:
   Enabled: false
+Style/OptionalBooleanParameter:
+  Enabled: false

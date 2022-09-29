@@ -1,5 +1,5 @@
 module ApplicationHelper
-  def lineage_info(lineage, include_names: false)
+  def lineage_info(lineage, include_names = false)
     order = if @v1
               Lineage::ORDER_V1
             else

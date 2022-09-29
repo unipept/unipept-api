@@ -1,4 +1,4 @@
-name: Ruby
+name: Test
 
 on: [push]
 
@@ -26,6 +26,6 @@ jobs:
           bundler-cache: true
       - name: Run tests
         env:
-          RAILS_ENV: "test"
+          RAILS_ENV: "github_actions"
         run: |
           bundle exec rails test

@@ -1,7 +1,7 @@
 class PrivateApiController < HandleOptionsController
   before_action :set_headers, only: %i[goterms ecnumbers interpros taxa proteins metadata]
   before_action :default_format_json
-  skip_before_action :verify_authenticity_token
+  skip_before_action :verify_authenticity_token, raise: false
 
   def goterms
     go_terms = params[:goterms] || []

@@ -2,9 +2,11 @@ set :application, 'unipept-api'
 set :repo_url,  'https://github.com/unipept/unipept-api.git'
 
 # set :linked_files, %w{config/database.yml}
-set :linked_dirs, %w[log tmp vendor/bundle public/system]
-
-require "bundler/capistrano"
+append :linked_dirs, '.bundle'
+append :linked_dirs, 'log'
+append :linked_dirs, 'tmp'
+append :linked_dirs, 'vendor/bundle'
+append :linked_dirs, 'public/system'
 
 namespace :deploy do
   desc 'Restart application'

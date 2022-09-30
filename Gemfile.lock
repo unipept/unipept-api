@@ -79,6 +79,8 @@ GEM
       i18n
       rake (>= 10.0.0)
       sshkit (>= 1.9.0)
+    capistrano-bundler (2.1.0)
+      capistrano (~> 3.1)
     concurrent-ruby (1.1.10)
     crass (1.0.6)
     debug (1.6.2)
@@ -229,6 +231,7 @@ PLATFORMS
 DEPENDENCIES
   bootsnap
   capistrano (~> 3.17)
+  capistrano-bundler (~> 2.1)
   debug
   jbuilder
   multi_json (~> 1.15.0)

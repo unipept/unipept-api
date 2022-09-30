@@ -59,3 +59,5 @@ gem "oj", "~> 3.13"
 gem 'multi_json',  '~> 1.15.0'
 
 gem "rubocop", "~> 1.36"
+
+gem "capistrano", "~> 3.17"

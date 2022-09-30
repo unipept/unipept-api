@@ -81,6 +81,9 @@ GEM
       sshkit (>= 1.9.0)
     capistrano-bundler (2.1.0)
       capistrano (~> 3.1)
+    capistrano-rvm (0.1.2)
+      capistrano (~> 3.0)
+      sshkit (~> 1.2)
     concurrent-ruby (1.1.10)
     crass (1.0.6)
     debug (1.6.2)
@@ -232,6 +235,7 @@ DEPENDENCIES
   bootsnap
   capistrano (~> 3.17)
   capistrano-bundler (~> 2.1)
+  capistrano-rvm (~> 0.1.2)
   debug
   jbuilder
   multi_json (~> 1.15.0)

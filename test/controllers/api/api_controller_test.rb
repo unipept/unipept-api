@@ -154,9 +154,6 @@ class Api::ApiControllerTest < ActionController::TestCase
   test 'should get pept2taxa with extra' do
     get :pept2taxa, params: { input: %w[AAIER AAILER], format: 'json', extra: 'true' }
     assert_response :success
-
-    puts @response.body.inspect
-
     assert_equal '*', @response.headers['Access-Control-Allow-Origin']
     assert @response.body.include? 'AAIER'
     assert @response.body.include? 'AAILER'
@@ -370,11 +367,9 @@ class Api::ApiControllerTest < ActionController::TestCase
   end
 
   test 'should get taxonomy' do
-    puts 'taxonomy'
     get :taxonomy, params: { input: %w[1 2], format: 'json' }
     assert_response :success
     assert_equal '*', @response.headers['Access-Control-Allow-Origin']
-    puts @response.inspect
     assert @response.body.include? 'taxon_id'
     assert @response.body.include? 'taxon_name'
     assert @response.body.include? 'taxon_rank'

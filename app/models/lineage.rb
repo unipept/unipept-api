@@ -184,7 +184,6 @@ class Lineage < ApplicationRecord
     root = Node.new(1, 'Organism', nil, 'no rank') # start constructing the tree
     taxa_with_lineage.each do |taxon|
       current_node = root
-      puts taxon.inspect
 
       Lineage.ranks.each do |rank|
         lineage_id = taxon.lineage.send(rank)

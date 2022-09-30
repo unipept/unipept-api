@@ -122,7 +122,7 @@ class Sequence < ApplicationRecord
 
     if equate_il
       Sequence.new(
-        sequence: sequence,
+        sequence:,
         lca_il: lca.id,
         lca_il_t: lca,
         fa: false,
@@ -130,7 +130,7 @@ class Sequence < ApplicationRecord
       )
     else
       Sequence.new(
-        sequence: sequence,
+        sequence:,
         lca: lca.id,
         lca_t: lca,
         fa: fadata,
@@ -159,7 +159,7 @@ class Sequence < ApplicationRecord
     sequence = sequence.tr('I', 'L') if equate_il
     # this solves the N+1 query problem
     includes(peptides_relation_name(equate_il) => { uniprot_entry: %i[taxon ec_cross_references go_cross_references] })
-      .find_by(sequence: sequence)
+      .find_by(sequence:)
   end
 
   # try to find multiple matches for a single sequence

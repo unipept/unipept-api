@@ -1,7 +1,7 @@
 class MpaController < HandleOptionsController
-  before_action :set_headers, only: %i[pept2data, pept2gm]
+  before_action :set_headers
   before_action :default_format_json
-  skip_before_action :verify_authenticity_token, :raise => false
+  skip_before_action :verify_authenticity_token, raise: false
 
   def pept2data
     peptides = params[:peptides] || []

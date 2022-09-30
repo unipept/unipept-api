@@ -80,7 +80,7 @@ class UniprotEntry < ApplicationRecord
         .each do |cr|
         ups_with_ec.add(cr.uniprot_entry_id)
         # Also count in how many proteins this EC number occurs
-        data['EC:' + cr.ec_number_code] += 1
+        data["EC:#{cr.ec_number_code}"] += 1
       end
     end
 
@@ -93,7 +93,7 @@ class UniprotEntry < ApplicationRecord
         .all
         .each do |cr|
         ups_with_ipr.add(cr.uniprot_entry_id)
-        data['IPR:' + cr.interpro_entry_code] += 1
+        data["IPR:#{cr.interpro_entry_code}"] += 1
       end
     end
 

@@ -57,3 +57,11 @@ gem "rails-controller-testing", "~> 1.0", :group => :test
 gem "oj", "~> 3.13"
 
 gem 'multi_json',  '~> 1.15.0'
+
+gem "rubocop", "~> 1.36"
+
+gem "capistrano", "~> 3.17"
+
+gem "capistrano-bundler", "~> 2.1"
+
+gem "capistrano-rvm", "~> 0.1.2"

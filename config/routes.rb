@@ -46,4 +46,13 @@ Rails.application.routes.draw do
     match 'taxonomy' => 'api#taxonomy', via: %i[get post]
     match 'messages' => 'api#messages', via: %i[get post]
   end
+
+  scope :mpa, as: 'mpa' do
+    match '/*path', via: [:options], to: 'handle_options#handle_options_request'
+    match 'pept2data', via: %i[get post], to: 'mpa#pept2data'
+  end
+
+  scope :datasets, as: 'datasets' do
+    match 'sampledata', via: [:post], to: 'datasets#sampledata'
+  end
 end

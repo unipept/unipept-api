@@ -26,19 +26,19 @@ class MpaController < HandleOptionsController
 
   def pept2filtered
     peptides = params[:peptides] || []
-    missed = params[:missed] || false
+    # missed = params[:missed] || false
     taxa_filter_ids = (params[:taxa] || []).map(&:to_i)
 
     @equate_il = params[:equate_il].nil? ? true : params[:equate_il]
 
     @sequences = Sequence
-                  .joins(peptides: [:uniprot_entry])
-                  .includes(peptides: [:uniprot_entry])
-                  .where(sequence: peptides)
-                  .where(uniprot_entry: { taxon_id: taxa_filter_ids })
-                  .uniq
+                 .joins(peptides: [:uniprot_entry])
+                 .includes(peptides: [:uniprot_entry])
+                 .where(sequence: peptides)
+                 .where(uniprot_entry: { taxon_id: taxa_filter_ids })
+                 .uniq
 
-    @seq_entries = @sequences.map { |s| [s, s.peptides.map { |p| p.uniprot_entry }.select { |e| taxa_filter_ids.include? e.taxon_id }]  }
+    @seq_entries = @sequences.map { |s| [s, s.peptides.map(&:uniprot_entry).select { |e| taxa_filter_ids.include? e.taxon_id }] }
   end
 
   private

@@ -38,6 +38,17 @@ class MpaController < HandleOptionsController
                  .where(uniprot_entry: { taxon_id: taxa_filter_ids })
                  .uniq
 
+    uniprot_ids = @sequences.map { |s| s.peptides.map(&:uniprot_entry_id) }.flatten.uniq
+
+    @go_terms = GoCrossReference
+                .where(uniprot_entry_id: uniprot_ids)
+
+    @ec_numbers = EcCrossReference
+                  .where(uniprot_entry_id: uniprot_ids)
+
+    @ipr_entries = InterproCrossReference
+                   .where(uniprot_entry_id: uniprot_ids)
+
     @seq_entries = @sequences.map { |s| [s, s.peptides.map(&:uniprot_entry).select { |e| taxa_filter_ids.include? e.taxon_id }] }
   end
 

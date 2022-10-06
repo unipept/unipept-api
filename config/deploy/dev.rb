@@ -7,7 +7,7 @@ server 'sherlock.ugent.be', user: 'unipept', roles: %i[web app], ssh_options: {
   port: 4840
 }
 
-set :branch, 'develop'
+set :branch, 'feature/pept2filtered'
 set :rails_env, :development
 
 namespace :deploy do

@@ -24,6 +24,34 @@ class MpaController < HandleOptionsController
     end
   end
 
+  def pept2filtered
+    peptides = params[:peptides] || []
+    # missed = params[:missed] || false
+    taxa_filter_ids = (params[:taxa] || []).map(&:to_i)
+
+    @equate_il = params[:equate_il].nil? ? true : params[:equate_il]
+
+    @sequences = Sequence
+                 .joins(peptides: [:uniprot_entry])
+                 .includes(peptides: [:uniprot_entry])
+                 .where(sequence: peptides)
+                 .where(uniprot_entry: { taxon_id: taxa_filter_ids })
+                 .uniq
+
+    uniprot_ids = @sequences.map { |s| s.peptides.map(&:uniprot_entry_id) }.flatten.uniq
+
+    @go_terms = GoCrossReference
+                .where(uniprot_entry_id: uniprot_ids)
+
+    @ec_numbers = EcCrossReference
+                  .where(uniprot_entry_id: uniprot_ids)
+
+    @ipr_entries = InterproCrossReference
+                   .where(uniprot_entry_id: uniprot_ids)
+
+    @seq_entries = @sequences.map { |s| [s, s.peptides.map(&:uniprot_entry).select { |e| taxa_filter_ids.include? e.taxon_id }] }
+  end
+
   private
 
   def default_format_json

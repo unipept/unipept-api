@@ -273,11 +273,11 @@ class Api::ApiController < ApplicationController
   private
 
   # log all api calls to stathat
-  def log
-    return unless Rails.application.config.unipept_API_logging
-
-    StatHat::API.ez_post_count("API - #{action_name}", Rails.application.config.unipept_stathat_key, 1)
-  end
+  # def log
+  #   return unless Rails.application.config.unipept_API_logging
+  #
+  #   StatHat::API.ez_post_count("API - #{action_name}", Rails.application.config.unipept_stathat_key, 1)
+  # end
 
   # enable cross origin requests
   def set_headers

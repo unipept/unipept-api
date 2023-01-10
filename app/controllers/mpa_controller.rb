@@ -2,6 +2,7 @@ class MpaController < HandleOptionsController
   before_action :set_headers
   before_action :default_format_json
   skip_before_action :verify_authenticity_token, raise: false
+  require 'set'
 
   def pept2data
     peptides = params[:peptides] || []
@@ -27,29 +28,37 @@ class MpaController < HandleOptionsController
   def pept2filtered
     peptides = params[:peptides] || []
     # missed = params[:missed] || false
-    taxa_filter_ids = (params[:taxa] || []).map(&:to_i)
+    taxa_filter_ids = (params[:taxa] || []).map(&:to_i).to_set
+
+    puts "Length of peptides is: " + peptides.length.to_s
 
     @equate_il = params[:equate_il].nil? ? true : params[:equate_il]
 
-    @sequences = Sequence
-                 .joins(peptides: [:uniprot_entry])
-                 .includes(peptides: [:uniprot_entry])
-                 .where(sequence: peptides)
-                 .where(uniprot_entry: { taxon_id: taxa_filter_ids })
-                 .uniq
+    @result = Sequence
+                .where(sequence: peptides)
+                .map { |s| [s, taxa_filter_ids.intersection(Lineage.invert_lca(s.lca))] }
+                .reject { |s| s[1].empty? }
 
-    uniprot_ids = @sequences.map { |s| s.peptides.map(&:uniprot_entry_id) }.flatten.uniq
-
-    @go_terms = GoCrossReference
-                .where(uniprot_entry_id: uniprot_ids)
-
-    @ec_numbers = EcCrossReference
-                  .where(uniprot_entry_id: uniprot_ids)
-
-    @ipr_entries = InterproCrossReference
-                   .where(uniprot_entry_id: uniprot_ids)
-
-    @seq_entries = @sequences.map { |s| [s, s.peptides.map(&:uniprot_entry).select { |e| taxa_filter_ids.include? e.taxon_id }] }
+    #
+    # @sequences = Sequence
+    #              .joins(peptides: [:uniprot_entry])
+    #              .includes(peptides: [:uniprot_entry])
+    #              .where(sequence: peptides)
+    #              .where(uniprot_entry: { taxon_id: taxa_filter_ids })
+    #              .uniq
+    #
+    # uniprot_ids = @sequences.map { |s| s.peptides.map(&:uniprot_entry_id) }.flatten.uniq
+    #
+    # @go_terms = GoCrossReference
+    #             .where(uniprot_entry_id: uniprot_ids)
+    #
+    # @ec_numbers = EcCrossReference
+    #               .where(uniprot_entry_id: uniprot_ids)
+    #
+    # @ipr_entries = InterproCrossReference
+    #                .where(uniprot_entry_id: uniprot_ids)
+    #
+    # @seq_entries = @sequences.map { |s| [s, s.peptides.map(&:uniprot_entry).select { |e| taxa_filter_ids.include? e.taxon_id }] }
   end
 
   private

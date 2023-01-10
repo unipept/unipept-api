@@ -34,6 +34,8 @@
 class Lineage < ApplicationRecord
   include ReadOnlyModel
 
+  require 'set'
+
   has_many :uniprot_entries,      foreign_key: 'taxon_id',      primary_key: 'taxon_id', class_name: 'UniprotEntry'
 
   belongs_to :name,               foreign_key: 'taxon_id',      primary_key: 'id',  class_name: 'Taxon'
@@ -150,6 +152,15 @@ class Lineage < ApplicationRecord
 
   def hits
     self[:hits] || 1
+  end
+
+  # returns a list of ncbi taxon_ids that are all descendants of the given LCA id.
+  def self.invert_lca(lca_id)
+    descendants = %x["/Users/pverscha/Downloads/invert_lca.sh" #{lca_id}]
+    # descendants = %x["/home/unipept/invert_lca.sh" #{lca_id}]
+    result = descendants.split(/,/).reject(&:empty?).map(&:to_i).to_set
+    puts "Length of descendants is: " + descendants.split(/,/).reject(&:empty?).length.to_s
+    return result
   end
 
   # returns the Taxon object of the lowest common ancestor

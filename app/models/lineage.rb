@@ -159,7 +159,6 @@ class Lineage < ApplicationRecord
     # descendants = %x["/Users/pverscha/Downloads/invert_lca.sh" #{lca_id}]
     descendants = %x["/home/unipept/invert_lca.sh" #{lca_id}]
     result = descendants.split(/,/).reject(&:empty?).map(&:to_i).to_set
-    puts "Length of descendants is: " + descendants.split(/,/).reject(&:empty?).length.to_s
     return result
   end
 

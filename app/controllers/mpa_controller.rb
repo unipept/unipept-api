@@ -30,8 +30,6 @@ class MpaController < HandleOptionsController
     # missed = params[:missed] || false
     taxa_filter_ids = (params[:taxa] || []).map(&:to_i).to_set
 
-    puts "Length of peptides is: " + peptides.length.to_s
-
     @equate_il = params[:equate_il].nil? ? true : params[:equate_il]
 
     @result = Sequence

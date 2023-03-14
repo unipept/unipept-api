@@ -1,3 +1,6 @@
+require:
+  - rubocop-rails
+
 AllCops:
   Exclude:
     - "Gemfile"
@@ -17,6 +20,13 @@ Style/ClassAndModuleChildren:
   Enabled: false
 
 Style/FrozenStringLiteralComment:
+  Enabled: false
+
+Rails/InverseOf:
+  Enabled: false
+Rails/HasManyOrHasOneDependent:
+  Enabled: false
+Rails/HelperInstanceVariable:
   Enabled: false
 
 # disable for now

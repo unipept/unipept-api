@@ -13,7 +13,7 @@ class Peptide < ApplicationRecord
 
   belongs_to :uniprot_entry
   belongs_to :sequence
-  belongs_to :original_sequence, foreign_key: 'original_sequence_id', primary_key: 'id', class_name: 'Sequence'
+  belongs_to :original_sequence, primary_key: 'id', class_name: 'Sequence'
 
   # since this is a read-only model, these validations aren't used
   validates :sequence_id, presence: true

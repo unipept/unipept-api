@@ -8,7 +8,7 @@ class Api::ApiController < ApplicationController
   before_action :set_query, only: %i[pept2taxa pept2lca peptinfo taxonomy]
   before_action :set_sequences, only: %i[pept2prot]
 
-  before_action :log, only: %i[pept2taxa pept2lca pept2prot pept2funct pept2ec pept2go pept2interpro peptinfo taxa2lca taxonomy taxa2tree]
+  # before_action :log, only: %i[pept2taxa pept2lca pept2prot pept2funct pept2ec pept2go pept2interpro peptinfo taxa2lca taxonomy taxa2tree]
 
   # sends a message to the ruby cli
   def messages
@@ -273,11 +273,11 @@ class Api::ApiController < ApplicationController
   private
 
   # log all api calls to stathat
-  def log
-    return unless Rails.application.config.unipept_API_logging
-
-    StatHat::API.ez_post_count("API - #{action_name}", Rails.application.config.unipept_stathat_key, 1)
-  end
+  # def log
+  #   return unless Rails.application.config.unipept_API_logging
+  #
+  #   StatHat::API.ez_post_count("API - #{action_name}", Rails.application.config.unipept_stathat_key, 1)
+  # end
 
   # enable cross origin requests
   def set_headers

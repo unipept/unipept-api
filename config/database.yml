@@ -22,8 +22,7 @@ test:
 github_actions:
   <<: *default
   database: unipept_test
-  host: 127.0.0.1
-  port: 3306
+  url: <%= ENV['TEST_DATABASE_URL'] || ENV['DATABASE_URL'] %>
 
 production:
   <<: *default

@@ -14,12 +14,9 @@
 class UniprotEntry < ApplicationRecord
   include ReadOnlyModel
 
-  has_many :refseq_cross_references
-  has_many :embl_cross_references
   has_many :ec_cross_references
   has_many :go_cross_references
   has_many :interpro_cross_references
-  has_many :proteome_cross_references
 
   has_many :peptides
   has_many :ec_numbers, through: :ec_cross_references

@@ -26,4 +26,5 @@ jobs:
           bundler-cache: true
       - name: Run tests
         run: |
+          bundle exec rails db:test:prepare
           bundle exec rails test

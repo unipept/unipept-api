@@ -5,8 +5,8 @@ on: [push]
 jobs:
   test:
     env:
-      RAILS_ENV: "github_actions"
-      DATABASE_URL: "mysql2://root:unipept@127.0.0.1:3306/unipept_test"
+      RAILS_ENV: "test"
+      TEST_DATABASE_URL: "mysql2://root:unipept@127.0.0.1:3306/unipept_test"
     runs-on: ubuntu-latest
     services:
       mysql:
@@ -25,7 +25,5 @@ jobs:
         with:
           bundler-cache: true
       - name: Run tests
-        env:
-          RAILS_ENV: "github_actions"
         run: |
           bundle exec rails test

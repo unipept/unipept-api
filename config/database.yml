@@ -17,11 +17,6 @@ development:
 test:
   <<: *default
   database: unipept_test
-  socket: /tmp/mysql.sock
-
-github_actions:
-  <<: *default
-  database: unipept_test
   url: <%= ENV['TEST_DATABASE_URL'] || ENV['DATABASE_URL'] %>
 
 production:

@@ -26,9 +26,9 @@ class UniprotEntry < ApplicationRecord
   has_many :go_terms, through: :go_cross_references
   has_many :interpro_entries, through: :interpro_cross_references
 
-  belongs_to :taxon,            foreign_key: 'taxon_id',
-                                primary_key: 'id',
-                                class_name: 'Taxon'
+  belongs_to :taxon,
+             primary_key: 'id',
+             class_name: 'Taxon'
 
   belongs_to :lineage,          foreign_key: 'taxon_id',
                                 primary_key: 'taxon_id',
@@ -63,7 +63,7 @@ class UniprotEntry < ApplicationRecord
         GoCrossReference
           .where(uniprot_entry_id: id_batch)
           .all
-          .each do |cr|
+          .find_each do |cr|
             ups_with_go.add(cr.uniprot_entry_id)
             # Also count in how many proteins this GO term occurs
             data[cr.go_term_code] += 1
@@ -77,7 +77,7 @@ class UniprotEntry < ApplicationRecord
       EcCrossReference
         .where(uniprot_entry_id: id_batch)
         .all
-        .each do |cr|
+        .find_each do |cr|
         ups_with_ec.add(cr.uniprot_entry_id)
         # Also count in how many proteins this EC number occurs
         data["EC:#{cr.ec_number_code}"] += 1
@@ -91,7 +91,7 @@ class UniprotEntry < ApplicationRecord
       InterproCrossReference
         .where(uniprot_entry_id: id_batch)
         .all
-        .each do |cr|
+        .find_each do |cr|
         ups_with_ipr.add(cr.uniprot_entry_id)
         data["IPR:#{cr.interpro_entry_code}"] += 1
       end

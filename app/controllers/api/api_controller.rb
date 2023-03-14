@@ -264,7 +264,7 @@ class Api::ApiController < ApplicationController
   # param[names]: "true" or "false", Include the lineage names
   def taxonomy
     @result = @query.where(id: @input)
-    @result = Hash[@result.map { |t| [t.id, t] }]
+    @result = @result.index_by(&:id)
     @input_order = @input.select { |i| @result.key? i.to_i }
     @result = @input_order.map { |i| @result[i.to_i] }
     respond_with(@result)

@@ -18,9 +18,13 @@ class Sequence < ApplicationRecord
 
   has_many :peptides
   has_many :original_peptides, foreign_key: 'original_sequence_id', primary_key: 'id', class_name: 'Peptide'
+  has_many :seq_taxa_cross_references, foreign_key: 'seq_id', primary_key: 'id', class_name: 'SeqTaxaCrossReference'
+  has_one :seq_fa_cross_reference, foreign_key: 'seq_id', primary_key: 'id', class_name: 'SeqFaCrossReference'
+  has_one :seq_fa_il_cross_reference, foreign_key: 'seq_id', primary_key: 'id', class_name: 'SeqFaIlCrossReference'
 
   belongs_to :lca_t, foreign_key: 'lca', primary_key: 'id', class_name: 'Taxon'
   belongs_to :lca_il_t, foreign_key: 'lca_il', primary_key: 'id', class_name: 'Taxon'
+
 
   alias generated_peptides peptides
   def peptides(equate_il = true)
@@ -59,14 +63,14 @@ class Sequence < ApplicationRecord
   end
 
   def fa_il
-    unmarshall_fa(:fa_il)
+    unmarshall_fa(self.seq_fa_il_cross_reference, :fa_il)
   end
 
   def fa
-    unmarshall_fa(:fa)
+    unmarshall_fa(self.seq_fa_cross_reference, :fa)
   end
 
-  # Calculates thefor this sequence
+  # Calculates the functional annotations for this sequence
   def calculate_fa(equate_il = true)
     equate_il ? fa_il : fa
   end
@@ -213,15 +217,15 @@ class Sequence < ApplicationRecord
   private
 
   # Parse the JSON in :fa of :fa_il
-  def unmarshall_fa(prop)
-    if self[prop].blank?
-      return nil if self[prop] == false
+  def unmarshall_fa(cross_reference, prop)
+    if cross_reference[prop].blank?
+      return nil if cross_reference[prop] == false
 
-      self[prop] = { 'num' => { 'all' => 0, 'EC' => 0, 'GO' => 0 }, 'data' => {} }
+      cross_reference[prop] = { 'num' => { 'all' => 0, 'EC' => 0, 'GO' => 0 }, 'data' => {} }
     end
-    return self[prop] if self[prop].is_a?(Hash)
+    return cross_reference[prop] if cross_reference[prop].is_a?(Hash)
 
-    self[prop] = Oj.load(self[prop])
+    cross_reference[prop] = Oj.load(cross_reference[prop])
   end
 end
 

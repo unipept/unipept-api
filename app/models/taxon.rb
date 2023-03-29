@@ -12,6 +12,8 @@
 class Taxon < ApplicationRecord
   include ReadOnlyModel
 
+  has_many :seq_taxa_cross_references, foreign_key: 'taxon_id', primary_key: 'id', class_name: 'SeqTaxaCrossReference'
+
   belongs_to :lineage, foreign_key: 'id', primary_key: 'taxon_id', class_name: 'Lineage'
 
   scope :with_genome, -> { distinct.joins('RIGHT JOIN uniprot_entries ON taxons.id = uniprot_entries.taxon_id') }

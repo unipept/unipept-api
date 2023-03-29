@@ -24,6 +24,28 @@ class MpaController < HandleOptionsController
     end
   end
 
+  def taxa2pept
+    taxa = (params[:taxa] || []).map(&:to_i)
+
+    @taxa_seq = Hash.new
+    taxa.each_slice(100) do |taxa_slice|
+      @taxa_seq = @taxa_seq.merge(
+        SeqTaxaCrossReference
+          .distinct
+          .select(:seq_id)
+          .where(taxon_id: taxa_slice)
+          .group(:taxon_id)
+          .count
+      )
+    end
+
+    # Add count 0 for all requested taxa that where not found
+    taxa.each do |taxon_id|
+      @taxa_seq[taxon_id] = 0 unless @taxa_seq.key?(taxon_id)
+    end
+
+  end
+
   def pept2filtered
     peptides = params[:peptides] || []
     # missed = params[:missed] || false

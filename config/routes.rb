@@ -33,6 +33,7 @@ Rails.application.routes.draw do
     match 'peptinfo' => 'api#peptinfo', via: %i[get post]
     match 'taxonomy' => 'api#taxonomy', via: %i[get post]
     match 'messages' => 'api#messages', via: %i[get post]
+    match 'protinfo' => 'api#protinfo', via: %i[get post]
   end
 
   namespace :api, path: 'api/v2' do
@@ -49,5 +50,6 @@ Rails.application.routes.draw do
     match 'peptinfo' => 'api#peptinfo', via: %i[get post]
     match 'taxonomy' => 'api#taxonomy', via: %i[get post]
     match 'messages' => 'api#messages', via: %i[get post]
+    match 'protinfo' => 'api#protinfo', via: %i[get post]
   end
 end

@@ -4,7 +4,7 @@ json.array! @input_order do |uniprot_id|
 
     json.ec @result[uniprot_id][:ec]
     json.go @result[uniprot_id][:go]
-    json.interpro @result[uniprot_id][:interpro]
+    json.ipr @result[uniprot_id][:ipr]
 
     json.taxon_id @result[uniprot_id][:taxon][:id]
     json.taxon_name @result[uniprot_id][:taxon][:name]

@@ -284,7 +284,7 @@ class Api::ApiController < ApplicationController
             taxon: uniprot_id.taxon,
             ec: uniprot_id.ec_numbers.map { |ec| { ec_number: ec.code } },
             go: uniprot_id.go_terms.map { |go| { go_term: go.code } },
-            interpro: uniprot_id.interpro_entries.map { |interpro| { code: interpro.code } }
+            ipr: uniprot_id.interpro_entries.map { |interpro| { code: interpro.code } }
           }
         end
       end

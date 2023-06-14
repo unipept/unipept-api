@@ -3,8 +3,8 @@ require 'octokit'
 class Api::ApiController < ApplicationController
   respond_to :json
 
-  before_action :set_headers, only: %i[pept2taxa pept2lca pept2prot pept2funct pept2ec pept2go pept2interpro peptinfo taxa2lca taxonomy taxa2tree]
-  before_action :set_params, only: %i[pept2taxa pept2lca pept2prot pept2funct pept2ec pept2go pept2interpro peptinfo taxa2lca taxonomy taxa2tree]
+  before_action :set_headers, only: %i[pept2taxa pept2lca pept2prot pept2funct pept2ec pept2go pept2interpro peptinfo taxa2lca taxonomy taxa2tree protinfo]
+  before_action :set_params, only: %i[pept2taxa pept2lca pept2prot pept2funct pept2ec pept2go pept2interpro peptinfo taxa2lca taxonomy taxa2tree protinfo]
   before_action :set_query, only: %i[pept2taxa pept2lca peptinfo taxonomy]
   before_action :set_sequences, only: %i[pept2prot]
 
@@ -267,6 +267,28 @@ class Api::ApiController < ApplicationController
     @result = @result.index_by(&:id)
     @input_order = @input.select { |i| @result.key? i.to_i }
     @result = @input_order.map { |i| @result[i.to_i] }
+    respond_with(@result)
+  end
+
+  # Returns the taxonomic and functional information for given uniprot id's
+  # param[input]: Array, required, List of input uniprot id's
+  def protinfo
+    @result = {}
+
+    UniprotEntry
+      .includes(:taxon, :ec_numbers, :go_terms, :interpro_entries)
+      .where(uniprot_accession_number: @input_order)
+      .find_in_batches do |batch|
+        batch.each do |uniprot_id|
+          @result[uniprot_id.uniprot_accession_number] = {
+            taxon: uniprot_id.taxon,
+            ec: uniprot_id.ec_numbers.map { |ec| { ec_number: ec.code } },
+            go: uniprot_id.go_terms.map { |go| { go_term: go.code } },
+            ipr: uniprot_id.interpro_entries.map { |interpro| { code: interpro.code } }
+          }
+        end
+      end
+
     respond_with(@result)
   end
 

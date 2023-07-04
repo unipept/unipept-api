@@ -9,14 +9,14 @@ class MpaController < HandleOptionsController
     @equate_il = params[:equate_il].nil? ? true : params[:equate_il]
 
     # If equate_il is set, we have to replace all I's by and L in the input peptides.
-    equalized_pepts = peptides.map { |p| p.gsub('I', 'L') } if @equate_il
+    equalized_pepts = @equate_il ? peptides.map { |p| p.gsub('I', 'L') } : peptides
 
     @peptides = Sequence
                 .includes(Sequence.lca_t_relation_name(@equate_il) => :lineage)
                 .where(sequence: equalized_pepts)
                 .where.not(Sequence.lca_t_relation_name(@equate_il) => nil)
     if missed
-      @peptides += peptides
+      @peptides += equalized_pepts
                    .to_set.subtract(@peptides.map(&:sequence))
                    .map { |p| Sequence.missed_cleavage(p, @equate_il) }
                    .compact
@@ -34,7 +34,7 @@ class MpaController < HandleOptionsController
     @original_pep_fas = {}
 
     peptides.each do |original_seq|
-      equalized_seq = original_seq.gsub('I', 'L')
+      equalized_seq = @equate_il ? original_seq.gsub('I', 'L') : original_seq
       if eq_seq_to_info.key? equalized_seq
         @original_pep_results[original_seq] = eq_seq_to_info[equalized_seq]
         @original_pep_fas[original_seq] = eq_seq_to_fa[equalized_seq]

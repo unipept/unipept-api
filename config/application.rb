@@ -13,16 +13,16 @@ module UnipeptApi
     config.load_defaults 7.0
 
     config.versions = {
-      unipept: '4.6.4',
-      gem: '2.2.1',
-      uniprot: '2021.03',
-      desktop: '1.2.4'
+      unipept: '5.0.9',
+      gem: '3.0.2',
+      uniprot: '2023.03',
+      desktop: '2.0.0'
     }
-    
+
     config.api_only = true
 
     config.api_host = 'api.unipept.ugent.be'
-    
+
     MultiJson.use :Oj
   end
 end

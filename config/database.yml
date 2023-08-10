@@ -6,6 +6,7 @@ default: &default
 
 development:
   <<: *default
+  username: unipept
   database: unipept
   # setup local port forwarding for this to work
   host: 127.0.0.1

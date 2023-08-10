@@ -44,6 +44,7 @@ class MpaController < HandleOptionsController
 
   def pept2filtered
     peptides = params[:peptides] || []
+    cutoff = params[:cutoff] || 1000
     # missed = params[:missed] || false
     taxa_filter_ids = (params[:taxa] || []).map(&:to_i)
 
@@ -52,11 +53,18 @@ class MpaController < HandleOptionsController
     @seq_entries = {}
     uniprot_ids = []
 
+    peptides_under_cutoff = Sequence
+      .joins(:peptides)
+      .where(sequence: peptides)
+      .group('sequences.id')
+      .having('count(peptides.id) < ?', cutoff)
+      .pluck(:sequence)
+
     taxa_filter_ids.each_slice(5000) do |taxa_slice|
       sequence_subset = Sequence
                         .joins(peptides: [:uniprot_entry])
                         .includes(peptides: [:uniprot_entry])
-                        .where(sequence: peptides)
+                        .where(sequence: peptides_under_cutoff)
                         .where(uniprot_entry: { taxon_id: taxa_slice })
                         .uniq
 

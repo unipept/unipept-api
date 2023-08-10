@@ -1,11 +1,12 @@
 default: &default
   adapter: mysql2
-  username: unipept
+  username: root
   password: unipept
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
 
 development:
   <<: *default
+  username: unipept
   database: unipept
   # setup local port forwarding for this to work
   host: 127.0.0.1

@@ -54,11 +54,11 @@ class MpaController < HandleOptionsController
     uniprot_ids = []
 
     peptides_under_cutoff = Sequence
-      .joins(:peptides)
-      .where(sequence: peptides)
-      .group('sequences.id')
-      .having('count(peptides.id) < ?', cutoff)
-      .pluck(:sequence)
+                            .joins(:peptides)
+                            .where(sequence: peptides)
+                            .group('sequences.id')
+                            .having('count(peptides.id) < ?', cutoff)
+                            .pluck(:sequence)
 
     taxa_filter_ids.each_slice(5000) do |taxa_slice|
       sequence_subset = Sequence

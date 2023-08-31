@@ -61,6 +61,17 @@ class MpaController < HandleOptionsController
                             .pluck(:sequence)
 
     taxa_filter_ids.each_slice(5000) do |taxa_slice|
+      # For all given taxon id's, filter out those that are invalid according to Unipept's filter
+      # i.e. these taxa are typically rubbish (for example those that end in bacterium and are classified at the
+      # species rank).
+      taxa_slice = Taxon
+                   .where(id: taxa_slice)
+                   .where(valid_taxon: 1)
+                   .pluck(:id)
+
+      # If none of the taxa in this slice are valid, skip this iteration of the loop and continue with the next one.
+      next if taxa_slice.empty?
+
       sequence_subset = Sequence
                         .joins(peptides: [:uniprot_entry])
                         .includes(peptides: [:uniprot_entry])

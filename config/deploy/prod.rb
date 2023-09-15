@@ -1,3 +1,5 @@
+# Example: cap prod deploy server=patty.taild1497.ts.net
+
 set :stage, :prod
 
 set :deploy_to, '/home/unipept/rails'

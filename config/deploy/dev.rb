@@ -2,12 +2,14 @@ set :stage, :dev
 
 set :deploy_to, '/home/unipept/rails'
 
+set :server, ENV['server'] || 'patty.ugent.be'
+
 # don't specify db as it's not needed for unipept
-server 'sherlock.ugent.be', user: 'unipept', roles: %i[web app], ssh_options: {
+server "#{fetch(:server)}", user: 'unipept', roles: %i[web app], ssh_options: {
   port: 4840
 }
 
-set :branch, 'feature/pept2filtered'
+set :branch, 'fix/options_request_api'
 set :rails_env, :development
 
 namespace :deploy do

@@ -21,6 +21,7 @@ Rails.application.routes.draw do
   end
 
   namespace :api, path: 'api/v1' do
+    match '/*path', via: [:options], to: 'handle_options#handle_options_request'
     match 'pept2taxa' => "api#pept2taxa", via: %i[get post]
     match 'pept2lca' => "api#pept2lca", via: %i[get post]
     match 'taxa2lca' => 'api#taxa2lca', via: %i[get post]
@@ -37,6 +38,7 @@ Rails.application.routes.draw do
   end
 
   namespace :api, path: 'api/v2' do
+    match '/*path', via: [:options], to: 'handle_options#handle_options_request'
     match 'pept2taxa' => "api#pept2taxa", via: %i[get post]
     match 'pept2lca' => "api#pept2lca", via: %i[get post]
     match 'taxa2lca' => 'api#taxa2lca', via: %i[get post]

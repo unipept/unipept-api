@@ -1,5 +1,5 @@
 Rails.application.routes.draw do
-  # General inforamtion
+  # General information
   scope :private_api, as: 'private_api' do
     match "/*path", via: [:options], :to => "handle_options#handle_options_request"
     match "goterms", via: [:get, :post], :to => "private_api#goterms"
@@ -20,8 +20,11 @@ Rails.application.routes.draw do
     match 'sampledata', via: [:post], to: 'datasets#sampledata'
   end
 
-  namespace :api, path: 'api/v1' do
+  scope :api, as: 'api' do
     match '/*path', via: [:options], to: 'handle_options#handle_options_request'
+  end
+
+  namespace :api, path: 'api/v1' do
     match 'pept2taxa' => "api#pept2taxa", via: %i[get post]
     match 'pept2lca' => "api#pept2lca", via: %i[get post]
     match 'taxa2lca' => 'api#taxa2lca', via: %i[get post]

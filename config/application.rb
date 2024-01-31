@@ -15,7 +15,7 @@ module UnipeptApi
     config.versions = {
       unipept: '5.0.9',
       gem: '3.0.2',
-      uniprot: '2023.04',
+      uniprot: '2024.01',
       desktop: '2.0.0'
     }
 

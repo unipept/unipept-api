@@ -19,7 +19,7 @@ class MpaController < HandleOptionsController
 
     @response = Hash.new
     processed_peptides.each do |line|
-      splitted = line.split(";")
+      splitted = line.rstrip.split(";")
       # Skip taxa that are not found
       unless splitted[1] == "/"
         @response[splitted[0]] = splitted[1]

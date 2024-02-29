@@ -26,7 +26,7 @@ class MpaController < HandleOptionsController
       end
     end
 
-    taxa = Taxon.find(@response.values).includes(:lineage)
+    taxa = Taxon.includes(:lineage).find(@response.values)
 
     @lineages = Hash.new
     taxa.each do |taxon|

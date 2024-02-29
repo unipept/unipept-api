@@ -8,6 +8,13 @@ class MpaController < HandleOptionsController
     missed = params[:missed] || false
     @equate_il = params[:equate_il].nil? ? true : params[:equate_il]
 
+    if peptides.empty?
+      @response = Hash.new
+      @lineages = Hash.new
+
+      return
+    end
+
     File.open("/mnt/data/suffix-array/unipept_query.txt", "w+") do |f|
       peptides.each { |element| f.puts(element) }
     end

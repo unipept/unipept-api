@@ -12,7 +12,7 @@ class MpaController < HandleOptionsController
       peptides.each { |element| f.puts(element) }
     end
 
-    command = IO.popen("/mnt/data/Thesis_rust_implementations/target/release/suffixarray -d /mnt/data/suffix-array/protein_database.tsv -t /mnt/data/suffix-array/taxons.tsv -s /mnt/data/suffix-array/unipept_query.txt -m taxon-id > /mnt/data/suffix-array/unipept_result.txt --load-index /mnt/data/suffix-array/swissprot_sparse3_sa.bin")
+    command = IO.popen("/mnt/data/Thesis_rust_implementations/target/release/suffixarray -d /mnt/data/suffix-array/uniprotKB_protein_database.tsv -t /mnt/data/suffix-array/taxons.tsv -s /mnt/data/suffix-array/unipept_query.txt -m taxon-id > /mnt/data/suffix-array/unipept_result.txt --load-index /mnt/data/suffix-array/uniprot_indexed_sparse3_sa.bin")
     Process.wait(command.pid)
 
     processed_peptides = File.readlines('/mnt/data/suffix-array/unipept_result.txt')

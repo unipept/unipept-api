@@ -22,12 +22,11 @@ class MpaController < HandleOptionsController
       splitted = line.rstrip.split(";")
       # Skip taxa that are not found
       unless splitted[1] == "/"
-        @response[splitted[0]] = splitted[1]
+        @response[splitted[0]] = splitted[1].to_i
       end
     end
 
     taxa = Taxon.includes(:lineage).find(@response.values)
-    puts taxa.inspect
 
     @lineages = Hash.new
     taxa.each do |taxon|

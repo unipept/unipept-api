@@ -30,7 +30,7 @@ class MpaController < HandleOptionsController
 
     @lineages = Hash.new
     taxa.each do |taxon|
-      @lineages[taxon.id] = taxon.lineage.to_a
+      @lineages[taxon.id] = taxon.lineage.to_a_idx
     end
 
     puts @lineages.inspect

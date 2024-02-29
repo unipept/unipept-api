@@ -3,7 +3,7 @@ json.peptides @response do |peptide, lca|
   json.lca lca
   json.lineage @lineages[lca]
   json.fa do
-    json.counts {}
-    json.data {}
+    json.counts({})
+    json.data({})
   end
 end

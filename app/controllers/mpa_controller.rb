@@ -27,11 +27,14 @@ class MpaController < HandleOptionsController
     end
 
     taxa = Taxon.includes(:lineage).find(@response.values)
+    puts taxa.inspect
 
     @lineages = Hash.new
     taxa.each do |taxon|
       @lineages[taxon.id] = taxon.lineage
     end
+
+    puts @lineages.inspect
 
     @response
   end

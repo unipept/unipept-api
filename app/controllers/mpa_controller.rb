@@ -8,38 +8,32 @@ class MpaController < HandleOptionsController
     missed = params[:missed] || false
     @equate_il = params[:equate_il].nil? ? true : params[:equate_il]
 
-    # If equate_il is set, we have to replace all I's by and L in the input peptides.
-    equalized_pepts = @equate_il ? peptides.map { |p| p.gsub('I', 'L') } : peptides
-
-    @peptides = Sequence
-                .includes(Sequence.lca_t_relation_name(@equate_il) => :lineage)
-                .where(sequence: equalized_pepts)
-                .where.not(Sequence.lca_t_relation_name(@equate_il) => nil)
-    if missed
-      @peptides += equalized_pepts
-                   .to_set.subtract(@peptides.map(&:sequence))
-                   .map { |p| Sequence.missed_cleavage(p, @equate_il) }
-                   .compact
+    File.open("/mnt/data/suffix-array/unipept_query.txt", "w+") do |f|
+      peptides.each { |element| f.puts(element) }
     end
 
-    eq_seq_to_fa = {}
-    eq_seq_to_info = {}
+    command = IO.popen("/mnt/data/Thesis_rust_implementations/target/release/suffixarray -d /mnt/data/suffix-array/protein_database.tsv -t /mnt/data/suffix-array/taxons.tsv -s /mnt/data/suffix-array/unipept_query.txt -m taxon-id > /mnt/data/suffix-array/unipept_result.txt --load-index /mnt/data/suffix-array/uniprot_indexed_sparse3_sa.bin")
+    Process.wait(command.pid)
 
-    @peptides.each do |sequence|
-      eq_seq_to_fa[sequence.sequence] = sequence.calculate_fa(@equate_il)
-      eq_seq_to_info[sequence.sequence] = sequence
-    end
+    processed_peptides = File.readlines('/mnt/data/suffix-array/unipept_result.txt')
 
-    @original_pep_results = {}
-    @original_pep_fas = {}
-
-    peptides.each do |original_seq|
-      equalized_seq = @equate_il ? original_seq.gsub('I', 'L') : original_seq
-      if eq_seq_to_info.key? equalized_seq
-        @original_pep_results[original_seq] = eq_seq_to_info[equalized_seq]
-        @original_pep_fas[original_seq] = eq_seq_to_fa[equalized_seq]
+    @response = Hash.new
+    processed_peptides.each do |line|
+      splitted = line.split(";")
+      # Skip taxa that are not found
+      unless splitted[1] == "/"
+        @response[splitted[0]] = splitted[1]
       end
     end
+
+    taxa = Taxon.where(id => @response.values).includes(:lineage)
+
+    @lineages = Hash.new
+    taxa.each do |taxon|
+      @lineages[taxon.id] = taxon.lineage
+    end
+
+    @response
   end
 
   def pept2filtered

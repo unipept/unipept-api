@@ -23,7 +23,7 @@ class MpaController < HandleOptionsController
     json_data = {peptides: peptides}.to_json
 
     # The URL to which the request will be sent
-    uri = URI.parse("http://localhost:3000")
+    uri = URI.parse("http://localhost:3000/search")
 
     # Create a POST request
     request = Net::HTTP::Post.new(uri)

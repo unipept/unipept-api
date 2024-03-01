@@ -4,7 +4,7 @@ set :stage, :dev
 
 set :deploy_to, '/home/unipept/rails'
 
-set :server, ENV['server'] || 'rick.ugent.be'
+set :server, ENV['server'] || 'rick.taild1497.ts.net'
 
 # don't specify db as it's not needed for unipept
 server "#{fetch(:server)}", user: 'unipept', roles: %i[web app], ssh_options: {

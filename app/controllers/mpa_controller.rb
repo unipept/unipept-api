@@ -1,3 +1,7 @@
+require 'net/http'
+require 'uri'
+require 'json'
+
 class MpaController < HandleOptionsController
   before_action :set_headers
   before_action :default_format_json
@@ -15,22 +19,32 @@ class MpaController < HandleOptionsController
       return
     end
 
-    File.open("/mnt/data/suffix-array/unipept_query.txt", "w+") do |f|
-      peptides.each { |element| f.puts(element) }
+    # Convert the peptides array into a JSON string
+    json_data = {peptides: peptides}.to_json
+
+    # The URL to which the request will be sent
+    uri = URI.parse("http://localhost:3000")
+
+    # Create a POST request
+    request = Net::HTTP::Post.new(uri)
+    request.content_type = "application/json"
+    request.body = json_data
+
+    # Set up the HTTP session
+    response = Net::HTTP.start(uri.hostname, uri.port) do |http|
+      http.request(request)
     end
 
-    command = IO.popen("/mnt/data/Thesis_rust_implementations/target/release/suffixarray -d /mnt/data/suffix-array/uniprotKB_protein_database.tsv -t /mnt/data/suffix-array/taxons.tsv -s /mnt/data/suffix-array/unipept_query.txt -m taxon-id > /mnt/data/suffix-array/unipept_result.txt --load-index /mnt/data/suffix-array/uniprot_indexed_sparse3_sa.bin")
-    Process.wait(command.pid)
+    # Parse the response body as JSON
+    response_data = JSON.parse(response.body)
 
-    processed_peptides = File.readlines('/mnt/data/suffix-array/unipept_result.txt')
+    # Initialize an empty Hash for the mapping
+    @response = {}
 
-    @response = Hash.new
-    processed_peptides.each do |line|
-      splitted = line.rstrip.split(";")
-      # Skip taxa that are not found
-      unless splitted[1] == "/"
-        @response[splitted[0]] = splitted[1].to_i
-      end
+    # Iterate over the 'result' array in the response data
+    response_data["result"].each do |item|
+      # Map each peptide sequence to its taxon_id in the Hash
+      @response[item["peptide"]] = item["taxon_id"]
     end
 
     taxa = Taxon.includes(:lineage).find(@response.values)

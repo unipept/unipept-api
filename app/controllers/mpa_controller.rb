@@ -37,8 +37,6 @@ class MpaController < HandleOptionsController
       http.request(request)
     end
 
-    puts response.inspect
-
     # Parse the response body as JSON
     response_data = JSON.parse(response.body)
 

@@ -46,18 +46,17 @@ class MpaController < HandleOptionsController
 
     # Iterate over the 'result' array in the response data
     response_data["result"].each do |item|
-      # Map each peptide sequence to its taxon_id in the Hash
-      item["fa"]["data"] = item["fa"]["data"].map do |m|
-        if m.start_with? "IPR"
-          return "IPR:" . m
+      new_data = Hash.new
+      item["fa"]["data"].each do |key, value|
+        if key.start_with? "IPR"
+          new_data["IPR:" . key] = value
+        elsif key.start_with? "GO"
+          new_data[key] = value
+        else
+          new_data["EC". key] = value
         end
-
-        unless m.start_with? "GO" or m.start_with? "IPR"
-          return "EC:" . m
-        end
-
-        return m
       end
+      item["fa"]["data"] = new_data
       @response[item["sequence"]] = item
       taxa.append(item["lca"])
     end

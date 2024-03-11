@@ -1,3 +1,1 @@
-json.peptides @response do |_, data|
-  data
-end
+json.peptides @response.values

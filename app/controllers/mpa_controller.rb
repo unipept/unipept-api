@@ -42,21 +42,21 @@ class MpaController < HandleOptionsController
 
     # Initialize an empty Hash for the mapping
     @response = {}
+    taxa = []
 
     # Iterate over the 'result' array in the response data
     response_data["result"].each do |item|
       # Map each peptide sequence to its taxon_id in the Hash
-      @response[item["peptide"]] = item["taxon_id"]
+      @response[item["sequence"]] = item
+      taxa.append(item["lca"])
     end
 
-    taxa = Taxon.includes(:lineage).find(@response.values)
+    looked_up_taxa = Taxon.includes(:lineage).find(taxa)
 
     @lineages = Hash.new
-    taxa.each do |taxon|
+    looked_up_taxa.each do |taxon|
       @lineages[taxon.id] = taxon.lineage.to_a_idx
     end
-
-    puts @lineages.inspect
 
     @response
   end

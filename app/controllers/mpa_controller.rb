@@ -68,9 +68,9 @@ class MpaController < HandleOptionsController
       @lineages[taxon.id] = taxon.lineage.to_a_idx
     end
 
-    @response.each do |entry|
-      entry["lineage"] = @lineages[entry["lca"].to_i]
-    end
+    # @response.each do |entry|
+    #   entry["lineage"] = @lineages[entry["lca"].to_i]
+    # end
 
     @response
   end

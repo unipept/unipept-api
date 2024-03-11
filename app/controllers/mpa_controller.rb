@@ -49,11 +49,11 @@ class MpaController < HandleOptionsController
       new_data = Hash.new
       item["fa"]["data"].each do |key, value|
         if key.start_with? "IPR"
-          new_data["IPR:" . key] = value
+          new_data["IPR:#{key}"] = value
         elsif key.start_with? "GO"
           new_data[key] = value
         else
-          new_data["EC". key] = value
+          new_data["EC:#{key}"] = value
         end
       end
       item["fa"]["data"] = new_data

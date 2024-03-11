@@ -69,7 +69,7 @@ class MpaController < HandleOptionsController
     end
 
     @response.each do |entry|
-      entry["lineage"] = @lineages[entry["lca"].to_s]
+      entry["lineage"] = @lineages[entry["lca"].to_i]
     end
 
     @response

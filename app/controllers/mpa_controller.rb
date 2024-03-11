@@ -55,6 +55,8 @@ class MpaController < HandleOptionsController
         unless m.start_with? "GO" or m.start_with? "IPR"
           return "EC:" . m
         end
+
+        return m
       end
       @response[item["sequence"]] = item
       taxa.append(item["lca"])

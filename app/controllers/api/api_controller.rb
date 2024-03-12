@@ -109,7 +109,9 @@ class Api::ApiController < HandleOptionsController
       @result[item["sequence"]] = taxon_objs
     end
 
-    # filter_input_order
+    puts @result.inspect
+
+    filter_input_order
 
     respond_with(@result)
   end

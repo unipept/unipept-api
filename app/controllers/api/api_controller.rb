@@ -61,38 +61,52 @@ class Api::ApiController < HandleOptionsController
   # param[equate_il]: "true" or "false", Indicate if you want to equate I and L
   # param[extra]: "true" or "false", Include lineage
   # param[names]: "true" or "false", Include the lineage names
+  # TODO: right now, the parameter "extra" is not yet supported in this branch
   def pept2taxa
     @result = {}
-    lookup = Hash.new { |h, k| h[k] = Set.new }
-    ids = Set.new
 
-    seqid2seq = {}
-    Sequence.where(sequence: @input).select(:id, :sequence).each do |seq|
-      seqid2seq[seq[:id]] = seq[:sequence]
-      @result[seq[:sequence]] = Set.new
+    # Convert the peptides array into a JSON string
+    json_data = {peptides: peptides}.to_json
+
+    # The URL to which the request will be sent
+    uri = URI.parse("http://localhost:3000/search")
+
+    # Create a POST request
+    request = Net::HTTP::Post.new(uri)
+    request.content_type = "application/json"
+    request.body = json_data
+
+    # Set up the HTTP session
+    response = Net::HTTP.start(uri.hostname, uri.port) do |http|
+      http.request(request)
     end
 
-    rel_name = @equate_il ? :sequence_id : :original_sequence_id
-    Peptide.where(rel_name => seqid2seq.keys).select(:id, rel_name, :uniprot_entry_id).find_in_batches do |items|
-      uniprot2seqids = Hash.new { |h, k| h[k] = [] }
-      items.each { |i| uniprot2seqids[i[:uniprot_entry_id]] << i[rel_name] }
+    # Parse the response body as JSON
+    response_data = JSON.parse(response.body)
 
-      UniprotEntry.where(id: uniprot2seqids.keys).select(:id, :taxon_id).each do |entry|
-        uniprot2seqids[entry[:id]].each do |seqid|
-          sequence = seqid2seq[seqid]
-          lookup[entry[:taxon_id]] << sequence
-          ids << entry[:taxon_id]
+    all_taxa = set()
+
+    response_data["result"].each do |item|
+      all_taxa.merge(item.taxa)
+    end
+
+    # Now, retrieve all information associated with the taxa
+    taxon_information = Taxon.find(all_taxa)
+
+    taxon_id_to_obj = Hash.new
+
+    taxon_information.each do |taxon|
+      taxon_id_to_obj[taxon.id] = taxon
+    end
+
+    response_data["result"].each do |item|
+      taxon_objs = []
+      for taxon_id in item.taxa
+        unless taxon_information.key? taxon_id
+          taxon_objs.append(taxon_id_to_obj[taxon_information])
         end
       end
-    end
-
-    ids.delete nil
-    ids = ids.to_a.sort
-
-    @query.where(id: ids).find_in_batches do |group|
-      group.each do |t|
-        lookup[t.id].each { |s| @result[s] << t }
-      end
+      @result[item["sequence"]] = taxon_objs
     end
 
     filter_input_order

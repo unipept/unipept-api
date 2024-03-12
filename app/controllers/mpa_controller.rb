@@ -30,8 +30,6 @@ class MpaController < HandleOptionsController
     request.content_type = "application/json"
     request.body = json_data
 
-    puts json_data
-
     # Set up the HTTP session
     response = Net::HTTP.start(uri.hostname, uri.port) do |http|
       http.request(request)

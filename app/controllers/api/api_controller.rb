@@ -66,7 +66,7 @@ class Api::ApiController < HandleOptionsController
     @result = {}
 
     # Convert the peptides array into a JSON string
-    json_data = {peptides: peptides}.to_json
+    json_data = {peptides: @input}.to_json
 
     # The URL to which the request will be sent
     uri = URI.parse("http://localhost:3000/search")

@@ -87,7 +87,7 @@ class Api::ApiController < HandleOptionsController
     all_taxa = Set.new
 
     response_data["result"].each do |item|
-      all_taxa.merge(item.taxa)
+      all_taxa.merge(item["taxa"])
     end
 
     # Now, retrieve all information associated with the taxa

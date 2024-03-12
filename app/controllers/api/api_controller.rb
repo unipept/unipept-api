@@ -91,7 +91,7 @@ class Api::ApiController < HandleOptionsController
     end
 
     # Now, retrieve all information associated with the taxa
-    taxon_information = Taxon.find(all_taxa)
+    taxon_information = Taxon.find(all_taxa.to_a)
 
     taxon_id_to_obj = Hash.new
 

@@ -84,7 +84,7 @@ class Api::ApiController < HandleOptionsController
     # Parse the response body as JSON
     response_data = JSON.parse(response.body)
 
-    all_taxa = set()
+    all_taxa = Set.new
 
     response_data["result"].each do |item|
       all_taxa.merge(item.taxa)

@@ -101,7 +101,7 @@ class Api::ApiController < HandleOptionsController
 
     response_data["result"].each do |item|
       taxon_objs = []
-      for taxon_id in item.taxa
+      for taxon_id in item["taxa"]
         unless taxon_information.key? taxon_id
           taxon_objs.append(taxon_id_to_obj[taxon_information])
         end

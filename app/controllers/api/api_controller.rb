@@ -103,13 +103,11 @@ class Api::ApiController < HandleOptionsController
       taxon_objs = []
       item["taxa"].each do |taxon_id|
         if taxon_id_to_obj.key? taxon_id
-          taxon_objs.append(taxon_id_to_obj[taxon_information])
+          taxon_objs.append(taxon_id_to_obj[taxon_id])
         end
       end
       @result[item["sequence"]] = taxon_objs
     end
-
-    puts @result.inspect
 
     filter_input_order
 

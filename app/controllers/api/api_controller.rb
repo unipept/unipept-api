@@ -101,6 +101,7 @@ class Api::ApiController < HandleOptionsController
 
     response_data["result"].each do |item|
       taxon_objs = []
+      item["taxa"].uniq!
       item["taxa"].each do |taxon_id|
         if taxon_id_to_obj.key? taxon_id
           taxon_objs.append(taxon_id_to_obj[taxon_id])

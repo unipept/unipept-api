@@ -3,6 +3,6 @@ json.array! @input_order do |peptide|
   if @result.key? seq_index
     json.peptide peptide
     json.total_protein_count @result[seq_index][:total]
-    json.partial! partial: 'api/api/pept2go', locals: { data: @result[seq_index][:go] }
+    json.partial! partial: 'api/pept2go', locals: { data: @result[seq_index][:go] }
   end
 end

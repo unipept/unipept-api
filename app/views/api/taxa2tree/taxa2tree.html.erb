@@ -253,7 +253,7 @@
 
     openTab('info');
 
-    const data = <%= raw render(:template => "api/api/taxa2tree.json", :locals => { item: @root }) %>;
+    const data = <%= raw render(:template => "api/taxa2tree/taxa2tree", :locals => { item: @root }, :formats => [:json]) %>;
 
     function tooltipContent(d) {
         return '<b>' + d.name + '</b> (' + d.rank + ')<br/>' +

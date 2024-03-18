@@ -6,5 +6,5 @@ json.data do
   json.self_count item.data['self_count']
 end
 json.children item.children.each do |child|
-  json.partial! partial: 'api/api/taxa2tree', locals: { item: child }
+  json.partial! partial: 'api/taxa2tree', locals: { item: child }
 end

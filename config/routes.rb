@@ -11,9 +11,9 @@ Rails.application.routes.draw do
   end
 
   scope :mpa, as: 'mpa' do
-    match '/*path', via: [:options], to: 'handle_options#handle_options_request'
-    match 'pept2data', via: %i[get post], to: 'mpa#pept2data'
-    match 'pept2filtered', via: %i[get post], to: 'mpa#pept2filtered'
+    match '/*path' => 'handle_options#handle_options_request', via: [:options]  
+    match 'pept2data' => 'mpa/pept2data#pept2data', via: %i[get post]
+    match 'pept2filtered' => 'mpa/pept2filtered#pept2filtered', via: %i[get post]
   end
 
   scope :datasets, as: 'datasets' do

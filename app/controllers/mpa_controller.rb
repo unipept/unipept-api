@@ -42,8 +42,14 @@ class MpaController < HandleOptionsController
     @response = {}
     taxa = []
 
+    puts response_data.inspect
+
     # Keep track of all proteins that we need to retrieve extra information for from the database
     proteins = Set.new
+
+    response_data["result"].each_slice(50) do |peptide_slice|
+
+    end
 
     response_data["result"].each do |item|
       proteins.merge(item["uniprot_accessions"])
@@ -51,7 +57,7 @@ class MpaController < HandleOptionsController
 
     # Now, retrieve all of these protein accessions from the database and retrieve the functions associated with them.
     entries = UniprotEntry
-                .where(uniprot_accession_number: proteins.to_a)
+                .where(uniprot_accession_number: proteins.to_a.uniq)
 
     # Convert the retrieved entries to a hash (for easy retrieval)
     accession_to_protein = Hash.new
@@ -68,16 +74,16 @@ class MpaController < HandleOptionsController
       taxa.append(item["lca"])
     end
 
-    looked_up_taxa = Taxon.includes(:lineage).find(taxa)
+    looked_up_lineages = Lineage.where(taxon_id: taxa)
 
     @lineages = Hash.new
-    looked_up_taxa.each do |taxon|
-      @lineages[taxon.id] = taxon.lineage.to_a_idx
+    looked_up_lineages.each do |lineage|
+      @lineages[lineage.taxon_id] = lineage.to_a_idx
     end
 
-    # @response.each do |entry|
-    #   entry["lineage"] = @lineages[entry["lca"].to_i]
-    # end
+    @response.each do |_, entry|
+      entry["lineage"] = @lineages[entry["lca"].to_i]
+    end
 
     @response
   end

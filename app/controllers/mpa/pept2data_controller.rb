@@ -2,7 +2,7 @@ class Mpa::Pept2dataController < Mpa::MpaController
   def pept2data
     peptides = params[:peptides] || []
     missed = params[:missed] || false
-    @equate_il = params[:equate_il].nil? ? true : params[:equate_il]
+    @equate_il = params[:equate_il].nil? ? true : params[:equate_il] == 'true'
 
     # If equate_il is set, we have to replace all I's by and L in the input peptides.
     equalized_pepts = @equate_il ? peptides.map { |p| p.gsub('I', 'L') } : peptides

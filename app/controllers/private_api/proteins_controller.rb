@@ -11,7 +11,7 @@ class PrivateApi::ProteinsController < PrivateApi::PrivateApiController
     # the sequence or id of the peptide (filter out all characters that are non-ASCII)
     seq = params[:peptide].upcase.gsub(/\P{ASCII}/, '')
     # should we equate I and L? (true by default)
-    equate_il = params.key?(:equate_il) ? params[:equate_il] : true
+    equate_il = params.key?(:equate_il) ? params[:equate_il] == 'true' : true
 
     begin
       # process the input, convert seq to a valid @sequence

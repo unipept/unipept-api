@@ -18,4 +18,3 @@ class Api::Taxa2lcaController < Api::ApiController
     respond_with(@result)
   end
 end
-  

@@ -9,7 +9,7 @@ module FunctionalityHelper
     @sequences.each do |seq|
       fa = seq.calculate_fa(@equate_il)
       # TODO: this ['num'] is a bug and should be removed before merging
-      #ecs = fa['num']['data'].select { |k, _v| k.start_with?('EC:') }
+      # ecs = fa['num']['data'].select { |k, _v| k.start_with?('EC:') }
       ecs = fa['data'].select { |k, _v| k.start_with?('EC:') }
 
       output[seq.sequence] = {
@@ -30,11 +30,11 @@ module FunctionalityHelper
 
       ec_mapping = {}
 
-      EcNumber.where(code: ec_numbers).each do |ec_term|
+      EcNumber.where(code: ec_numbers).find_each do |ec_term|
         ec_mapping[ec_term.code] = ec_term.name
       end
 
-      output.each do |_k, v|
+      output.each_value do |v|
         v[:ec].each do |value|
           value[:name] = ec_mapping[value[:ec_number]]
         end
@@ -53,7 +53,7 @@ module FunctionalityHelper
     @sequences.each do |seq|
       fa = seq.calculate_fa(@equate_il)
       # TODO: this ['num'] is a bug and should be removed before merging
-      #gos = fa['num']['data'].select { |k, _v| k.start_with?('GO:') }
+      # gos = fa['num']['data'].select { |k, _v| k.start_with?('GO:') }
       gos = fa['data'].select { |k, _v| k.start_with?('GO:') }
 
       output[seq.sequence] = {
@@ -73,7 +73,7 @@ module FunctionalityHelper
       go_terms = go_terms.uniq.compact.sort
 
       go_mapping = {}
-      GoTerm.where(code: go_terms).each do |go_term|
+      GoTerm.where(code: go_terms).find_each do |go_term|
         go_mapping[go_term.code] = go_term
       end
 
@@ -87,7 +87,7 @@ module FunctionalityHelper
                    end
 
         # We have to transform the input so that the different GO-terms are split per namespace
-        output.each do |_k, v|
+        output.each_value do |v|
           splitted = Hash.new { |h, k1| h[k1] = [] }
 
           v[:go].each do |value|
@@ -119,7 +119,7 @@ module FunctionalityHelper
     @sequences.each do |seq|
       fa = seq.calculate_fa(@equate_il)
       # TODO: this ['num'] is a bug and should be removed before merging
-      #iprs = fa['num']['data'].select { |k, _v| k.start_with?('IPR:') }
+      # iprs = fa['num']['data'].select { |k, _v| k.start_with?('IPR:') }
       iprs = fa['data'].select { |k, _v| k.start_with?('IPR:') }
 
       output[seq.sequence] = {
@@ -139,13 +139,13 @@ module FunctionalityHelper
       ipr_entries = ipr_entries.uniq.compact.sort
       ipr_mapping = {}
 
-      InterproEntry.where(code: ipr_entries).each do |ipr_entry|
+      InterproEntry.where(code: ipr_entries).find_each do |ipr_entry|
         ipr_mapping[ipr_entry.code] = ipr_entry
       end
 
       if @domains
         # We have to transform the input so that the different InterPro entries are split per type
-        output.each do |_k, v|
+        output.each_value do |v|
           splitted = Hash.new { |h, k1| h[k1] = [] }
 
           v[:ipr].each do |value|
@@ -173,4 +173,3 @@ module FunctionalityHelper
     output
   end
 end
-  

@@ -22,9 +22,9 @@ class Mpa::Pept2filteredController < Mpa::MpaController
       # i.e. these taxa are typically rubbish (for example those that end in bacterium and are classified at the
       # species rank).
       taxa_slice = Taxon
-                    .where(id: taxa_slice)
-                    .where(valid_taxon: 1)
-                    .pluck(:id)
+                   .where(id: taxa_slice)
+                   .where(valid_taxon: 1)
+                   .pluck(:id)
 
       # If none of the taxa in this slice are valid, skip this iteration of the loop and continue with the next one.
       next if taxa_slice.empty?
@@ -40,9 +40,9 @@ class Mpa::Pept2filteredController < Mpa::MpaController
         @seq_entries[seq_info.sequence] = [] unless @seq_entries.key?(seq_info.sequence)
 
         @seq_entries[seq_info.sequence] += seq_info
-                                            .peptides
-                                            .map(&:uniprot_entry)
-                                            .select { |e| taxa_filter_ids.include? e.taxon_id }
+                                           .peptides
+                                           .map(&:uniprot_entry)
+                                           .select { |e| taxa_filter_ids.include? e.taxon_id }
 
         @seq_entries[seq_info.sequence].uniq!
       end
@@ -59,6 +59,6 @@ class Mpa::Pept2filteredController < Mpa::MpaController
                   .where(uniprot_entry_id: uniprot_ids)
 
     @ipr_entries = InterproCrossReference
-                    .where(uniprot_entry_id: uniprot_ids)
+                   .where(uniprot_entry_id: uniprot_ids)
   end
 end

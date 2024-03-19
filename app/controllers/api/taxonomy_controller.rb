@@ -2,7 +2,7 @@ class Api::TaxonomyController < Api::ApiController
   before_action :set_headers
   before_action :set_params
   before_action :set_query
-  
+
   # Returns the taxonomic information for a given list of taxon id's
   # param[input]: Array, required, List of input taxon ids
   # param[extra]: "true" or "false", Include lineage

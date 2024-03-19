@@ -217,7 +217,7 @@ class Sequence < ApplicationRecord
     if self[prop].blank?
       return nil if self[prop] == false
 
-      self[prop] = { 'num' => { 'all' => 0, 'EC' => 0, 'GO' => 0 }, 'data' => {} }
+      self[prop] = { 'num' => { 'all' => 0, 'EC' => 0, 'GO' => 0, 'IPR' => 0 }, 'data' => {} }
     end
     return self[prop] if self[prop].is_a?(Hash)
 

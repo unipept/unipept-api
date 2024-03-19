@@ -9,5 +9,7 @@ class ActiveSupport::TestCase
   # Setup all fixtures in test/fixtures/*.yml for all tests in alphabetical order.
   fixtures :all
 
-  # Add more helper methods to be used by all tests here...
+  def assert_json
+    assert_equal JSON.parse(@response.body), JSON.parse(@expected)
+  end
 end

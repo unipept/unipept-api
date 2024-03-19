@@ -1,0 +1,17 @@
+if @extra_info
+  json.array! @input_order do |peptide|
+    seq_index = @equate_il ? peptide.tr('I', 'L') : peptide
+    if result.key? seq_index
+      json.peptide peptide
+      json.uniprot_id @result[seq_index][:uniprot_accession_number]
+      json.protein_name @result[seq_index][:name]
+      json.taxon_id @result[seq_index][:taxon_id]
+      json.taxon_name @result[seq_index][:taxon].try(:name)
+      json.ec_references @result[seq_index][:ec_cross_references].map(&:ec_number_code).join(" ")
+      json.go_references @result[seq_index][:go_cross_references].map(&:go_term_code).join(" ")
+      json.ec_references @result[seq_index][:interpro_cross_references].map(&:interpro_entry_code).join(" ")
+    end
+  end
+else
+
+end

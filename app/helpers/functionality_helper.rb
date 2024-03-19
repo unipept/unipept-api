@@ -9,7 +9,8 @@ module FunctionalityHelper
     @sequences.each do |seq|
       fa = seq.calculate_fa(@equate_il)
       # TODO: this ['num'] is a bug and should be removed before merging
-      ecs = fa['num']['data'].select { |k, _v| k.start_with?('EC:') }
+      #ecs = fa['num']['data'].select { |k, _v| k.start_with?('EC:') }
+      ecs = fa['data'].select { |k, _v| k.start_with?('EC:') }
 
       output[seq.sequence] = {
         total: fa['num']['all'],
@@ -52,7 +53,8 @@ module FunctionalityHelper
     @sequences.each do |seq|
       fa = seq.calculate_fa(@equate_il)
       # TODO: this ['num'] is a bug and should be removed before merging
-      gos = fa['num']['data'].select { |k, _v| k.start_with?('GO:') }
+      #gos = fa['num']['data'].select { |k, _v| k.start_with?('GO:') }
+      gos = fa['data'].select { |k, _v| k.start_with?('GO:') }
 
       output[seq.sequence] = {
         total: fa['num']['all'],
@@ -117,7 +119,8 @@ module FunctionalityHelper
     @sequences.each do |seq|
       fa = seq.calculate_fa(@equate_il)
       # TODO: this ['num'] is a bug and should be removed before merging
-      iprs = fa['num']['data'].select { |k, _v| k.start_with?('IPR:') }
+      #iprs = fa['num']['data'].select { |k, _v| k.start_with?('IPR:') }
+      iprs = fa['data'].select { |k, _v| k.start_with?('IPR:') }
 
       output[seq.sequence] = {
         total: fa['num']['all'],

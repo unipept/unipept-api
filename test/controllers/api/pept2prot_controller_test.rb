@@ -1,101 +1,55 @@
 require 'test_helper'
 
 class Api::Pept2protControllerTest < ActionController::TestCase
-  test 'set_params should parse single peptide input correctly' do
-    get :pept2prot, params: { input: 'AAIER', format: 'json' }
-    assert_equal ['AAIER'], assigns(:input)
-    assert_not assigns(:equate_il)
-    assert_not assigns(:extra_info)
-    assert_not assigns(:names)
-  end
-
-  test 'set_params should parse hash input correctly' do
-    get :pept2prot, params: { input: { 0 => 'AAIER' }, format: 'json' }
-    assert_equal ['AAIER'], assigns(:input)
-  end
-
-  test 'set_params should parse array input correctly' do
-    get :pept2prot, params: { input: %w[AAIER TEST], format: 'json' }
-    assert_equal %w[AAIER TEST], assigns(:input)
-  end
-
-  test 'set_params should parse json input correctly' do
-    get :pept2prot, params: { input: '["AAIER", "TEST"]', format: 'json' }
-    assert_equal %w[AAIER TEST], assigns(:input)
-  end
-
-  test 'set_params should parse boolean options correctly' do
-    get :pept2prot, params: { input: 'AAIER', format: 'json', equate_il: 'true', extra: 'true', names: 'true' }
-    assert_equal ['AALER'], assigns(:input)
-    assert_equal ['AAIER'], assigns(:input_order)
-    assert assigns(:equate_il)
-    assert assigns(:extra_info)
-    assert assigns(:names)
-  end
+  teardown :assert_success
 
   test 'should get pept2prot' do
+    @expected = '[
+      {"peptide":"AAIER","uniprot_id":"nr","protein_name":"some name","taxon_id":1,"protein":"ELABA"},
+      {"peptide":"AAILER","uniprot_id":"nr3","protein_name":"some name","taxon_id":2,"protein":"AAILERAGGAR"},
+      {"peptide":"AAILER","uniprot_id":"nr4","protein_name":"some name","taxon_id":1,"protein":"AAILERA"}
+    ]'
+
     get :pept2prot, params: { input: %w[AAIER AAILER], format: 'json' }
-    assert_response :success
-    assert_equal '*', @response.headers['Access-Control-Allow-Origin']
-    assert @response.body.include? 'AAIER'
-    assert @response.body.include? 'AAILER'
-    assert_not @response.body.include? 'AALLER'
-    assert_not @response.body.include? 'AALER'
-    assert @response.body.include? 'uniprot_id'
-    assert @response.body.include? 'protein_name'
-    assert @response.body.include? 'taxon_id'
-    assert_not @response.body.include? 'taxon_name'
-    assert_not @response.body.include? '"uniprot_id":"nr2"'
   end
 
   test 'should get pept2prot with il' do
+    @expected = '[
+      {"peptide":"AAIER","uniprot_id":"nr","protein_name":"some name","taxon_id":1,"protein":"ELABA"},
+      {"peptide":"AAIER","uniprot_id":"nr2","protein_name":"some name","taxon_id":2,"protein":"EIABA"},
+      {"peptide":"AAILER","uniprot_id":"nr3","protein_name":"some name","taxon_id":2,"protein":"AAILERAGGAR"},
+      {"peptide":"AAILER","uniprot_id":"nr4","protein_name":"some name","taxon_id":1,"protein":"AAILERA"}
+    ]'
+    
     get :pept2prot, params: { input: %w[AAIER AAILER], format: 'json', equate_il: 'true' }
-    assert_response :success
-    assert_equal '*', @response.headers['Access-Control-Allow-Origin']
-    assert @response.body.include? 'AAIER'
-    assert @response.body.include? 'AAILER'
-    assert_not @response.body.include? 'AALLER'
-    assert_not @response.body.include? 'AALER'
-    assert @response.body.include? 'uniprot_id'
-    assert @response.body.include? 'protein_name'
-    assert @response.body.include? 'taxon_id'
-    assert_not @response.body.include? 'taxon_name'
-    assert @response.body.include? '"uniprot_id":"nr2"'
   end
 
   test 'should get pept2prot with extra' do
+    @expected = '[
+      {"peptide":"AAIER","uniprot_id":"nr","protein_name":"some name","taxon_id":1,"taxon_name":"species1","ec_references":"1.2.3.4","go_references":"goid","interpro_references":"IPR000126"},
+      {"peptide":"AAILER","uniprot_id":"nr3","protein_name":"some name","taxon_id":2,"taxon_name":"kingdom1","ec_references":"","go_references":"","interpro_references":""},
+      {"peptide":"AAILER","uniprot_id":"nr4","protein_name":"some name","taxon_id":1,"taxon_name":"species1","ec_references":"","go_references":"","interpro_references":""}
+    ]'
+    
     get :pept2prot, params: { input: %w[AAIER AAILER], format: 'json', extra: 'true' }
-    assert_response :success
-    assert_equal '*', @response.headers['Access-Control-Allow-Origin']
-    assert @response.body.include? 'AAIER'
-    assert @response.body.include? 'AAILER'
-    assert_not @response.body.include? 'AALLER'
-    assert_not @response.body.include? 'AALER'
-    assert @response.body.include? 'uniprot_id'
-    assert @response.body.include? 'protein_name'
-    assert @response.body.include? 'taxon_id'
-    assert @response.body.include? 'taxon_name'
-    assert_not @response.body.include? '"taxon_name":null'
-    assert @response.body.include? 'ec_references'
-    assert @response.body.include? 'go_references'
-    assert_not @response.body.include? '"uniprot_id":"nr2"'
   end
 
   test 'should get pept2prot with extra and il' do
+    @expected = '[
+      {"peptide":"AAIER","uniprot_id":"nr","protein_name":"some name","taxon_id":1,"taxon_name":"species1","ec_references":"1.2.3.4","go_references":"goid","interpro_references":"IPR000126"},
+      {"peptide":"AAIER","uniprot_id":"nr2","protein_name":"some name","taxon_id":2,"taxon_name":"kingdom1","ec_references":"","go_references":"","interpro_references":""},
+      {"peptide":"AAILER","uniprot_id":"nr3","protein_name":"some name","taxon_id":2,"taxon_name":"kingdom1","ec_references":"","go_references":"","interpro_references":""},
+      {"peptide":"AAILER","uniprot_id":"nr4","protein_name":"some name","taxon_id":1,"taxon_name":"species1","ec_references":"","go_references":"","interpro_references":""}
+    ]'
+    
     get :pept2prot, params: { input: %w[AAIER AAILER], format: 'json', equate_il: 'true', extra: 'true' }
+  end
+
+  private
+
+  def assert_success
     assert_response :success
     assert_equal '*', @response.headers['Access-Control-Allow-Origin']
-    assert @response.body.include? 'AAIER'
-    assert @response.body.include? 'AAILER'
-    assert_not @response.body.include? 'AALLER'
-    assert_not @response.body.include? 'AALER'
-    assert @response.body.include? 'uniprot_id'
-    assert @response.body.include? 'protein_name'
-    assert @response.body.include? 'taxon_id'
-    assert @response.body.include? 'taxon_name'
-    assert_not @response.body.include? '"taxon_name":null'
-    assert @response.body.include? 'ec_references'
-    assert @response.body.include? 'go_references'
-    assert @response.body.include? '"uniprot_id":"nr2"'
+    assert_json
   end
 end

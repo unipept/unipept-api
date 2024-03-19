@@ -1,4 +1,6 @@
 # Unipept API
+![codecov](https://img.shields.io/codecov/c/github/unipept/unipept-api/develop)
+
 This package is an implementation of the Unipept API that's being used by the Unipept Web Application and Desktop application to succesfully perform analysis of metaproteomics samples.
 
 ## Overview of existing endpoints

@@ -5,10 +5,8 @@ require "rails/test_help"
 require 'simplecov'
 SimpleCov.start 'rails'
 
-if ENV['CI'] == 'true'
-  require 'simplecov-cobertura'
-  SimpleCov.formatter = SimpleCov::Formatter::CoberturaFormatter
-end
+require 'simplecov-cobertura'
+SimpleCov.formatter = SimpleCov::Formatter::CoberturaFormatter
 
 class ActiveSupport::TestCase
   # Run tests in parallel with specified workers

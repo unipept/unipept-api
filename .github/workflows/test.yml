@@ -26,7 +26,6 @@ jobs:
           bundler-cache: true
       - name: Run tests
         env:
-          CI: true
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         run: |
           bundle exec rails db:test:prepare

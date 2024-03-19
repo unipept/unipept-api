@@ -47,7 +47,7 @@ class UniprotEntry < ApplicationRecord
   # Note: this should only be used for peptides who's FA's have
   # not been precalculated (because they were mot in the DB)
   #
-  # @param entries list of UniprotEnteries that match the sequence
+  # @param entries list of UniprotEntries that match the sequence
   def self.summarize_fa(entries)
     data = Hash.new(0)
 

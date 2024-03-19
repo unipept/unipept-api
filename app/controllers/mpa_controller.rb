@@ -42,19 +42,28 @@ class MpaController < HandleOptionsController
     @response = {}
     taxa = []
 
+    # Keep track of all proteins that we need to retrieve extra information for from the database
+    proteins = Set.new
+
+    response_data["result"].each do |item|
+      proteins.merge(item["uniprot_accessions"])
+    end
+
+    # Now, retrieve all of these protein accessions from the database and retrieve the functions associated with them.
+    entries = UniprotEntry
+                .where(uniprot_accession_number: proteins.to_a)
+
+    # Convert the retrieved entries to a hash (for easy retrieval)
+    accession_to_protein = Hash.new
+
+    entries.each do |entry|
+      accession_to_protein[entry.uniprot_accession_number] = entry
+    end
+
     # Iterate over the 'result' array in the response data
     response_data["result"].each do |item|
-      new_data = Hash.new
-      item["fa"]["data"].each do |key, value|
-        if key.start_with? "IPR"
-          new_data["IPR:#{key}"] = value
-        elsif key.start_with? "GO"
-          new_data[key] = value
-        else
-          new_data["EC:#{key}"] = value
-        end
-      end
-      item["fa"]["data"] = new_data
+      uniprot_entries = item["uniprot_accessions"].map { |acc| accession_to_protein[acc] }
+      item["fa"] = UniprotEntry.summarize_fa(uniprot_entries)
       @response[item["sequence"]] = item
       taxa.append(item["lca"])
     end

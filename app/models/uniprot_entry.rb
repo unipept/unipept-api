@@ -59,10 +59,11 @@ class UniprotEntry < ApplicationRecord
     # Count GO term occurrences
     ups_with_go = Set.new
     entries.each do |uniprot_entry|
-      unless uniprot_entry.go_cross_references.length == 0
+      gos = uniprot_entry.go_cross_references.reject { |go| go.go_term_code.empty? }
+      unless gos.length == 0
         ups_with_go.add(uniprot_entry.id)
       end
-      uniprot_entry.go_cross_references.each do |go|
+      gos.each do |go|
         data[go.go_term_code] += 1
       end
     end
@@ -82,10 +83,11 @@ class UniprotEntry < ApplicationRecord
     # Count InterPro code occurences
     ups_with_ipr = Set.new
     entries.each do |uniprot_entry|
-      unless uniprot_entry.interpro_cross_references.length == 0
+      iprs = uniprot_entry.interpro_cross_references.reject { |ipr| ipr.interpro_entry_code.empty? }
+      unless iprs.length == 0
         ups_with_ipr.add(uniprot_entry.id)
       end
-      uniprot_entry.interpro_cross_references.each do |ipr|
+      iprs.each do |ipr|
         data["IPR:#{ipr.interpro_entry_code}"] += 1
       end
     end

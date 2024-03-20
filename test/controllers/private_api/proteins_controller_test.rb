@@ -25,6 +25,24 @@ class PrivateApi::ProteinsControllerTest < ActionController::TestCase
     get :proteins, params: { peptide: "AAAAAAAAA" }
   end
 
+  test 'should get proteins too short sequence' do
+    @expected = '{
+      "name":"Sequence too short",
+      "message":"The peptide sequence you provided is too short. It should contain at least 5 valid amino acids."
+    }'
+
+    get :proteins, params: { peptide: "AAA" }
+  end
+
+  test 'should get proteins without peptides' do
+    @expected = '{
+      "name":"Invalid peptide provided",
+      "message":"No peptide sequence was provided. Please provide a valid peptide sequence."
+    }'
+
+    get :proteins, params: {}
+  end
+
   private
 
   def assert_success

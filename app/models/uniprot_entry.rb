@@ -48,49 +48,45 @@ class UniprotEntry < ApplicationRecord
   # not been precalculated (because they were mot in the DB)
   #
   # @param entries list of UniprotEntries that match the sequence
+  # In order to speed up this query, it's a good idea to include
+  # the cross references already when requesting all UniprotEntry's
+  # with a specific id.
   def self.summarize_fa(entries)
     data = Hash.new(0)
 
     uniprot_entry_ids = entries.map(&:id)
 
-    # Count GO term occurences
+    # Count GO term occurrences
     ups_with_go = Set.new
-    uniprot_entry_ids
-      .each_slice(50) do |id_batch|
-        GoCrossReference
-          .where(uniprot_entry_id: id_batch)
-          .all
-          .find_each do |cr|
-            ups_with_go.add(cr.uniprot_entry_id)
-            # Also count in how many proteins this GO term occurs
-            data[cr.go_term_code] += 1
-          end
+    entries.each do |uniprot_entry|
+      unless uniprot_entry.go_cross_references.length == 0
+        ups_with_go.add(uniprot_entry.id)
       end
+      uniprot_entry.go_cross_references.each do |go|
+        data[go.go_term_code] += 1
+      end
+    end
 
     # Count EC Term occurences
     ups_with_ec = Set.new
-    uniprot_entry_ids
-      .each_slice(50) do |id_batch|
-      EcCrossReference
-        .where(uniprot_entry_id: id_batch)
-        .all
-        .find_each do |cr|
-        ups_with_ec.add(cr.uniprot_entry_id)
-        # Also count in how many proteins this EC number occurs
-        data["EC:#{cr.ec_number_code}"] += 1
+    entries.each do |uniprot_entry|
+      ecs = uniprot_entry.ec_cross_references.reject { |ec| ec.ec_number_code.empty? }
+      unless ecs.length == 0
+        ups_with_ec.add(uniprot_entry.id)
+      end
+      ecs.each do |ec|
+        data[ec.ec_number_code] += 1
       end
     end
 
     # Count InterPro code occurences
     ups_with_ipr = Set.new
-    uniprot_entry_ids
-      .each_slice(50) do |id_batch|
-      InterproCrossReference
-        .where(uniprot_entry_id: id_batch)
-        .all
-        .find_each do |cr|
-        ups_with_ipr.add(cr.uniprot_entry_id)
-        data["IPR:#{cr.interpro_entry_code}"] += 1
+    entries.each do |uniprot_entry|
+      unless uniprot_entry.interpro_cross_references.length == 0
+        ups_with_ipr.add(uniprot_entry.id)
+      end
+      uniprot_entry.interpro_cross_references.each do |ipr|
+        data["IPR:#{ipr.interpro_entry_code}"] += 1
       end
     end
 

@@ -14,8 +14,6 @@ class MpaController < HandleOptionsController
 
     if peptides.empty?
       @response = Hash.new
-      @lineages = Hash.new
-
       return
     end
 
@@ -42,14 +40,8 @@ class MpaController < HandleOptionsController
     @response = {}
     taxa = []
 
-    puts response_data.inspect
-
     # Keep track of all proteins that we need to retrieve extra information for from the database
     proteins = Set.new
-
-    response_data["result"].each_slice(50) do |peptide_slice|
-
-    end
 
     response_data["result"].each do |item|
       proteins.merge(item["uniprot_accessions"])
@@ -57,7 +49,10 @@ class MpaController < HandleOptionsController
 
     # Now, retrieve all of these protein accessions from the database and retrieve the functions associated with them.
     entries = UniprotEntry
-                .where(uniprot_accession_number: proteins.to_a.uniq)
+      .includes(:go_cross_references)
+      .includes(:ec_cross_references)
+      .includes(:interpro_cross_references)
+      .where(uniprot_accession_number: proteins.to_a.uniq)
 
     # Convert the retrieved entries to a hash (for easy retrieval)
     accession_to_protein = Hash.new
@@ -74,7 +69,7 @@ class MpaController < HandleOptionsController
       taxa.append(item["lca"])
     end
 
-    looked_up_lineages = Lineage.where(taxon_id: taxa)
+    looked_up_lineages = Lineage.find(taxa)
 
     @lineages = Hash.new
     looked_up_lineages.each do |lineage|

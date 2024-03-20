@@ -10,7 +10,7 @@
 
 goterm1:
     id: 1
-    code: "GO:12345"
+    code: "GO:0012345"
     namespace: "cellular component"
     name: "some function"
 

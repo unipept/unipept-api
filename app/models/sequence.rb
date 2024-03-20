@@ -76,7 +76,7 @@ class Sequence < ApplicationRecord
     sequences = sequence
                 .gsub(/([KR])([^P])/, "\\1\n\\2")
                 .gsub(/([KR])([^P])/, "\\1\n\\2")
-                .lines.map(&:strip).reject { |i| i.length.zero? }.to_a
+                .lines.map(&:strip).reject(&:empty?).to_a
 
     # If only one sequence is present in this array, no missed cleavages were detected for this sequence and we don't
     # need to continue computing these (since it will not make any difference anyway).
@@ -217,7 +217,7 @@ class Sequence < ApplicationRecord
     if self[prop].blank?
       return nil if self[prop] == false
 
-      self[prop] = { 'num' => { 'all' => 0, 'EC' => 0, 'GO' => 0 }, 'data' => {} }
+      self[prop] = { 'num' => { 'all' => 0, 'EC' => 0, 'GO' => 0, 'IPR' => 0 }, 'data' => {} }
     end
     return self[prop] if self[prop].is_a?(Hash)
 

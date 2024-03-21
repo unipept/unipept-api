@@ -9,19 +9,10 @@
 #  type                     :string(9)        not null
 #  name                     :string(150)      not null
 #  protein                  :text(65535)      not null
-#
+#  fa                       :text(65535)      not null
 
 class UniprotEntry < ApplicationRecord
   include ReadOnlyModel
-
-  has_many :ec_cross_references
-  has_many :go_cross_references
-  has_many :interpro_cross_references
-
-  has_many :peptides
-  has_many :ec_numbers, through: :ec_cross_references
-  has_many :go_terms, through: :go_cross_references
-  has_many :interpro_entries, through: :interpro_cross_references
 
   belongs_to :taxon,
              primary_key: 'id',
@@ -54,41 +45,26 @@ class UniprotEntry < ApplicationRecord
   def self.summarize_fa(entries)
     data = Hash.new(0)
 
-    uniprot_entry_ids = entries.map(&:id)
-
-    # Count GO term occurrences
     ups_with_go = Set.new
-    entries.each do |uniprot_entry|
-      gos = uniprot_entry.go_cross_references.reject { |go| go.go_term_code.empty? }
-      unless gos.length == 0
-        ups_with_go.add(uniprot_entry.id)
-      end
-      gos.each do |go|
-        data[go.go_term_code] += 1
-      end
-    end
-
-    # Count EC Term occurences
     ups_with_ec = Set.new
-    entries.each do |uniprot_entry|
-      ecs = uniprot_entry.ec_cross_references.reject { |ec| ec.ec_number_code.empty? }
-      unless ecs.length == 0
-        ups_with_ec.add(uniprot_entry.id)
-      end
-      ecs.each do |ec|
-        data[ec.ec_number_code] += 1
-      end
-    end
-
-    # Count InterPro code occurences
     ups_with_ipr = Set.new
+
     entries.each do |uniprot_entry|
-      iprs = uniprot_entry.interpro_cross_references.reject { |ipr| ipr.interpro_entry_code.empty? }
-      unless iprs.length == 0
-        ups_with_ipr.add(uniprot_entry.id)
-      end
-      iprs.each do |ipr|
-        data["IPR:#{ipr.interpro_entry_code}"] += 1
+      uniprot_entry.fa.split(";").each do |fa, count|
+        # TODO: These checks can be improved once the fa-object of a protein has been expanded
+        if fa.start_with? "GO"
+          ups_with_go.add(uniprot_entry.id)
+        end
+
+        if fa.start_with? "EC"
+          ups_with_ec.add(uniprot_entry.id)
+        end
+
+        if fa.start_with? "IPR"
+          ups_with_ipr.add(uniprot_entry.id)
+        end
+
+        data[fa] += 1
       end
     end
 

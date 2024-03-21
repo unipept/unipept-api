@@ -12,68 +12,67 @@ class MpaController < HandleOptionsController
     missed = params[:missed] || false
     @equate_il = params[:equate_il].nil? ? true : params[:equate_il]
 
+    @response = Hash.new
+    @lineages = Hash.new
+
     if peptides.empty?
-      @response = Hash.new
       return
     end
 
-    # Convert the peptides array into a JSON string
-    json_data = {peptides: peptides}.to_json
 
-    # The URL to which the request will be sent
-    uri = URI.parse("http://localhost:3000/search")
+    peptides.each_slice(50) do |peptide_slice|
+      # Convert the peptide_slice array into a JSON string
+      json_data = {peptides: peptide_slice}.to_json
 
-    # Create a POST request
-    request = Net::HTTP::Post.new(uri)
-    request.content_type = "application/json"
-    request.body = json_data
+      # The URL to which the request will be sent
+      uri = URI.parse("http://localhost:3000/search")
 
-    # Set up the HTTP session
-    response = Net::HTTP.start(uri.hostname, uri.port) do |http|
-      http.request(request)
-    end
+      # Create a POST request
+      request = Net::HTTP::Post.new(uri)
+      request.content_type = "application/json"
+      request.body = json_data
 
-    # Parse the response body as JSON
-    response_data = JSON.parse(response.body)
+      # Set up the HTTP session
+      response = Net::HTTP.start(uri.hostname, uri.port) do |http|
+        http.request(request)
+      end
 
-    # Initialize an empty Hash for the mapping
-    @response = {}
-    taxa = []
+      # Parse the response body as JSON
+      response_data = JSON.parse(response.body)
 
-    # Keep track of all proteins that we need to retrieve extra information for from the database
-    proteins = Set.new
+      # Keep track of all proteins that we need to retrieve extra information for from the database
+      proteins = Set.new
 
-    response_data["result"].each do |item|
-      proteins.merge(item["uniprot_accessions"])
-    end
+      response_data["result"].each do |item|
+        proteins.merge(item["uniprot_accessions"])
+      end
 
-    # Now, retrieve all of these protein accessions from the database and retrieve the functions associated with them.
-    entries = UniprotEntry
-      .includes(:go_cross_references)
-      .includes(:ec_cross_references)
-      .includes(:interpro_cross_references)
-      .where(uniprot_accession_number: proteins.to_a.uniq)
+      # Now, retrieve all of these protein accessions from the database and retrieve the functions associated with them.
+      entries = UniprotEntry
+                  .where(uniprot_accession_number: proteins.to_a.uniq)
 
-    # Convert the retrieved entries to a hash (for easy retrieval)
-    accession_to_protein = Hash.new
+      # Convert the retrieved entries to a hash (for easy retrieval)
+      accession_to_protein = Hash.new
 
-    entries.each do |entry|
-      accession_to_protein[entry.uniprot_accession_number] = entry
-    end
+      entries.each do |entry|
+        accession_to_protein[entry.uniprot_accession_number] = entry
+      end
 
-    # Iterate over the 'result' array in the response data
-    response_data["result"].each do |item|
-      uniprot_entries = item["uniprot_accessions"].map { |acc| accession_to_protein[acc] }
-      item["fa"] = UniprotEntry.summarize_fa(uniprot_entries)
-      @response[item["sequence"]] = item
-      taxa.append(item["lca"])
-    end
+      taxa = []
 
-    looked_up_lineages = Lineage.find(taxa)
+      # Iterate over the 'result' array in the response data
+      response_data["result"].each do |item|
+        uniprot_entries = item["uniprot_accessions"].map { |acc| accession_to_protein[acc] }
+        item["fa"] = UniprotEntry.summarize_fa(uniprot_entries)
+        @response[item["sequence"]] = item
+        taxa.append(item["lca"])
+      end
 
-    @lineages = Hash.new
-    looked_up_lineages.each do |lineage|
-      @lineages[lineage.taxon_id] = lineage.to_a_idx
+      looked_up_lineages = Lineage.find(taxa)
+
+      looked_up_lineages.each do |lineage|
+        @lineages[lineage.taxon_id] = lineage.to_a_idx
+      end
     end
 
     @response.each do |_, entry|

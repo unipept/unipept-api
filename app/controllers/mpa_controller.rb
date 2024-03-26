@@ -19,6 +19,8 @@ class MpaController < HandleOptionsController
       return
     end
 
+    database_time = 0;
+    aggregation_time = 0;
 
     peptides.each_slice(50) do |peptide_slice|
       # Convert the peptide_slice array into a JSON string
@@ -47,9 +49,13 @@ class MpaController < HandleOptionsController
         proteins.merge(item["uniprot_accessions"])
       end
 
+      starting_databes_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
       # Now, retrieve all of these protein accessions from the database and retrieve the functions associated with them.
       entries = UniprotEntry
                   .where(uniprot_accession_number: proteins.to_a.uniq)
+
+      database_time += Process.clock_gettime(Process::CLOCK_MONOTONIC) - starting_databes_time
 
       # Convert the retrieved entries to a hash (for easy retrieval)
       accession_to_protein = Hash.new
@@ -60,6 +66,8 @@ class MpaController < HandleOptionsController
 
       taxa = []
 
+      starting_aggregation_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
       # Iterate over the 'result' array in the response data
       response_data["result"].each do |item|
         uniprot_entries = item["uniprot_accessions"].map { |acc| accession_to_protein[acc] }
@@ -67,6 +75,8 @@ class MpaController < HandleOptionsController
         @response[item["sequence"]] = item
         taxa.append(item["lca"])
       end
+
+      aggregation_time += Process.clock_gettime(Process::CLOCK_MONOTONIC) - starting_aggregation_time
 
       looked_up_lineages = Lineage.find(taxa)
 
@@ -78,6 +88,9 @@ class MpaController < HandleOptionsController
     @response.each do |_, entry|
       entry["lineage"] = @lineages[entry["lca"].to_i]
     end
+
+    @response["database_time"] = database_time
+    @response["aggregation_time"] = aggregation_time
 
     @response
   end

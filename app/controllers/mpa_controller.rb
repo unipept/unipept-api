@@ -100,8 +100,6 @@ class MpaController < HandleOptionsController
     @timings["index_parse_time"] = index_parse_time
     @timings["database_time"] = database_time
     @timings["aggregation_time"] = aggregation_time
-
-    @response
   end
 
   def pept2filtered

@@ -19,8 +19,10 @@ class MpaController < HandleOptionsController
       return
     end
 
-    database_time = 0;
-    aggregation_time = 0;
+    index_time = 0
+    index_parse_time = 0
+    database_time = 0
+    aggregation_time = 0
 
     peptides.each_slice(50) do |peptide_slice|
       # Convert the peptide_slice array into a JSON string
@@ -34,13 +36,17 @@ class MpaController < HandleOptionsController
       request.content_type = "application/json"
       request.body = json_data
 
+      starting_index_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       # Set up the HTTP session
       response = Net::HTTP.start(uri.hostname, uri.port) do |http|
         http.request(request)
       end
+      index_time += Process.clock_gettime(Process::CLOCK_MONOTONIC) - starting_index_time
 
+      start_index_parse_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       # Parse the response body as JSON
       response_data = JSON.parse(response.body)
+      index_parse_time += Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_index_parse_time
 
       # Keep track of all proteins that we need to retrieve extra information for from the database
       proteins = Set.new
@@ -49,13 +55,13 @@ class MpaController < HandleOptionsController
         proteins.merge(item["uniprot_accessions"])
       end
 
-      starting_databes_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      starting_databases_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
       # Now, retrieve all of these protein accessions from the database and retrieve the functions associated with them.
       entries = UniprotEntry
                   .where(uniprot_accession_number: proteins.to_a.uniq)
 
-      database_time += Process.clock_gettime(Process::CLOCK_MONOTONIC) - starting_databes_time
+      database_time += Process.clock_gettime(Process::CLOCK_MONOTONIC) - starting_databases_time
 
       # Convert the retrieved entries to a hash (for easy retrieval)
       accession_to_protein = Hash.new
@@ -89,8 +95,11 @@ class MpaController < HandleOptionsController
       entry["lineage"] = @lineages[entry["lca"].to_i]
     end
 
-    @response["database_time"] = database_time
-    @response["aggregation_time"] = aggregation_time
+    @timings = Hash.new
+    @timings["index_time"] = index_time
+    @timings["index_parse_time"] = index_parse_time
+    @timings["database_time"] = database_time
+    @timings["aggregation_time"] = aggregation_time
 
     @response
   end

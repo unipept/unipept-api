@@ -24,6 +24,8 @@ class MpaController < HandleOptionsController
     database_time = 0
     aggregation_time = 0
 
+    starting_total_time = Time.now.to_i
+
     peptides.each_slice(50) do |peptide_slice|
       # Convert the peptide_slice array into a JSON string
       json_data = {peptides: peptide_slice}.to_json
@@ -100,6 +102,7 @@ class MpaController < HandleOptionsController
     @timings["index_parse_time"] = index_parse_time
     @timings["database_time"] = database_time
     @timings["aggregation_time"] = aggregation_time
+    @timings["total_time"] = starting_total_time - Time.now.to_i
   end
 
   def pept2filtered

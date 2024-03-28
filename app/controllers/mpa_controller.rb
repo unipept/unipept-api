@@ -25,6 +25,7 @@ class MpaController < HandleOptionsController
 
     index_time = 0
     index_parse_time = 0
+    index_access_time = 0
     database_time = 0
     database_access_time = 0
     aggregation_time = 0
@@ -66,9 +67,13 @@ class MpaController < HandleOptionsController
       # Keep track of all proteins that we need to retrieve extra information for from the database
       proteins = Set.new
 
+      start_index_access_time = get_time
+
       response_data["result"].each do |item|
         proteins.merge(item["uniprot_accessions"])
       end
+
+      index_access_time += get_time - start_index_access_time
 
       start_databases_time = get_time
 
@@ -127,6 +132,7 @@ class MpaController < HandleOptionsController
     @timings = Hash.new
     @timings["index_time"] = index_time / 1000
     @timings["index_parse_time"] = index_parse_time / 1000
+    @timings["index_access_time"] = index_access_time / 1000
     @timings["database_time"] = database_time / 1000
     @timings["database_access_time"] = database_access_time / 1000
     @timings["aggregation_time"] = aggregation_time / 1000

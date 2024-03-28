@@ -28,10 +28,13 @@ class MpaController < HandleOptionsController
     database_time = 0
     aggregation_time = 0
     lineage_time = 0
+    loop_times = []
 
     start_total_time = get_time
 
     peptides.each_slice(50) do |peptide_slice|
+      start_loop_time = get_time
+
       # Convert the peptide_slice array into a JSON string
       json_data = {peptides: peptide_slice}.to_json
 
@@ -104,6 +107,8 @@ class MpaController < HandleOptionsController
       end
 
       lineage_time += get_time - start_lineage_time
+
+      loop_times.append((get_time - start_loop_time) / 1000)
     end
 
     start_prepare_lineage_time = get_time
@@ -121,6 +126,7 @@ class MpaController < HandleOptionsController
     @timings["aggregation_time"] = aggregation_time / 1000
     @timings["lineage_time"] = lineage_time / 1000
     @timings["prepare_lineage_time"] = prepare_lineage_time / 1000
+    @timings["loop_times"] = loop_times
     @timings["total_time"] = (get_time - start_total_time) / 1000
   end
 

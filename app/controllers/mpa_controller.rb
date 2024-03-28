@@ -8,7 +8,7 @@ class MpaController < HandleOptionsController
   skip_before_action :verify_authenticity_token, raise: false
 
   def get_time
-    Process.clock_gettime(Process::CLOCK_REALTIME, :millisecond)
+    Process.clock_gettime(Process::CLOCK_MONOTONIC, :millisecond)
   end
 
   def pept2data
@@ -28,9 +28,8 @@ class MpaController < HandleOptionsController
     database_time = 0
     aggregation_time = 0
     lineage_time = 0
-    prepare_lineage_time = 0
 
-    starting_total_time = get_time
+    start_total_time = get_time
 
     peptides.each_slice(50) do |peptide_slice|
       # Convert the peptide_slice array into a JSON string
@@ -122,7 +121,7 @@ class MpaController < HandleOptionsController
     @timings["aggregation_time"] = aggregation_time / 1000
     @timings["lineage_time"] = lineage_time / 1000
     @timings["prepare_lineage_time"] = prepare_lineage_time / 1000
-    @timings["total_time"] = get_time - starting_total_time / 1000
+    @timings["total_time"] = get_time - start_total_time / 1000
   end
 
   def pept2filtered

@@ -121,7 +121,7 @@ class MpaController < HandleOptionsController
     @timings["aggregation_time"] = aggregation_time / 1000
     @timings["lineage_time"] = lineage_time / 1000
     @timings["prepare_lineage_time"] = prepare_lineage_time / 1000
-    @timings["total_time"] = get_time - start_total_time / 1000
+    @timings["total_time"] = (get_time - start_total_time) / 1000
   end
 
   def pept2filtered

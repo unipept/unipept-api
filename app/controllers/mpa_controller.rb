@@ -7,6 +7,10 @@ class MpaController < HandleOptionsController
   before_action :default_format_json
   skip_before_action :verify_authenticity_token, raise: false
 
+  def get_time
+    Process.clock_gettime(Process::CLOCK_REALTIME, :millisecond)
+  end
+
   def pept2data
     peptides = params[:peptides] || []
     missed = params[:missed] || false
@@ -24,7 +28,7 @@ class MpaController < HandleOptionsController
     database_time = 0
     aggregation_time = 0
 
-    starting_total_time = Time.now.in_milliseconds
+    starting_total_time = get_time
 
     peptides.each_slice(50) do |peptide_slice|
       # Convert the peptide_slice array into a JSON string
@@ -38,17 +42,17 @@ class MpaController < HandleOptionsController
       request.content_type = "application/json"
       request.body = json_data
 
-      starting_index_time = Time.now.in_milliseconds
+      starting_index_time = get_time
       # Set up the HTTP session
       response = Net::HTTP.start(uri.hostname, uri.port) do |http|
         http.request(request)
       end
-      index_time += Time.now.in_milliseconds - starting_index_time
+      index_time += get_time - starting_index_time
 
-      start_index_parse_time = Time.now.in_milliseconds
+      start_index_parse_time = get_time
       # Parse the response body as JSON
       response_data = JSON.parse(response.body)
-      index_parse_time += Time.now.in_milliseconds - start_index_parse_time
+      index_parse_time += get_time - start_index_parse_time
 
       # Keep track of all proteins that we need to retrieve extra information for from the database
       proteins = Set.new
@@ -57,13 +61,13 @@ class MpaController < HandleOptionsController
         proteins.merge(item["uniprot_accessions"])
       end
 
-      starting_databases_time = Time.now.in_milliseconds
+      starting_databases_time = get_time
 
       # Now, retrieve all of these protein accessions from the database and retrieve the functions associated with them.
       entries = UniprotEntry
                   .where(uniprot_accession_number: proteins.to_a.uniq)
 
-      database_time += Time.now.in_milliseconds - starting_databases_time
+      database_time += get_time - starting_databases_time
 
       # Convert the retrieved entries to a hash (for easy retrieval)
       accession_to_protein = Hash.new
@@ -74,7 +78,7 @@ class MpaController < HandleOptionsController
 
       taxa = []
 
-      starting_aggregation_time = Time.now.in_milliseconds
+      starting_aggregation_time = get_time
 
       # Iterate over the 'result' array in the response data
       response_data["result"].each do |item|
@@ -84,7 +88,7 @@ class MpaController < HandleOptionsController
         taxa.append(item["lca"])
       end
 
-      aggregation_time += Time.now.in_milliseconds - starting_aggregation_time
+      aggregation_time += get_time - starting_aggregation_time
 
       looked_up_lineages = Lineage.find(taxa)
 
@@ -98,11 +102,11 @@ class MpaController < HandleOptionsController
     end
 
     @timings = Hash.new
-    @timings["index_time"] = index_time
-    @timings["index_parse_time"] = index_parse_time
-    @timings["database_time"] = database_time
-    @timings["aggregation_time"] = aggregation_time
-    @timings["total_time"] = Time.now.in_milliseconds - starting_total_time
+    @timings["index_time"] = index_time / 1000
+    @timings["index_parse_time"] = index_parse_time / 1000
+    @timings["database_time"] = database_time / 1000
+    @timings["aggregation_time"] = aggregation_time / 1000
+    @timings["total_time"] = get_time - starting_total_time / 1000
   end
 
   def pept2filtered

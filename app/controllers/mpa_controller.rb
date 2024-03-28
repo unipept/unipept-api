@@ -26,6 +26,7 @@ class MpaController < HandleOptionsController
     index_time = 0
     index_parse_time = 0
     database_time = 0
+    database_access_time = 0
     aggregation_time = 0
     lineage_time = 0
     loop_times = []
@@ -80,9 +81,13 @@ class MpaController < HandleOptionsController
       # Convert the retrieved entries to a hash (for easy retrieval)
       accession_to_protein = Hash.new
 
+      start_database_access_time = get_time
+
       entries.each do |entry|
         accession_to_protein[entry.uniprot_accession_number] = entry
       end
+
+      database_access_time += get_time - start_database_access_time
 
       taxa = []
 
@@ -123,6 +128,7 @@ class MpaController < HandleOptionsController
     @timings["index_time"] = index_time / 1000
     @timings["index_parse_time"] = index_parse_time / 1000
     @timings["database_time"] = database_time / 1000
+    @timings["database_access_time"] = database_access_time / 1000
     @timings["aggregation_time"] = aggregation_time / 1000
     @timings["lineage_time"] = lineage_time / 1000
     @timings["prepare_lineage_time"] = prepare_lineage_time / 1000

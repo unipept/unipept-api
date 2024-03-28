@@ -27,6 +27,8 @@ class MpaController < HandleOptionsController
     index_parse_time = 0
     database_time = 0
     aggregation_time = 0
+    lineage_time = 0
+    prepare_lineage_time = 0
 
     starting_total_time = get_time
 
@@ -42,16 +44,20 @@ class MpaController < HandleOptionsController
       request.content_type = "application/json"
       request.body = json_data
 
-      starting_index_time = get_time
+      start_index_time = get_time
+
       # Set up the HTTP session
       response = Net::HTTP.start(uri.hostname, uri.port) do |http|
         http.request(request)
       end
-      index_time += get_time - starting_index_time
+
+      index_time += get_time - start_index_time
 
       start_index_parse_time = get_time
+
       # Parse the response body as JSON
       response_data = JSON.parse(response.body)
+
       index_parse_time += get_time - start_index_parse_time
 
       # Keep track of all proteins that we need to retrieve extra information for from the database
@@ -61,13 +67,13 @@ class MpaController < HandleOptionsController
         proteins.merge(item["uniprot_accessions"])
       end
 
-      starting_databases_time = get_time
+      start_databases_time = get_time
 
       # Now, retrieve all of these protein accessions from the database and retrieve the functions associated with them.
       entries = UniprotEntry
                   .where(uniprot_accession_number: proteins.to_a.uniq)
 
-      database_time += get_time - starting_databases_time
+      database_time += get_time - start_databases_time
 
       # Convert the retrieved entries to a hash (for easy retrieval)
       accession_to_protein = Hash.new
@@ -78,7 +84,7 @@ class MpaController < HandleOptionsController
 
       taxa = []
 
-      starting_aggregation_time = get_time
+      start_aggregation_time = get_time
 
       # Iterate over the 'result' array in the response data
       response_data["result"].each do |item|
@@ -88,24 +94,34 @@ class MpaController < HandleOptionsController
         taxa.append(item["lca"])
       end
 
-      aggregation_time += get_time - starting_aggregation_time
+      aggregation_time += get_time - start_aggregation_time
+
+      start_lineage_time = get_time
 
       looked_up_lineages = Lineage.find(taxa)
 
       looked_up_lineages.each do |lineage|
         @lineages[lineage.taxon_id] = lineage.to_a_idx
       end
+
+      lineage_time += get_time - start_lineage_time
     end
+
+    start_prepare_lineage_time = get_time
 
     @response.each do |_, entry|
       entry["lineage"] = @lineages[entry["lca"].to_i]
     end
+
+    prepare_lineage_time = get_time - start_prepare_lineage_time
 
     @timings = Hash.new
     @timings["index_time"] = index_time / 1000
     @timings["index_parse_time"] = index_parse_time / 1000
     @timings["database_time"] = database_time / 1000
     @timings["aggregation_time"] = aggregation_time / 1000
+    @timings["lineage_time"] = lineage_time / 1000
+    @timings["prepare_lineage_time"] = prepare_lineage_time / 1000
     @timings["total_time"] = get_time - starting_total_time / 1000
   end
 

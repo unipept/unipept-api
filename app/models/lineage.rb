@@ -141,7 +141,7 @@ class Lineage < ApplicationRecord
 
   def to_a_idx
     array = ORDER_T.map { |rank| send(rank) }
-    array.map { |x| x.nil? ? nil : x.id }
+    array.map { |x| x&.id }
   end
 
   def self.ranks

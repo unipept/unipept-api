@@ -27,6 +27,7 @@ class Mpa::Pept2dataController < Mpa::MpaController
     end
 
     @response.each do |_, value|
+      value["lineage_id"] = value["lca"].to_i
       value["lineage"] = @lineages[value["lca"].to_i]
     end
 
@@ -57,6 +58,7 @@ class Mpa::Pept2dataController < Mpa::MpaController
     # end
 
     # @response.each do |_, entry|
+
     #   entry["lineage"] = @lineages[entry["lca"].to_i]
     # end
   end

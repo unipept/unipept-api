@@ -27,8 +27,8 @@ class Mpa::Pept2dataController < Mpa::MpaController
     end
 
     @response.each do |_, value|
-      entry["test"] = value
-      entry["lineage"] = @lineages[value["lca"].to_i]
+      @response["test"] = value
+      value["lineage"] = @lineages[value["lca"].to_i]
     end
 
     # proteins = Set.new

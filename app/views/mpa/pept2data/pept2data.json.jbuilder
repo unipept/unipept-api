@@ -1,1 +1,1 @@
-json.peptides(@response)
+json.peptides(@response.values)

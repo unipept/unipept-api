@@ -11,8 +11,6 @@ class Mpa::Pept2dataController < Mpa::MpaController
     # Request the suffix array search service
     search_results = search(peptides, @equate_il)
 
-    @response = search_results["result"]
-
     taxa = []
     search_results["result"].each do |result|
       taxa.append(result["lca"])
@@ -21,6 +19,18 @@ class Mpa::Pept2dataController < Mpa::MpaController
     @lineages = Hash.new
     Lineage.find(taxa).each do |lineage|
       @lineages[lineage.taxon_id] = lineage.to_a_idx
+    end
+
+    search_results["result"].each do |result|
+      @response[result["sequence"]] = {
+        sequence: result["sequence"],
+        lca: result["lca"],
+        lineage: @lineages[result["lca"].to_i],
+        fa: {
+          counts: result["fa"]["num"],
+          data: result["fa"]["data"]
+        }
+      }
     end
 
     # proteins = Set.new

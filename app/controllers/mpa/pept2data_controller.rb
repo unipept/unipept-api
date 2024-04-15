@@ -16,10 +16,8 @@ class Mpa::Pept2dataController < Mpa::MpaController
 
     search_results.each do |entry|
       new_entry = {}
-      new_entry["sequence"] = entry["sequence"]
-      new_entry["fa"] = entry["fa"]
-      new_entry["lca"] = entry["lca"]
-      @response[entry["sequence"]] = new_entry
+      new_entry["sequence"] = entry
+      @response = new_entry
     end
 
     # proteins = Set.new

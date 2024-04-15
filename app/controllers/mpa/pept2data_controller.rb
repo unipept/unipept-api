@@ -12,13 +12,7 @@ class Mpa::Pept2dataController < Mpa::MpaController
     # Request the suffix array search service
     search_results = search(peptides, @equate_il)
 
-    #@response = search_results
-
-    search_results.each do |entry|
-      new_entry = {}
-      new_entry["sequence"] = entry
-      @response = new_entry
-    end
+    @response = search_results.result
 
     # proteins = Set.new
     # search_results["result"].each do |result|

@@ -9,19 +9,10 @@
 #  type                     :string(9)        not null
 #  name                     :string(150)      not null
 #  protein                  :text(65535)      not null
-#
+#  fa                       :text(65535)      not null
 
 class UniprotEntry < ApplicationRecord
   include ReadOnlyModel
-
-  has_many :ec_cross_references
-  has_many :go_cross_references
-  has_many :interpro_cross_references
-
-  has_many :peptides
-  has_many :ec_numbers, through: :ec_cross_references
-  has_many :go_terms, through: :go_cross_references
-  has_many :interpro_entries, through: :interpro_cross_references
 
   belongs_to :taxon,
              primary_key: 'id',
@@ -47,50 +38,33 @@ class UniprotEntry < ApplicationRecord
   # Note: this should only be used for peptides who's FA's have
   # not been precalculated (because they were mot in the DB)
   #
-  # @param entries list of UniprotEnteries that match the sequence
+  # @param entries list of UniprotEntries that match the sequence
+  # In order to speed up this query, it's a good idea to include
+  # the cross references already when requesting all UniprotEntry's
+  # with a specific id.
   def self.summarize_fa(entries)
     data = Hash.new(0)
 
-    uniprot_entry_ids = entries.map(&:id)
-
-    # Count GO term occurences
     ups_with_go = Set.new
-    uniprot_entry_ids
-      .each_slice(50) do |id_batch|
-        GoCrossReference
-          .where(uniprot_entry_id: id_batch)
-          .all
-          .find_each do |cr|
-            ups_with_go.add(cr.uniprot_entry_id)
-            # Also count in how many proteins this GO term occurs
-            data[cr.go_term_code] += 1
-          end
-      end
-
-    # Count EC Term occurences
     ups_with_ec = Set.new
-    uniprot_entry_ids
-      .each_slice(50) do |id_batch|
-      EcCrossReference
-        .where(uniprot_entry_id: id_batch)
-        .all
-        .find_each do |cr|
-        ups_with_ec.add(cr.uniprot_entry_id)
-        # Also count in how many proteins this EC number occurs
-        data["EC:#{cr.ec_number_code}"] += 1
-      end
-    end
-
-    # Count InterPro code occurences
     ups_with_ipr = Set.new
-    uniprot_entry_ids
-      .each_slice(50) do |id_batch|
-      InterproCrossReference
-        .where(uniprot_entry_id: id_batch)
-        .all
-        .find_each do |cr|
-        ups_with_ipr.add(cr.uniprot_entry_id)
-        data["IPR:#{cr.interpro_entry_code}"] += 1
+
+    entries.each do |uniprot_entry|
+      uniprot_entry.fa.split(";").each do |fa, count|
+        # TODO: These checks can be improved once the fa-object of a protein has been expanded
+        if fa.start_with? "GO"
+          ups_with_go.add(uniprot_entry.id)
+        end
+
+        if fa.start_with? "EC"
+          ups_with_ec.add(uniprot_entry.id)
+        end
+
+        if fa.start_with? "IPR"
+          ups_with_ipr.add(uniprot_entry.id)
+        end
+
+        data[fa] += 1
       end
     end
 

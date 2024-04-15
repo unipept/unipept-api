@@ -12,6 +12,8 @@ class Mpa::Pept2dataController < Mpa::MpaController
     # Request the suffix array search service
     search_results = search(peptides, @equate_il)
 
+    puts search_results
+
     proteins = Set.new
     search_results.each do |result|
       proteins.merge(result['uniprot_accessions'])

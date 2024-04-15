@@ -26,6 +26,8 @@ class Mpa::Pept2dataController < Mpa::MpaController
       lineages[lineage.taxon_id] = lineage.to_a_idx
     end
 
+    @lineages = lineages
+
     @response.each do |_, value|
       value["lineage"] = lineages[value["lca"].to_i]
     end

@@ -1,40 +1,45 @@
 class Mpa::Pept2dataController < Mpa::MpaController
+  include SuffixArrayHelper
+
   def pept2data
     peptides = params[:peptides] || []
     missed = params[:missed] || false
     @equate_il = params[:equate_il].nil? ? true : params[:equate_il] == 'true'
 
-    # If equate_il is set, we have to replace all I's by and L in the input peptides.
-    equalized_pepts = @equate_il ? peptides.map { |p| p.gsub('I', 'L') } : peptides
+    @response = Hash.new
+    @lineages = Hash.new
 
-    @peptides = Sequence
-                .includes(Sequence.lca_t_relation_name(@equate_il) => :lineage)
-                .where(sequence: equalized_pepts)
-                .where.not(Sequence.lca_t_relation_name(@equate_il) => nil)
-    if missed
-      @peptides += equalized_pepts
-                   .to_set.subtract(@peptides.map(&:sequence))
-                   .map { |p| Sequence.missed_cleavage(p, @equate_il) }
-                   .compact
+    # Request the suffix array search service
+    search_results = search(peptides, @equate_il)
+
+    proteins = Set.new
+    search_results.each do |result|
+      proteins.merge(result['uniprot_accessions'])
     end
 
-    eq_seq_to_fa = {}
-    eq_seq_to_info = {}
+    entries = UniprotEntry.where(uniprot_accession_number: proteins.to_a.uniq)
 
-    @peptides.each do |sequence|
-      eq_seq_to_fa[sequence.sequence] = sequence.calculate_fa(@equate_il)
-      eq_seq_to_info[sequence.sequence] = sequence
+    # Convert the retrieved entries to a hash (for easy retrieval)
+    accession_to_protein = Hash.new
+    entries.each do |entry|
+      accession_to_protein[entry.uniprot_accession_number] = entry
     end
 
-    @original_pep_results = {}
-    @original_pep_fas = {}
+    taxa = []
+    search_results["result"].each do |result|
+      uniprot_entries = result["uniprot_accessions"].map { |acc| accession_to_protein[acc] }
+      result["fa"] = UniprotEntry.summarize_fa(uniprot_entries)
+      @response[result["sequence"]] = result
+      taxa.append(result["lca"])
+    end
 
-    peptides.each do |original_seq|
-      equalized_seq = @equate_il ? original_seq.gsub('I', 'L') : original_seq
-      if eq_seq_to_info.key? equalized_seq
-        @original_pep_results[original_seq] = eq_seq_to_info[equalized_seq]
-        @original_pep_fas[original_seq] = eq_seq_to_fa[equalized_seq]
-      end
+    looked_up_lineages = Lineage.find(taxa)
+    looked_up_lineages.each do |lineage|
+      @lineages[lineage.taxon_id] = lineage.to_a_idx
+    end
+
+    @response.each do |_, entry|
+      entry["lineage"] = @lineages[entry["lca"].to_i]
     end
   end
 end

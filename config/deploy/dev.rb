@@ -4,14 +4,14 @@ set :stage, :dev
 
 set :deploy_to, '/home/unipept/rails'
 
-set :server, ENV['server'] || 'patty.ugent.be'
+set :server, ENV['server'] || 'rick.taild1497.ts.net'
 
 # don't specify db as it's not needed for unipept
 server "#{fetch(:server)}", user: 'unipept', roles: %i[web app], ssh_options: {
   port: 4840
 }
 
-set :branch, 'fix/options_request_api'
+set :branch, 'feature/suffix-array-integration'
 set :rails_env, :development
 
 namespace :deploy do

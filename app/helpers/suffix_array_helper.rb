@@ -1,9 +1,5 @@
 module SuffixArrayHelper
   def search(peptides, equate_il)
-    if peptides.empty?
-      return
-    end
-
     # Convert the peptides array into a json string
     json_data = { peptides: peptides }.to_json
 

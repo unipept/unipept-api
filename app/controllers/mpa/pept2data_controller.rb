@@ -10,6 +10,10 @@ class Mpa::Pept2dataController < Mpa::MpaController
     missed = params[:missed] || false
     equate_il = params[:equate_il].nil? ? true : params[:equate_il] == 'true'
 
+    if peptides.empty?
+      return
+    end
+
     @response = Hash.new
 
     search_time = get_time

@@ -25,10 +25,17 @@ class PrivateApi::ProteinsController < PrivateApi::PrivateApiController
       return
     end
 
-    # Collect all protein information
-    @proteins = UniprotEntry.where(uniprot_accession_number: search_result["uniprot_accessions"])
-
     @lca = search_result["lca"] || -1
+    @common_lineage = []
+
+    # Collect all protein information
+    @proteins = UniprotEntry
+      .includes(:taxon)
+      .where(uniprot_accession_number: search_result["uniprot_accessions"])
+      .map do |protein|
+        protein[:test] = protein.fa.split(";")
+        protein
+      end
 
 
     # if sequence.present? && sequence.peptides(equate_il).empty?

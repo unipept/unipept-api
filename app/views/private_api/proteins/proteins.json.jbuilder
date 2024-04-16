@@ -10,4 +10,9 @@
 # end
 
 json.lca @lca
-json.proteins(@proteins)
+json.common_lineage @common_lineage
+json.proteins @proteins do |protein|
+  json.uniprotAccessionId protein.uniprot_accession_number
+  json.name protein.name
+  json.organism protein.taxon_id
+end

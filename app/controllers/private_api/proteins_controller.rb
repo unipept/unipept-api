@@ -23,7 +23,7 @@ class PrivateApi::ProteinsController < PrivateApi::PrivateApiController
     search_result = search([ peptide ], equate_il)
 
     # Collect all protein information
-    @proteins = UniprotEntry.find(search_result["uniprot_accessions"])
+    @proteins = UniprotEntry.where(uniprot_accession_number: search_result["uniprot_accessions"])
 
     @lca = search_result["lca"] || -1
 

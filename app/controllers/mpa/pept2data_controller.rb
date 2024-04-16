@@ -7,6 +7,7 @@ class Mpa::Pept2dataController < Mpa::MpaController
     equate_il = params[:equate_il].nil? ? true : params[:equate_il] == 'true'
 
     @response = Hash.new
+    @lineages = Hash.new
 
     if peptides.empty?
       return
@@ -22,22 +23,10 @@ class Mpa::Pept2dataController < Mpa::MpaController
     end
 
     # Retrieve all lineages at once
-    @lineages = Hash.new
     Lineage.find(taxa).each do |lineage|
       @lineages[lineage.taxon_id] = lineage.to_a_idx
     end
 
-    # Fill the response hash with the search results
-    search_results["result"].each do |result|
-      @response[result["sequence"]] = {
-        sequence: result["sequence"],
-        lca: result["lca"],
-        lineage: @lineages[result["lca"].to_i],
-        fa: {
-          counts: result["fa"]["counts"],
-          data: result["fa"]["data"]
-        }
-      }
-    end
+    @response = search_results["result"]
   end
 end

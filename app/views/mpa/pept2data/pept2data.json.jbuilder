@@ -1,5 +1,4 @@
 json.peptides @response do |peptide|
-  json.equate peptide["equate"]
   json.sequence peptide["sequence"]
   json.lca peptide["lca"]
   json.lineage @lineages[peptide["lca"].to_i]

@@ -30,7 +30,7 @@ class Mpa::Pept2dataController < Mpa::MpaController
         lca: result["lca"],
         lineage: @lineages[result["lca"].to_i],
         fa: {
-          counts: result["fa"]["num"],
+          counts: result["fa"]["counts"],
           data: result["fa"]["data"]
         }
       }

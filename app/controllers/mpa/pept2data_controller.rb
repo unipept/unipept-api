@@ -4,7 +4,7 @@ class Mpa::Pept2dataController < Mpa::MpaController
   def pept2data
     peptides = params[:peptides] || []
     missed = params[:missed] || false
-    equate_il = params[:equate_il].nil? ? true : params[:equate_il] == 'true'
+    equate_il = params[:equate_il].nil? ? true : params[:equate_il]
 
     @response = Hash.new
     @lineages = Hash.new

@@ -7,3 +7,4 @@ json.peptides @response do |peptide|
     json.data peptide["fa"]["data"]
   end
 end
+json.equated_IL @response["equated_IL"]

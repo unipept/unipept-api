@@ -15,6 +15,7 @@ class Mpa::Pept2dataController < Mpa::MpaController
 
     # Request the suffix array search service
     @response = search(peptides, equate_il).uniq
+    @response["equated_IL"] = equate_il
 
     # Collect all lca's to look up the lineages
     taxa = []

@@ -35,7 +35,7 @@ class PrivateApi::ProteinsController < PrivateApi::PrivateApiController
       .map do |protein| {
           uniprot_accession_number: protein.uniprot_accession_number,
           name: protein.name,
-          organism: protein.taxon_id
+          organism: protein.taxon_id,
           test: protein.fa.split(";")
         }
       end

@@ -22,13 +22,14 @@ class PrivateApi::ProteinsController < PrivateApi::PrivateApiController
     # Request the suffix array search service
     search_result = search([ peptide ], equate_il).first
 
-    @lca = search_result["lca"] || -1
+    @lca = -1
     @common_lineage = []
 
     if search_result.nil?
       return
     end
 
+    @lca = search_result["lca"]
     @proteins = UniprotEntry
       .includes(:taxon)
       .where(uniprot_accession_number: search_result["uniprot_accessions"])

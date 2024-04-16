@@ -9,4 +9,5 @@
 #   json.interproEntries(entry.interpro_cross_references.map(&:interpro_entry_code))
 # end
 
-json.proteins(@response)
+json.lca @lca
+json.proteins(@proteins)

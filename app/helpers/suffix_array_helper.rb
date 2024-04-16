@@ -17,6 +17,6 @@ module SuffixArrayHelper
     end
 
     # Parse the response from the suffix array search service
-    JSON.parse(response.body)
+    JSON.parse(response.body)["result"]
   end
 end

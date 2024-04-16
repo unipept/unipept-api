@@ -15,4 +15,5 @@ json.proteins @proteins do |protein|
   json.uniprotAccessionId protein.uniprot_accession_number
   json.name protein.name
   json.organism protein.taxon_id
+  json.test protein.test
 end

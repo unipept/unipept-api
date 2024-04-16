@@ -32,11 +32,15 @@ class PrivateApi::ProteinsController < PrivateApi::PrivateApiController
     @proteins = UniprotEntry
       .includes(:taxon)
       .where(uniprot_accession_number: search_result["uniprot_accessions"])
-      .map do |protein| {
+      .map do |protein| 
+        annotations = protein.fa.split(";")
+        {
           uniprot_accession_number: protein.uniprot_accession_number,
           name: protein.name,
           organism: protein.taxon_id,
-          test: protein.fa.split(";")
+          ec_numbers: annotations.filter { |a| a.start_with? "EC" },
+          go_terms: annotations.filter { |a| a.start_with? "GO" },
+          interpro_entries: annotations.filter { |a| a.start_with? "IPR" }
         }
       end
 

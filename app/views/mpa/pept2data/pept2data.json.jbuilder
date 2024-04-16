@@ -1,7 +1,9 @@
 json.peptides @response do |peptide|
-  json.test peptide
   json.sequence peptide["sequence"]
-  json.lca peptide[:lca]
-  json.lineage @lineages[peptide[:lca].to_i]
-  json.fa peptide[:fa]
+  json.lca peptide["lca"]
+  json.lineage @lineages[peptide["lca"].to_i]
+  json.fa do
+    json.counts peptide["fa"]["counts"]
+    json.data peptide["fa"]["data"]
+  end
 end

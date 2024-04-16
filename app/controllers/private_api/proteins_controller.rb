@@ -44,6 +44,6 @@ class PrivateApi::ProteinsController < PrivateApi::PrivateApiController
         }
       end
 
-    // TODO: Common lineage calculation
+    # TODO: Common lineage calculation
   end
 end

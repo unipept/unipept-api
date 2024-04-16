@@ -21,9 +21,12 @@ class PrivateApi::ProteinsController < PrivateApi::PrivateApiController
 
     # Request the suffix array search service
     search_result = search([ peptide ], equate_il)
+    if search_result.empty?
+      return
+    end
 
     # Collect all protein information
-    @proteins = UniprotEntry.where(uniprot_accession_number: search_result["uniprot_accessions"])
+    @proteins = UniprotEntry.where(uniprot_accession_number: search_result[0]["uniprot_accessions"])
 
     @lca = search_result["lca"] || -1
 

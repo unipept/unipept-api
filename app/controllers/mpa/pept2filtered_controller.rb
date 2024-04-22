@@ -20,7 +20,7 @@ class Mpa::Pept2filteredController < Mpa::MpaController
 
     # TODO: we should remove this or use a different approach
     @response.each do |result|
-      result["taxa"] = result["taxa"].select { |taxon_id| taxa_filter_ids.include?(taxon_id) }
+      result["taxa"] = result["taxa"].select { |taxon_id| taxa_filter_ids.include?(taxon_id) }.uniq
     end
   end
 end

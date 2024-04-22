@@ -1,7 +1,7 @@
 module SuffixArrayHelper
-  def search(peptides, equate_il)
+  def search(peptides, equate_il, cutoff = 10_000)
     # Convert the peptides array into a json string
-    json_data = { peptides: peptides, equalize_I_and_L: equate_il }.to_json
+    json_data = { peptides: peptides, equalize_I_and_L: equate_il, cutoff: cutoff }.to_json
 
     # The URL to the suffix array search service
     url = URI.parse("http://localhost:3000/search")

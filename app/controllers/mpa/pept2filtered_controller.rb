@@ -24,16 +24,15 @@ class Mpa::Pept2filteredController < Mpa::MpaController
     # Request the suffix array search service
     @response = search(peptides, equate_il, cutoff)
       .select { |result| !result["cutoff_used"] }
-      .each { |result| result["taxa"] = result["taxa"].to_set }
 
     end_index_time = get_time - index_time
 
     filter_time = get_time
 
-    taxa_filter_ids.to_set
+    taxa_filter_ids = taxa_filter_ids.to_set
 
     @response.each do |result|
-      result["taxa"] = result["taxa"] & taxa_slice
+      result["taxa"] = result["taxa"].to_set  & taxa_filter_ids
     end
 
     end_filter_time = get_time - filter_time

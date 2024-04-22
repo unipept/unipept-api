@@ -1,4 +1,6 @@
 class Mpa::Pept2filteredController < Mpa::MpaController
+  include SuffixArrayHelper
+  
   def pept2filtered
     peptides = params[:peptides] || []
     missed = params[:missed].nil? ? false : params[:missed]

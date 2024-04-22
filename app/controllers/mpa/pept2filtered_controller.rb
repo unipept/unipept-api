@@ -37,6 +37,8 @@ class Mpa::Pept2filteredController < Mpa::MpaController
       result["taxa"] = result["taxa"].to_set  & taxa_filter_ids
     end
 
+    @response.reject! { |result| result["taxa"].empty? }
+
     end_filter_time = get_time - filter_time
 
     end_total_time = get_time - total_time

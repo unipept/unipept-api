@@ -16,7 +16,7 @@ class Mpa::Pept2filteredController < Mpa::MpaController
     taxa_filter_ids = (params[:taxa] || []).map(&:to_i)
 
     # Request the suffix array search service
-    @response = search(peptides, equate_il, cutoff).uniq.select { |result| !result["cuttof_used"] }
+    @response = search(peptides, equate_il, cutoff).uniq.select { |result| !result["cutoff_used"] }
 
     # TODO: we should remove this or use a different approach
     @response.each do |result|

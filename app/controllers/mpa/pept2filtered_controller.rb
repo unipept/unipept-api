@@ -19,7 +19,7 @@ class Mpa::Pept2filteredController < Mpa::MpaController
     @response = search(peptides, equate_il).uniq
 
     # TODO: we should remove this or use a different approach
-    @reponse.each do |result|
+    @response.each do |result|
       result["taxa"] = result["taxa"].select { |taxon_id| taxa_filter_ids.include?(taxon_id) }
     end
   end

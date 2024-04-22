@@ -28,16 +28,19 @@ class Mpa::Pept2filteredController < Mpa::MpaController
 
     end_index_time = get_time - index_time
 
-    taxa_filter_ids.each_slice(5000) do |taxa_slice|
-      taxa_slice = Taxon.where(id: taxa_slice).where(valid_taxon: 1).pluck(:id).to_set
+    filter_time = get_time
 
-      next if taxa_slice.empty?
+    taxa_filter_ids.to_set
 
-      @response.each do |result|
-        result["taxa"] = result["taxa"].select { |taxon_id| taxa_slice.include?(taxon_id) }.uniq
-      end
+    @response.each do |result|
+      result["taxa"] = result["taxa"] & taxa_slice
     end
 
-    @timings = end_index_time
+    end_filter_time = get_time - filter_time
+
+    @timings = {
+      index_time: end_index_time,
+      filter_time: end_filter_time
+    }
   end
 end

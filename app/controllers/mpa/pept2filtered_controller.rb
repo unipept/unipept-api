@@ -1,6 +1,6 @@
 class Mpa::Pept2filteredController < Mpa::MpaController
   include SuffixArrayHelper
-  
+
   def pept2filtered
     peptides = params[:peptides] || []
     missed = params[:missed].nil? ? false : params[:missed]
@@ -17,5 +17,10 @@ class Mpa::Pept2filteredController < Mpa::MpaController
 
     # Request the suffix array search service
     @response = search(peptides, equate_il).uniq
+
+    # TODO: we should remove this or use a different approach
+    @reponse.each do |result|
+      result["taxa"] = result["taxa"].select { |taxon_id| taxa_filter_ids.include?(taxon_id) }
+    end
   end
 end

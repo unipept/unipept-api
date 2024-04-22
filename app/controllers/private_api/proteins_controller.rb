@@ -46,5 +46,6 @@ class PrivateApi::ProteinsController < PrivateApi::PrivateApiController
       end
 
     # TODO: Common lineage calculation
+    # Lineage van de lca ophalen
   end
 end

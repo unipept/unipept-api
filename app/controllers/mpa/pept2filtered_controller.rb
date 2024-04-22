@@ -6,6 +6,8 @@ class Mpa::Pept2filteredController < Mpa::MpaController
   end
 
   def pept2filtered
+    total_time = get_time
+
     peptides = (params[:peptides] || []).uniq
     missed = params[:missed].nil? ? false : params[:missed]
     equate_il = params[:equate_il].nil? ? true : params[:equate_il]
@@ -37,9 +39,12 @@ class Mpa::Pept2filteredController < Mpa::MpaController
 
     end_filter_time = get_time - filter_time
 
+    end_total_time = get_time - total_time
+
     @timings = {
       index_time: end_index_time,
-      filter_time: end_filter_time
+      filter_time: end_filter_time,
+      total_time: end_total_time
     }
   end
 end

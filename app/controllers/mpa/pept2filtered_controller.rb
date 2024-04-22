@@ -19,8 +19,8 @@ class Mpa::Pept2filteredController < Mpa::MpaController
     @response = search(peptides, equate_il, cutoff).uniq.select { |result| !result["cutoff_used"] }
 
     # TODO: we should remove this or use a different approach
-    @response.each do |result|
-      result["taxa"] = result["taxa"].select { |taxon_id| taxa_filter_ids.include?(taxon_id) }.uniq
-    end
+    # @response.each do |result|
+    #   result["taxa"] = result["taxa"].select { |taxon_id| taxa_filter_ids.include?(taxon_id) }.uniq
+    # end
   end
 end

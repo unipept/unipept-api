@@ -139,5 +139,10 @@ ActiveRecord::Schema[7.0].define(version: 0) do
     t.index ["uniprot_accession_number"], name: "idx_uniprot_entries_uniprot_accession_number"
   end
 
+  create_table "users", id: :integer, force: :cascade do |t|
+    t.string "username", limit: 8, null: false
+    t.integer "admin", limit: 1, default: 0, null: false
+  end
+
   add_foreign_key "dataset_items", "datasets", name: "fk_dataset_items_datasets"
 end

@@ -119,10 +119,6 @@ GEM
     minitest (5.18.0)
     msgpack (1.5.6)
     multi_json (1.15.0)
-<<<<<<< HEAD
-    mysql2 (0.5.6)
-=======
->>>>>>> b4f1356 (Move to psql)
     net-imap (0.2.3)
       digest
       net-protocol

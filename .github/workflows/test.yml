@@ -6,18 +6,18 @@ jobs:
   test:
     env:
       RAILS_ENV: "test"
-      TEST_DATABASE_URL: "mysql2://root:unipept@127.0.0.1:3306/unipept_test"
+      TEST_DATABASE_URL: "pg://unipept:unipept@127.0.0.1:5432/unipept_test"
     runs-on: ubuntu-latest
     services:
-      mysql:
-        image: mariadb:10.9
+      psql:
+        image: postgres:16.2
         env:
-          MYSQL_DATABASE: "unipept_test"
-          MYSQL_ROOT_PASSWORD: "unipept"
-          MYSQL_HOST: "localhost"
+          POSTGRES_DB: "unipept_test"
+          POSTGRES_PASSWORD: "unipept"
+          POSTGRES_USER: "unipept"
         ports:
-          - 3306:3306
-        options: --health-cmd "mysqladmin ping -h localhost" --health-interval 10s --health-timeout 5s --health-retries 5
+          - 5432:5432
+        options: --health-cmd "pg_isready" --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - name: Use ruby from .ruby-version

@@ -1,16 +1,17 @@
 default: &default
-  adapter: mysql2
+  adapter: postgresql
   username: root
-  password: unipept
+  password: root
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
 
 development:
   <<: *default
-  username: unipept
-  database: unipept
+  username: root
+  database: postgres
   # setup local port forwarding for this to work
   host: 127.0.0.1
-  port: 3306
+  port: 5432
+  schema_search_path: "unipept"
 
 # Warning: The database defined as "test" will be erased and
 # re-generated from your development database when you run "rake".

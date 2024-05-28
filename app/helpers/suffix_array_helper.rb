@@ -4,7 +4,7 @@ module SuffixArrayHelper
     json_data = { peptides: peptides, equalize_I_and_L: equate_il, cutoff: cutoff }.to_json
 
     # The URL to the suffix array search service
-    url = URI.parse("http://localhost:3000/search")
+    url = URI.parse("http://localhost:3000/analyse")
 
     # Create a new HTTP POST request
     request = Net::HTTP::Post.new(url.path)

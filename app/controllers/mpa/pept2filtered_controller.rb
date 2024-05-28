@@ -22,9 +22,9 @@ class Mpa::Pept2filteredController < Mpa::MpaController
     taxa_filter_ids = taxa_filter_ids.to_set
 
     @response.each do |result|
-      result["taxa"] = result["taxa"].to_set & taxa_filter_ids
+      result[:taxa] = result[:taxa].to_set & taxa_filter_ids
     end
 
-    @response.reject! { |result| result["taxa"].empty? }
+    @response.reject! { |result| result[:taxa].empty? }
   end
 end

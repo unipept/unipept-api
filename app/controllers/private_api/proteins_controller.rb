@@ -29,23 +29,34 @@ class PrivateApi::ProteinsController < PrivateApi::PrivateApiController
       return
     end
 
+    puts search_result
+
     @lca = search_result["lca"]
     @proteins = UniprotEntry
       .includes(:taxon)
-      .where(uniprot_accession_number: search_result["uniprot_accessions"])
+      .where(uniprot_accession_number: search_result["uniprot_accession_numbers"])
       .map do |protein| 
-        annotations = protein.fa.split(";")
         {
           uniprot_accession_number: protein.uniprot_accession_number,
           name: protein.name,
           organism: protein.taxon_id,
-          ec_numbers: annotations.filter { |a| a.start_with? "EC" },
-          go_terms: annotations.filter { |a| a.start_with? "GO" },
-          interpro_entries: annotations.filter { |a| a.start_with? "IPR" }
+          ec_numbers: protein.ec_cross_references.map(&:ec_number_code).reject(&:empty?),
+          go_terms: protein.go_cross_references.map(&:go_term_code).reject(&:empty?),
+          interpro_entries: protein.interpro_cross_references.map(&:interpro_entry_code).reject(&:empty?)
         }
       end
 
-    # TODO: Common lineage calculation
     # Lineage van de lca ophalen
+    lca_lineage = Lineage.find(@lca)
+    puts lca_lineage.inspect
+    finished = (@lca == 1)
+    while !finished && lca_lineage.has_next?
+      next_rank = lca_lineage.next_t
+
+      next if next_rank.nil?
+
+      finished = (lca_lineage.id == next_rank.id)
+      @common_lineage << next_rank.id
+    end
   end
 end

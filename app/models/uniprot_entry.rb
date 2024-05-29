@@ -14,6 +14,14 @@
 class UniprotEntry < ApplicationRecord
   include ReadOnlyModel
 
+  has_many :ec_cross_references
+  has_many :go_cross_references
+  has_many :interpro_cross_references
+
+  has_many :ec_numbers, through: :ec_cross_references
+  has_many :go_terms, through: :go_cross_references
+  has_many :interpro_entries, through: :interpro_cross_references
+
   belongs_to :taxon,
              primary_key: 'id',
              class_name: 'Taxon'

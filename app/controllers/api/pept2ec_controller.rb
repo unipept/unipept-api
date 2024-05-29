@@ -10,6 +10,5 @@ class Api::Pept2ecController < Api::ApiController
   # param[extra]: "true" or "false", optional, Output extra info?
   def pept2ec
     @result = pept2ec_helper
-    respond_with(@result)
   end
 end

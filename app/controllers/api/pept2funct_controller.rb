@@ -28,7 +28,5 @@ class Api::Pept2functController < Api::ApiController
         ipr: interpro_result[seq_index][:ipr]
       }
     end
-
-    respond_with(@result)
   end
 end

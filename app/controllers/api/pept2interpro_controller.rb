@@ -11,6 +11,5 @@ class Api::Pept2interproController < Api::ApiController
   # param[domains]: "true" or "false", optional, Should InterPro entries be split according to type?
   def pept2interpro
     @result = pept2interpro_helper
-    respond_with(@result)
   end
 end

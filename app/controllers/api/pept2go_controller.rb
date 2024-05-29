@@ -11,6 +11,5 @@ class Api::Pept2goController < Api::ApiController
   # param[domains]: "true" or "false", optional, Should GO_terms be split according to namespace?
   def pept2go
     @result = pept2go_helper
-    respond_with(@result)
   end
 end

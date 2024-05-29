@@ -1,35 +1,31 @@
 module FunctionalityHelper
+  include SuffixArrayHelper
+
   def pept2ec_helper
     output = {}
-
-    @sequences = Sequence.where(sequence: @input)
-
     ec_numbers = []
 
+    @sequences = search(@input, @equate_il).uniq
     @sequences.each do |seq|
-      fa = seq.calculate_fa(@equate_il)
-      # TODO: this ['num'] is a bug and should be removed before merging
-      # ecs = fa['num']['data'].select { |k, _v| k.start_with?('EC:') }
-      ecs = fa['data'].select { |k, _v| k.start_with?('EC:') }
+      ecs = seq["fa"]["data"].select { |k, _v| k.start_with?('EC:') }
 
-      output[seq.sequence] = {
-        total: fa['num']['all'],
-        ec: ecs.map do |k, v|
-              {
-                ec_number: k[3..],
-                protein_count: v
-              }
-            end
+      output[seq["sequence"]] = {
+        total: seq["fa"]["counts"]["all"],
+        ec: ecs.map do |k, v| 
+          {
+            ec_number: k[3..],
+            protein_count: v
+          }
+        end
       }
 
-      ec_numbers.push(*(ecs.map { |k, _v| k[3..] }))
+      ec_numbers.push(*(ecs.map { |k, v| k[3..] }))
     end
 
     if @extra_info
       ec_numbers = ec_numbers.uniq.compact.sort
 
       ec_mapping = {}
-
       EcNumber.where(code: ec_numbers).find_each do |ec_term|
         ec_mapping[ec_term.code] = ec_term.name
       end
@@ -48,22 +44,18 @@ module FunctionalityHelper
     output = {}
     go_terms = []
 
-    @sequences = Sequence.where(sequence: @input)
-
+    @sequences = search(@input, @equate_il).uniq
     @sequences.each do |seq|
-      fa = seq.calculate_fa(@equate_il)
-      # TODO: this ['num'] is a bug and should be removed before merging
-      # gos = fa['num']['data'].select { |k, _v| k.start_with?('GO:') }
-      gos = fa['data'].select { |k, _v| k.start_with?('GO:') }
+      gos = seq["fa"]["data"].select { |k, _v| k.start_with?('GO:') }
 
-      output[seq.sequence] = {
-        total: fa['num']['all'],
-        go: gos.map do |k, v|
-              {
-                go_term: k,
-                protein_count: v
-              }
-            end
+      output[seq["sequence"]] = {
+        total: seq["fa"]["counts"]["all"],
+        go: gos.map do |k, v| 
+          {
+            go_term: k,
+            protein_count: v
+          }
+        end
       }
 
       go_terms.push(*gos.keys)
@@ -78,7 +70,6 @@ module FunctionalityHelper
       end
 
       if @domains
-
         set_name = if @extra_info
                      ->(value) { value[:name] = go_mapping[value[:go_term]].name }
                    else
@@ -114,22 +105,18 @@ module FunctionalityHelper
     output = {}
     ipr_entries = []
 
-    @sequences = Sequence.where(sequence: @input)
-
+    @sequences = search(@input, @equate_il).uniq
     @sequences.each do |seq|
-      fa = seq.calculate_fa(@equate_il)
-      # TODO: this ['num'] is a bug and should be removed before merging
-      # iprs = fa['num']['data'].select { |k, _v| k.start_with?('IPR:') }
-      iprs = fa['data'].select { |k, _v| k.start_with?('IPR:') }
+      iprs = seq["fa"]["data"].select { |k, _v| k.start_with?('IPR:') }
 
-      output[seq.sequence] = {
-        total: fa['num']['all'],
-        ipr: iprs.map do |k, v|
-               {
-                 code: k[4..],
-                 protein_count: v
-               }
-             end
+      output[seq["sequence"]] = {
+        total: seq["fa"]["counts"]["all"],
+        ipr: iprs.map do |k, v| 
+          {
+            code: k[4..],
+            protein_count: v
+          }
+        end
       }
 
       ipr_entries.push(*(iprs.map { |k, _v| k[4..] }))
@@ -137,8 +124,8 @@ module FunctionalityHelper
 
     if @extra_info || @domains
       ipr_entries = ipr_entries.uniq.compact.sort
-      ipr_mapping = {}
 
+      ipr_mapping = {}
       InterproEntry.where(code: ipr_entries).find_each do |ipr_entry|
         ipr_mapping[ipr_entry.code] = ipr_entry
       end

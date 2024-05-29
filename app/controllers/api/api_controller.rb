@@ -1,4 +1,6 @@
 class Api::ApiController < HandleOptionsController
+  include SuffixArrayHelper
+
   respond_to :json
 
   # before_action :log, only: %i[pept2taxa pept2lca pept2prot pept2funct pept2ec pept2go pept2interpro peptinfo taxa2lca taxonomy taxa2tree]
@@ -22,15 +24,6 @@ class Api::ApiController < HandleOptionsController
   #
   #   StatHat::API.ez_post_count("API - #{action_name}", Rails.application.config.unipept_stathat_key, 1)
   # end
-
-  # enable cross origin requests
-  def set_headers
-    headers['Access-Control-Allow-Origin'] = '*'
-    headers['Access-Control-Expose-Headers'] = 'ETag'
-    headers['Access-Control-Allow-Methods'] = 'GET, POST'
-    headers['Access-Control-Allow-Headers'] = '*,x-requested-with,Content-Type,If-Modified-Since,If-None-Match'
-    headers['Access-Control-Max-Age'] = '86400'
-  end
 
   # handles the parameters
   def set_params
@@ -90,5 +83,23 @@ class Api::ApiController < HandleOptionsController
       key = @equate_il ? s.tr('I', 'L') : s
       @result.key? key
     end
+  end
+
+  # ======================================================
+  # === Cleaned up code from here on =====================
+  # ======================================================
+
+  # enable cross origin requests
+  def set_cors_headers
+    headers['Access-Control-Allow-Origin'] = '*'
+    headers['Access-Control-Expose-Headers'] = 'ETag'
+    headers['Access-Control-Allow-Methods'] = 'GET, POST'
+    headers['Access-Control-Allow-Headers'] = '*,x-requested-with,Content-Type,If-Modified-Since,If-None-Match'
+    headers['Access-Control-Max-Age'] = '86400'
+  end
+
+  # Searches the suffix array for the input sequences
+  def search_input
+    @sequences = search(@input, @equate_il).uniq
   end
 end

@@ -1,5 +1,5 @@
 class PrivateApi::PrivateApiController < HandleOptionsController
-  before_action :set_headers
+  before_action :set_cors_headers
   before_action :default_format_json
   skip_before_action :verify_authenticity_token, raise: false
 

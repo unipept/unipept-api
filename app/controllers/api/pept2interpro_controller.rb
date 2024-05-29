@@ -1,8 +1,9 @@
 class Api::Pept2interproController < Api::ApiController
   include FunctionalityHelper
 
-  before_action :set_headers
+  before_action :set_cors_headers
   before_action :set_params
+  before_action :search_input
 
   # Returns the functional interpro entries for given tryptic peptides
   # param[input]: Array, required, List of input peptides

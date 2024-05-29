@@ -1,5 +1,5 @@
 class Api::Taxa2lcaController < Api::ApiController
-  before_action :set_headers
+  before_action :set_cors_headers
   before_action :set_params
 
   # Returns the lowest common ancestor for a given list of taxon id's

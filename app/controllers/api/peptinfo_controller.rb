@@ -2,7 +2,7 @@ class Api::PeptinfoController < Api::ApiController
   include FunctionalityHelper
   include TaxonomyHelper
 
-  before_action :set_headers
+  before_action :set_cors_headers
   before_action :set_params
   before_action :set_query
 

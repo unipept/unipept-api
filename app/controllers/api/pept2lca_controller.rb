@@ -1,9 +1,10 @@
 class Api::Pept2lcaController < Api::ApiController
   include TaxonomyHelper
 
-  before_action :set_headers
+  before_action :set_cors_headers
   before_action :set_params
   before_action :set_query
+  before_action :search_input
 
   # Returns the taxonomic lowest common ancestor for a given tryptic peptide
   # param[input]: Array, required, List of input peptides
@@ -12,6 +13,5 @@ class Api::Pept2lcaController < Api::ApiController
   # param[names]: "true" or "false", Include the lineage names
   def pept2lca
     @result = pept2lca_helper
-    respond_with(@result)
   end
 end

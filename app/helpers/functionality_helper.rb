@@ -1,11 +1,8 @@
 module FunctionalityHelper
-  include SuffixArrayHelper
-
   def pept2ec_helper
     output = {}
     ec_numbers = []
 
-    @sequences = search(@input, @equate_il).uniq
     @sequences.each do |seq|
       ecs = seq["fa"]["data"].select { |k, _v| k.start_with?('EC:') }
 

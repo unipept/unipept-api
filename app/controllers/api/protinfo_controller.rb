@@ -1,5 +1,5 @@
 class Api::ProtinfoController < Api::ApiController
-  before_action :set_headers
+  before_action :set_cors_headers
   before_action :set_params
 
   # Returns the taxonomic and functional information for given uniprot id's

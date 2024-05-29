@@ -1,7 +1,7 @@
 require 'octokit'
 
 class Api::Taxa2treeController < Api::ApiController
-  before_action :set_headers
+  before_action :set_cors_headers
   before_action :set_params
 
   # Returns a tree with all taxa aggregated over the complete lineage.

@@ -1,5 +1,5 @@
 class Api::Pept2protController < Api::ApiController
-  before_action :set_headers
+  before_action :set_cors_headers
   before_action :set_params
   before_action :set_sequences
 

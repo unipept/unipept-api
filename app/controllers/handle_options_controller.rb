@@ -1,8 +1,8 @@
 class HandleOptionsController < ApplicationController
-  before_action :set_headers, only: %i[handle_options_request]
+  before_action :set_cors_headers, only: %i[handle_options_request]
 
   # enable cross origin requests
-  def set_headers
+  def set_cors_headers
     headers['Access-Control-Allow-Origin'] = '*'
     headers['Access-Control-Expose-Headers'] = 'ETag'
     headers['Access-Control-Allow-Methods'] = 'GET, POST'

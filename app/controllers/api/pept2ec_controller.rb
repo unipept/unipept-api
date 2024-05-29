@@ -1,8 +1,9 @@
 class Api::Pept2ecController < Api::ApiController
   include FunctionalityHelper
 
-  before_action :set_headers
+  before_action :set_cors_headers
   before_action :set_params
+  before_action :search_input
 
   # Returns the functional EC numbers for a given tryptic peptide
   # param[input]: Array, required, List of input peptides

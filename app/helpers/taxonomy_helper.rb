@@ -1,13 +1,14 @@
 module TaxonomyHelper
+  include SuffixArrayHelper
+
   def pept2lca_helper
     output = {}
     lookup = Hash.new { |h, k| h[k] = Set.new }
     ids = []
-    @sequences = Sequence.where(sequence: @input)
-    lca_field = @equate_il ? :lca_il : :lca
-    @sequences.pluck(:sequence, lca_field).each do |sequence, lca_il|
-      ids.append lca_il
-      lookup[lca_il] << sequence
+
+    @sequences.each do |seq|
+      ids.append seq["lca"]
+      lookup[seq["lca"]] << seq["sequence"]
     end
 
     ids = ids.uniq.compact.sort

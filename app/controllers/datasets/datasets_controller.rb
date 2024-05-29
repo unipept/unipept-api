@@ -1,6 +1,6 @@
 class Datasets::DatasetsController < HandleOptionsController
   before_action :default_format_json
-  before_action :set_headers
+  before_action :set_cors_headers
 
   private
 

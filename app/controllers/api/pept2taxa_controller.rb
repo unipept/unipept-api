@@ -1,5 +1,5 @@
 class Api::Pept2taxaController < Api::ApiController
-  before_action :set_headers
+  before_action :set_cors_headers
   before_action :set_params
   before_action :set_query
 

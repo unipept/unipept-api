@@ -1,4 +1,4 @@
-use axum::{routing::get, Router};
+use axum::{extract::DefaultBodyLimit, routing::{get, post}, Router};
 use datastore::sampledata::SampleData;
 
 use crate::{controllers::{datasets::sampledata, mpa::{pept2data, pept2filtered}, private_api::{ecnumbers, goterms, interpros, metadata, proteins, taxa}}, AppState};
@@ -9,7 +9,7 @@ pub fn create_routes(state: AppState) -> Router {
         .nest("/api", create_api_routes())
         .nest("/datasets", create_datasets_routes(state.sample_data.clone()))
         .nest("/mpa", create_mpa_routes())
-        .nest("/private_api", create_private_api_routes())
+        .nest("/private_api", create_private_api_routes(state))
 }
 
 fn create_api_routes() -> Router {
@@ -38,9 +38,10 @@ fn create_mpa_routes() -> Router {
         .route("/pept2filtered", get(pept2filtered::handler))
 }
 
-fn create_private_api_routes() -> Router {
+fn create_private_api_routes(state: AppState) -> Router {
     Router::new()
-        .route("/ecnumbers", get(ecnumbers::handler))
+        .route("/ecnumbers", post(ecnumbers::handler))
+        .with_state(state.ec_numbers)
         .route("/goterms", get(goterms::handler))
         .route("/interpros", get(interpros::handler))
         .route("/metadata", get(metadata::handler))

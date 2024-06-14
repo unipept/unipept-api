@@ -1,6 +1,7 @@
 use axum::{extract::State, Json};
-use datastore::ecnumbers::EcNumbers;
 use serde::{Deserialize, Serialize};
+
+use crate::EcState;
 
 #[derive(Serialize, Deserialize)]
 pub struct Body {
@@ -14,7 +15,7 @@ pub struct EcNumber {
 }
 
 pub async fn handler(
-    State(ec_numbers): State<EcNumbers>,
+    State(EcState { ec_numbers }): State<EcState>,
     data: Json<Body>
 ) -> Json<Vec<EcNumber>> {
     Json(data.ecnumbers

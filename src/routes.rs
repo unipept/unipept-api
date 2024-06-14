@@ -1,5 +1,7 @@
 use axum::{routing::get, Router};
 
+use crate::controllers::{datasets::sampledata, mpa::{pept2data, pept2filtered}, private_api::{ecnumbers, goterms, interpros, metadata, proteins, taxa}};
+
 pub fn create_routes() -> Router {
     Router::new()
         .route("/", get(|| async { "Unipept API server" }))
@@ -25,12 +27,21 @@ fn create_api_v2_routes() -> Router {
 
 fn create_datasets_routes() -> Router {
     Router::new()
+        .route("/sampledata", get(sampledata::handler))
 }
 
 fn create_mpa_routes() -> Router {
     Router::new()
+        .route("/pept2data", get(pept2data::handler))
+        .route("/pept2filtered", get(pept2filtered::handler))
 }
 
 fn create_private_api_routes() -> Router {
     Router::new()
+        .route("/ecnumbers", get(ecnumbers::handler))
+        .route("/goterms", get(goterms::handler))
+        .route("/interpros", get(interpros::handler))
+        .route("/metadata", get(metadata::handler))
+        .route("/proteins", get(proteins::handler))
+        .route("/taxa", get(taxa::handler))
 }

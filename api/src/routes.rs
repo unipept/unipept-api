@@ -39,10 +39,10 @@ fn create_mpa_routes() -> Router<AppState> {
 
 fn create_private_api_routes() -> Router<AppState> {
     Router::new()
-        .route("/ecnumbers", post(ecnumbers::handler))
-        .route("/goterms", post(goterms::handler))
-        .route("/interpros", get(interpros::handler))
-        .route("/metadata", get(metadata::handler))
+        .route("/ecnumbers", get(ecnumbers::handler).post(ecnumbers::handler))
+        .route("/goterms", get(goterms::handler).post(goterms::handler))
+        .route("/interpros", get(interpros::handler).post(interpros::handler))
+        .route("/metadata", get(metadata::handler).post(metadata::handler))
         .route("/proteins", get(proteins::handler))
         .route("/taxa", get(taxa::handler))
 }

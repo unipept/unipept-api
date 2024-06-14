@@ -3,7 +3,7 @@ use core::str;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct SampleData {
+pub struct SampleStore {
     sample_data: Vec<SampleDataItem>
 }
 
@@ -24,7 +24,7 @@ pub struct Dataset {
     data: Vec<String>
 }
 
-impl SampleData {
+impl SampleStore {
     pub fn try_from_file(file: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let json = std::fs::read_to_string(file)?;
         Ok(serde_json::from_str(&json)?)

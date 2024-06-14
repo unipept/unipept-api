@@ -1,8 +1,8 @@
 use axum::{extract::State, Json};
-use datastore::sampledata::SampleData;
+use datastore::SampleStore;
 
-use crate::SampleState;
+use crate::AppState;
 
-pub async fn handler(State(SampleState { samples }): State<SampleState>) -> Json<SampleData> {
-    Json(samples.as_ref().to_owned())
+pub async fn handler(State(AppState { datastore }): State<AppState>) -> Json<SampleStore> {
+    Json(datastore.sample_store().to_owned())
 }

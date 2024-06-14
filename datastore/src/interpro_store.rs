@@ -1,11 +1,13 @@
 use std::{collections::HashMap, io::{BufRead, BufReader}};
 
+pub type InterproEntryDescription = (String, String);
+
 #[derive(Clone)]
-pub struct EcNumbers {
-    mapper: HashMap<String, String>
+pub struct InterproStore {
+    mapper: HashMap<String, InterproEntryDescription>
 }
 
-impl EcNumbers {
+impl InterproStore {
     pub fn try_from_file(file: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let file = std::fs::File::open(file)?;
 
@@ -13,15 +15,18 @@ impl EcNumbers {
         for line in BufReader::new(file).lines() {
             let line = line?;
             let parts: Vec<&str> = line.split('\t').collect();
-            if parts.len() == 3 {
-                mapper.insert(parts[1].to_string(), parts[2].to_string());
+            if parts.len() == 4 {
+                mapper.insert(parts[1].to_string(), (
+                    parts[2].to_string(),
+                    parts[3].to_string()
+                ));
             }
         }
 
-        Ok(EcNumbers { mapper })
+        Ok(InterproStore { mapper })
     }
 
-    pub fn get(&self, key: &str) -> Option<&String> {
+    pub fn get(&self, key: &str) -> Option<&InterproEntryDescription> {
         self.mapper.get(key)
     }
 }

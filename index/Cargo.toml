@@ -6,10 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-sa-index = { git = "https://github.com/unipept/unipept-index.git", rev = "731912be4687a1cee63f3ed4504342dc294cbb94" }
-sa-builder = { git = "https://github.com/unipept/unipept-index.git", rev = "731912be4687a1cee63f3ed4504342dc294cbb94" }
-sa-mappings = { git = "https://github.com/unipept/unipept-index.git", rev = "731912be4687a1cee63f3ed4504342dc294cbb94" }
-sa-compression = { git = "https://github.com/unipept/unipept-index.git", rev = "731912be4687a1cee63f3ed4504342dc294cbb94" }
+sa-index = { git = "https://github.com/unipept/unipept-index.git", rev = "a181fa9e3560b838215186faf3f1a9eb80c18cd8" }
+sa-builder = { git = "https://github.com/unipept/unipept-index.git", rev = "a181fa9e3560b838215186faf3f1a9eb80c18cd8" }
+sa-mappings = { git = "https://github.com/unipept/unipept-index.git", rev = "a181fa9e3560b838215186faf3f1a9eb80c18cd8" }
+sa-compression = { git = "https://github.com/unipept/unipept-index.git", rev = "a181fa9e3560b838215186faf3f1a9eb80c18cd8" }
 serde = "1.0.203"
 serde_json = "1.0.117"
 rayon = "1.8.1"

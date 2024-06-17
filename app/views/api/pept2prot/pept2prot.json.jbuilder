@@ -1,13 +1,15 @@
-json.array! @input_order do |peptide|
-  json.peptide peptide
-  json.uniprot_id @result[peptide][:uniprot_id]
-  json.protein_name @result[peptide][:name]
-  json.taxon_id @result[peptide][:taxon_id]
-  json.protein @result[peptide][:protein]
-  if @extra_info
-    json.taxon_name @result[peptide][:taxon][:name]
-    json.ec_references @result[peptide][:ec_cross_references]
-    json.go_references @result[peptide][:go_cross_references]
-    json.interpro_references @result[peptide][:interpro_cross_references]
+@input_order.map do |peptide|
+  json.array! @result[peptide].map do |prot|
+    json.peptide peptide
+    json.uniprot_id prot[:uniprot_id]
+    json.protein_name prot[:name]
+    json.taxon_id prot[:taxon_id]
+    json.protein prot[:protein]
+    if @extra_info
+      json.taxon_name prot[:taxon][:name]
+      json.ec_references prot[:ec_cross_references]
+      json.go_references prot[:go_cross_references]
+      json.interpro_references prot[:interpro_cross_references]
+    end
   end
 end

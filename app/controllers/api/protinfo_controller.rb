@@ -20,7 +20,5 @@ class Api::ProtinfoController < Api::ApiController
           }
         end
       end
-
-    respond_with(@result)
   end
 end

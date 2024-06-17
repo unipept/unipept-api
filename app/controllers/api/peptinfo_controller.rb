@@ -5,6 +5,7 @@ class Api::PeptinfoController < Api::ApiController
   before_action :set_cors_headers
   before_action :set_params
   before_action :set_query
+  before_action :search_input
 
   # Returns both the lca, ec and go information for a given tryptic peptide
   # param[input]: Array, required, List of input peptides
@@ -20,8 +21,6 @@ class Api::PeptinfoController < Api::ApiController
     interpro_result = pept2interpro_helper
 
     @input_order.each do |seq|
-      seq_index = @equate_il ? seq.tr('I', 'L') : seq
-
       next unless go_result.key? seq_index
 
       @result[seq_index] = {
@@ -32,7 +31,5 @@ class Api::PeptinfoController < Api::ApiController
         lca: lca_result[seq_index]
       }
     end
-
-    respond_with(@result)
   end
 end

@@ -1,7 +1,6 @@
 class Api::Pept2protController < Api::ApiController
   before_action :set_cors_headers
   before_action :set_params
-  # before_action :set_sequences
   before_action :search_input
 
   # Returns a list of Uniprot entries containing a given tryptic peptide
@@ -45,15 +44,13 @@ class Api::Pept2protController < Api::ApiController
         end
     end
 
-    @result = {}
+    @result = Hash.new { |h, k| h[k] = Set.new }
     @sequences.each do |sequence|
       sequence["uniprot_accession_numbers"].each do |uniprot_id|
-        @result[sequence["sequence"]] = uniprot_info[uniprot_id]
+        @result[sequence["sequence"]] << uniprot_info[uniprot_id]
       end
     end
 
     filter_input_order
-
-    respond_with(@result)
   end
 end

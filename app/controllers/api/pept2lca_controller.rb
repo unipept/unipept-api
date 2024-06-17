@@ -13,5 +13,6 @@ class Api::Pept2lcaController < Api::ApiController
   # param[names]: "true" or "false", Include the lineage names
   def pept2lca
     @result = pept2lca_helper
+    filter_input_order
   end
 end

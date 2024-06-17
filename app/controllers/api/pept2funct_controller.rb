@@ -18,8 +18,6 @@ class Api::Pept2functController < Api::ApiController
     interpro_result = pept2interpro_helper
 
     @input_order.each do |seq|
-      seq_index = @equate_il ? seq.tr('I', 'L') : seq
-
       next unless go_result.key? seq_index
 
       @result[seq_index] = {

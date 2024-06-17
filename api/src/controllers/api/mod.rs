@@ -21,6 +21,10 @@ pub fn default_extra() -> bool {
   false
 }
 
+pub fn default_domains() -> bool {
+  false
+}
+
 pub struct Query<T>(T);
 
 #[async_trait]

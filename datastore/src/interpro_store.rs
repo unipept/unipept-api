@@ -29,4 +29,12 @@ impl InterproStore {
     pub fn get(&self, key: &str) -> Option<&InterproEntryDescription> {
         self.mapper.get(key)
     }
+
+    pub fn get_domain(&self, key: &str) -> Option<&str> {
+        self.mapper.get(key).map(|(domain, _)| domain.as_str())
+    }
+
+    pub fn get_name(&self, key: &str) -> Option<&str> {
+        self.mapper.get(key).map(|(_, name)| name.as_str())
+    }
 }

@@ -15,22 +15,10 @@ pub struct QueryParams {
 }
 
 #[derive(Serialize)]
-#[serde(untagged)]
-enum EcNumber {
-    Default(EcNumberDefault),
-    Extra(EcNumberExtra)
-}
-
-#[derive(Serialize)]
-struct EcNumberDefault {
-    ec_number: String,
-    protein_count: u32
-}
-
-#[derive(Serialize)]
-struct EcNumberExtra {
+struct EcNumber {
     ec_number: String,
     protein_count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>
 }
 
@@ -46,30 +34,24 @@ pub async fn handler(
     Query(QueryParams { input, equate_il, extra }): Query<QueryParams>
 ) -> Json<Vec<EcInformation>> {
     let result = index.analyse(&input, equate_il).result;
+    let ec_store = datastore.ec_store();
 
     Json(result.into_iter().filter_map(|item| {
         if let Some(fa) = item.fa {
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
 
-            let ecs = fa.data.iter().filter(|(key, _)| key.starts_with("EC:"));
-            let ec: Vec<EcNumber> = if extra {
-                let ec_store = datastore.ec_store();
-                ecs.map(|(key, count)| EcNumber::Extra(EcNumberExtra {
-                    ec_number: key[3..].to_string(),
-                    protein_count: *count,
-                    name: ec_store.get(&key[3..]).cloned()
-                })).collect()
-            } else {
-                ecs.map(|(key, count)| EcNumber::Default(EcNumberDefault {
-                    ec_number: key[3..].to_string(),
-                    protein_count: *count
-                })).collect()
-            };
-
             Some(EcInformation {
                 peptide: item.sequence,
                 total_protein_count,
-                ec
+                ec: fa.data
+                    .iter()
+                    .filter(|(key, _)| key.starts_with("EC:"))
+                    .map(|(key, count)| EcNumber {
+                        ec_number: key[3..].to_string(),
+                        protein_count: *count,
+                        name: if extra { ec_store.get(&key[3..]).cloned() } else { None }
+                    })
+                    .collect()
             })
         } else {
             None

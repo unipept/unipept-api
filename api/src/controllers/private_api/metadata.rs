@@ -9,7 +9,7 @@ pub struct Version {
 }
 
 pub async fn handler(
-    State(AppState { datastore }): State<AppState>
+    State(AppState { datastore, .. }): State<AppState>
 ) -> Json<Version> {
     Json(Version {
         db_version: datastore.version().to_string()

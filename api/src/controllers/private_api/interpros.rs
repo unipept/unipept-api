@@ -16,7 +16,7 @@ pub struct InterproEntry {
 }
 
 pub async fn handler(
-    State(AppState { datastore }): State<AppState>,
+    State(AppState { datastore, .. }): State<AppState>,
     data: Json<Body>
 ) -> Json<Vec<InterproEntry>> {
     Json(data.interpros

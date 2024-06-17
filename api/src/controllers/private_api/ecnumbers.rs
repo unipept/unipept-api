@@ -15,7 +15,7 @@ pub struct EcNumber {
 }
 
 pub async fn handler(
-    State(AppState { datastore }): State<AppState>,
+    State(AppState { datastore, .. }): State<AppState>,
     data: Json<Body>
 ) -> Json<Vec<EcNumber>> {
     Json(data.ecnumbers

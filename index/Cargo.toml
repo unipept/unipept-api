@@ -1,20 +1,16 @@
 [package]
-name = "unipept-api"
+name = "index"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-datastore = { path = "../datastore" }
-index = { path = "../index" }
-axum = { version = "0.7.4", features = ["macros"] }
-tokio = { version = "1.36.0", features = ["rt", "rt-multi-thread", "macros"] }
-clap = { version = "4.5.1", features = ["derive"] }
-serde = "1.0.203"
-serde_json = "1.0.117"
-
 sa-index = { git = "https://github.com/unipept/unipept-index.git", rev = "731912be4687a1cee63f3ed4504342dc294cbb94" }
 sa-builder = { git = "https://github.com/unipept/unipept-index.git", rev = "731912be4687a1cee63f3ed4504342dc294cbb94" }
 sa-mappings = { git = "https://github.com/unipept/unipept-index.git", rev = "731912be4687a1cee63f3ed4504342dc294cbb94" }
 sa-compression = { git = "https://github.com/unipept/unipept-index.git", rev = "731912be4687a1cee63f3ed4504342dc294cbb94" }
+serde = "1.0.203"
+serde_json = "1.0.117"
+rayon = "1.8.1"
+datastore = { path = "../datastore" }

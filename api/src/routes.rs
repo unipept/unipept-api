@@ -1,8 +1,8 @@
-use axum::{routing::{get, post}, Router};
+use axum::{routing::get, Router};
 
 use crate::{controllers::{datasets::sampledata, mpa::{pept2data, pept2filtered}, private_api::{ecnumbers, goterms, interpros, metadata, proteins, taxa}}, AppState};
 
-pub fn create_routes(state: AppState) -> Router {
+pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(|| async { "Unipept API server" }))
         .nest("/api", create_api_routes())
@@ -33,8 +33,8 @@ fn create_datasets_routes() -> Router<AppState> {
 
 fn create_mpa_routes() -> Router<AppState> {
     Router::new()
-        .route("/pept2data", get(pept2data::handler))
-        .route("/pept2filtered", get(pept2filtered::handler))
+        .route("/pept2data", get(pept2data::handler).post(pept2data::handler))
+        .route("/pept2filtered", get(pept2filtered::handler).post(pept2filtered::handler))
 }
 
 fn create_private_api_routes() -> Router<AppState> {

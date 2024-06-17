@@ -17,9 +17,9 @@ pub struct GoTerm {
 
 pub async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
-    data: Json<Body>
+    body: Json<Body>
 ) -> Json<Vec<GoTerm>> {
-    Json(data.goterms
+    Json(body.goterms
         .iter()
         .map(|go_term| go_term.trim())
         .filter_map(|go_term| {

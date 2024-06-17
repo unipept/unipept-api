@@ -43,6 +43,6 @@ fn create_private_api_routes() -> Router<AppState> {
         .route("/goterms", get(goterms::handler).post(goterms::handler))
         .route("/interpros", get(interpros::handler).post(interpros::handler))
         .route("/metadata", get(metadata::handler).post(metadata::handler))
-        .route("/proteins", get(proteins::handler))
-        .route("/taxa", get(taxa::handler))
+        .route("/proteins", get(proteins::handler).post(proteins::handler))
+        .route("/taxa", get(taxa::handler).post(taxa::handler))
 }

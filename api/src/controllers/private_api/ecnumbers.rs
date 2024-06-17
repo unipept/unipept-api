@@ -16,9 +16,9 @@ pub struct EcNumber {
 
 pub async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
-    data: Json<Body>
+    body: Json<Body>
 ) -> Json<Vec<EcNumber>> {
-    Json(data.ecnumbers
+    Json(body.ecnumbers
         .iter()
         .map(|ec_number| ec_number.trim())
         .filter_map(|ec_number| {

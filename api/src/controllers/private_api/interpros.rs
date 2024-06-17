@@ -17,9 +17,9 @@ pub struct InterproEntry {
 
 pub async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
-    data: Json<Body>
+    body: Json<Body>
 ) -> Json<Vec<InterproEntry>> {
-    Json(data.interpros
+    Json(body.interpros
         .iter()
         .map(|interpro_entry| interpro_entry.trim())
         .filter_map(|interpro_entry| {

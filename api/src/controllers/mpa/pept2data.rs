@@ -13,7 +13,7 @@ pub struct Body {
 }
 
 #[derive(Serialize)]
-pub struct ResponseItem {
+pub struct Data {
     sequence: String,
     lca: Option<usize>,
     lineage: Lineage,
@@ -23,13 +23,13 @@ pub struct ResponseItem {
 pub async fn handler(
     State(AppState { index, datastore }): State<AppState>,
     body: Json<Body>
-) -> Json<Vec<ResponseItem>> {
+) -> Json<Vec<Data>> {
     let lineage_store = datastore.lineage_store();
     let result = index.analyse(&body.peptides, body.equate_il).result;
     Json(result.into_iter().map(|item| {
         let lineage = lineage_store.get(item.lca.unwrap() as u32).unwrap().clone();
         
-        ResponseItem { 
+        Data { 
             sequence: item.sequence, 
             lca: item.lca, 
             lineage, 

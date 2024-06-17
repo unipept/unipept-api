@@ -1,8 +1,8 @@
 use std::{fs::File, io::{BufReader, Read}};
 
 use sa_compression::load_compressed_suffix_array;
-use sa_index::{binary::load_suffix_array, peptide_search::{analyse_all_peptides, search_all_peptides, search_proteins_for_peptide, OutputData, SearchOnlyResult, SearchResultWithAnalysis}, sa_searcher::Searcher, suffix_to_protein_index::SparseSuffixToProtein, SuffixArray};
-use sa_mappings::{functionality::FunctionAggregator, proteins::{Protein, Proteins}, taxonomy::{AggregationMethod, TaxonAggregator}};
+use sa_index::{binary::load_suffix_array, peptide_search::{analyse_all_peptides, OutputData, SearchResultWithAnalysis}, sa_searcher::Searcher, suffix_to_protein_index::SparseSuffixToProtein, SuffixArray};
+use sa_mappings::{functionality::FunctionAggregator, proteins::Proteins, taxonomy::{AggregationMethod, TaxonAggregator}};
 
 pub struct Index {
     searcher: Searcher

@@ -2,7 +2,7 @@ use std::{collections::HashMap, io::{BufRead, BufReader}, str::FromStr};
 
 pub type TaxonInformation = (String, LineageRank);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LineageRank {
     NoRank,
     Superkindom,
@@ -100,6 +100,41 @@ impl FromStr for LineageRank {
             "varietas" => Ok(Self::Varietas),
             "forma" => Ok(Self::Forma),
             _ => Err(())
+        }
+    }
+}
+
+impl Into<String> for LineageRank {
+    fn into(self) -> String {
+        match self {
+            Self::NoRank => "no rank".to_string(),
+            Self::Superkindom => "superkingdom".to_string(),
+            Self::Kingdom => "kingdom".to_string(),
+            Self::Subkingdom => "subkingdom".to_string(),
+            Self::Superphylum => "superphylum".to_string(),
+            Self::Phylum => "phylum".to_string(),
+            Self::Subphylum => "subphylum".to_string(),
+            Self::Superclass => "superclass".to_string(),
+            Self::Class => "class".to_string(),
+            Self::Subclass => "subclass".to_string(),
+            Self::Superorder => "superorder".to_string(),
+            Self::Order => "order".to_string(),
+            Self::Suborder => "suborder".to_string(),
+            Self::Infraorder => "infraorder".to_string(),
+            Self::Superfamily => "superfamily".to_string(),
+            Self::Family => "family".to_string(),
+            Self::Subfamily => "subfamily".to_string(),
+            Self::Tribe => "tribe".to_string(),
+            Self::Subtribe => "subtribe".to_string(),
+            Self::Genus => "genus".to_string(),
+            Self::Subgenus => "subgenus".to_string(),
+            Self::SpeciesGroup => "species group".to_string(),
+            Self::SpeciesSubgroup => "species subgroup".to_string(),
+            Self::Species => "species".to_string(),
+            Self::Subspecies => "subspecies".to_string(),
+            Self::Strain => "strain".to_string(),
+            Self::Varietas => "varietas".to_string(),
+            Self::Forma => "forma".to_string()
         }
     }
 }

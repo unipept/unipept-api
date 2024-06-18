@@ -28,19 +28,19 @@ pub async fn handler(
     Query(QueryParams { input, equate_il, extra, domains }): Query<QueryParams>
 ) -> Json<Vec<InterproInformation>> {
     let result = index.analyse(&input, equate_il).result;
-    
+
     let interpro_store = datastore.interpro_store();
 
     Json(result.into_iter().filter_map(|item| {
-        if let Some(fa) = item.fa {
-            let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
-            let iprs = interpro_entries(&fa.data, interpro_store, extra, domains);
+        let fa = item.fa?;
 
-            Some(InterproInformation {
-                peptide: item.sequence,
-                total_protein_count,
-                ipr: iprs
-            })
-        } else { None }
+        let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
+        let iprs = interpro_entries(&fa.data, interpro_store, extra, domains);
+
+        Some(InterproInformation {
+            peptide: item.sequence,
+            total_protein_count,
+            ipr: iprs
+        })
     }).collect())
 }

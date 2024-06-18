@@ -28,19 +28,19 @@ pub async fn handler(
     Query(QueryParams { input, equate_il, extra, domains }): Query<QueryParams>
 ) -> Json<Vec<GoInformation>> {
     let result = index.analyse(&input, equate_il).result;
-    
+
     let go_store = datastore.go_store();
 
     Json(result.into_iter().filter_map(|item| {
-        if let Some(fa) = item.fa {
-            let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
-            let gos = go_terms(&fa.data, go_store, extra, domains);
+        let fa = item.fa?;
 
-            Some(GoInformation {
-                peptide: item.sequence,
-                total_protein_count,
-                go: gos
-            })
-        } else { None }
+        let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
+        let gos = go_terms(&fa.data, go_store, extra, domains);
+
+        Some(GoInformation {
+            peptide: item.sequence,
+            total_protein_count,
+            go: gos
+        })
     }).collect())
 }

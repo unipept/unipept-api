@@ -30,25 +30,25 @@ pub async fn handler(
     Query(QueryParams { input, equate_il, extra, domains }): Query<QueryParams>
 ) -> Json<Vec<FunctInformation>> {
     let result = index.analyse(&input, equate_il).result;
-    
+
     let ec_store = datastore.ec_store();
     let go_store = datastore.go_store();
     let interpro_store = datastore.interpro_store();
 
     Json(result.into_iter().filter_map(|item| {
-        if let Some(fa) = item.fa {
-            let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
-            let ecs = ec_numbers(&fa.data, ec_store, extra);
-            let gos = go_terms(&fa.data, go_store, extra, domains);
-            let iprs = interpro_entries(&fa.data, interpro_store, extra, domains);
+        let fa = item.fa?;
+        
+        let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
+        let ecs = ec_numbers(&fa.data, ec_store, extra);
+        let gos = go_terms(&fa.data, go_store, extra, domains);
+        let iprs = interpro_entries(&fa.data, interpro_store, extra, domains);
 
-            Some(FunctInformation {
-                peptide: item.sequence,
-                total_protein_count,
-                ec: ecs,
-                go: gos,
-                ipr: iprs
-            })
-        } else { None }
+        Some(FunctInformation {
+            peptide: item.sequence,
+            total_protein_count,
+            ec: ecs,
+            go: gos,
+            ipr: iprs
+        })
     }).collect())
 }

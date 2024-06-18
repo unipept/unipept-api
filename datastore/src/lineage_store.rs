@@ -4,7 +4,7 @@ use serde::Serialize;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Lineage {
-    pub superkindom: Option<i32>,
+    pub superkingdom: Option<i32>,
     pub kingdom: Option<i32>,
     pub subkingdom: Option<i32>,
     pub superphylum: Option<i32>,
@@ -13,10 +13,12 @@ pub struct Lineage {
     pub superclass: Option<i32>,
     pub class: Option<i32>,
     pub subclass: Option<i32>,
+    pub infraclass: Option<i32>,
     pub superorder: Option<i32>,
     pub order: Option<i32>,
     pub suborder: Option<i32>,
     pub infraorder: Option<i32>,
+    pub parvorder: Option<i32>,
     pub superfamily: Option<i32>,
     pub family: Option<i32>,
     pub subfamily: Option<i32>,
@@ -53,7 +55,7 @@ impl LineageStore {
 
             if parts.len() == 27 {
                 mapper.insert(taxon_id, Lineage {
-                    superkindom: parts[0],
+                    superkingdom: parts[0],
                     kingdom: parts[1],
                     subkingdom: parts[2],
                     superphylum: parts[4],
@@ -62,10 +64,12 @@ impl LineageStore {
                     superclass: parts[6],
                     class: parts[7],
                     subclass: parts[8],
+                    infraclass: None,
                     superorder: parts[9],
                     order: parts[10],
                     suborder: parts[11],
                     infraorder: parts[12],
+                    parvorder: None,
                     superfamily: parts[13],
                     family: parts[14],
                     subfamily: parts[15],

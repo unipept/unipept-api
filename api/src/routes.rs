@@ -1,6 +1,6 @@
 use axum::{routing::get, Router};
 
-use crate::{controllers::{api::{pept2ec, pept2funct, pept2go, pept2interpro}, datasets::sampledata, mpa::{pept2data, pept2filtered}, private_api::{ecnumbers, goterms, interpros, metadata, proteins, taxa}}, AppState};
+use crate::{controllers::{api::{pept2ec, pept2funct, pept2go, pept2interpro, pept2lca}, datasets::sampledata, mpa::{pept2data, pept2filtered}, private_api::{ecnumbers, goterms, interpros, metadata, proteins, taxa}}, AppState};
 
 pub fn create_router(state: AppState) -> Router {
     Router::new()
@@ -24,6 +24,7 @@ fn create_api_v1_routes() -> Router<AppState> {
         .route("/pept2funct", get(pept2funct::handler).post(pept2funct::handler))
         .route("/pept2go", get(pept2go::handler).post(pept2go::handler))
         .route("/pept2interpro", get(pept2interpro::handler).post(pept2interpro::handler))
+        .route("/pept2lca", get(pept2lca::handler_v1).post(pept2lca::handler_v1))
 }
 
 fn create_api_v2_routes() -> Router<AppState> {
@@ -32,6 +33,7 @@ fn create_api_v2_routes() -> Router<AppState> {
         .route("/pept2funct", get(pept2funct::handler).post(pept2funct::handler))
         .route("/pept2go", get(pept2go::handler).post(pept2go::handler))
         .route("/pept2interpro", get(pept2interpro::handler).post(pept2interpro::handler))
+        .route("/pept2lca", get(pept2lca::handler_v2).post(pept2lca::handler_v2))
 }
 
 fn create_datasets_routes() -> Router<AppState> {

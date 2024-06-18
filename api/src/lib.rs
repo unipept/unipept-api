@@ -7,6 +7,7 @@ use tokio::net::TcpListener;
 pub mod routes;
 pub mod errors;
 pub mod controllers;
+pub mod helpers;
 
 #[derive(Clone)]
 pub struct AppState {

@@ -5,9 +5,9 @@ mod lineage_store;
 mod sample_store;
 mod taxon_store;
 
-use ec_store::EcStore;
-use go_store::GoStore;
-use interpro_store::InterproStore;
+pub use ec_store::EcStore;
+pub use go_store::GoStore;
+pub use interpro_store::InterproStore;
 pub use lineage_store::{Lineage, LineageStore};
 pub use sample_store::SampleStore;
 pub use taxon_store::TaxonStore;

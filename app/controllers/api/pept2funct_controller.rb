@@ -18,13 +18,13 @@ class Api::Pept2functController < Api::ApiController
     interpro_result = pept2interpro_helper
 
     @input_order.each do |seq|
-      next unless go_result.key? seq_index
+      next unless go_result.key? seq
 
-      @result[seq_index] = {
-        total: go_result[seq_index][:total],
-        go: go_result[seq_index][:go],
-        ec: ec_result[seq_index][:ec],
-        ipr: interpro_result[seq_index][:ipr]
+      @result[seq] = {
+        total: go_result[seq][:total],
+        go: go_result[seq][:go],
+        ec: ec_result[seq][:ec],
+        ipr: interpro_result[seq][:ipr]
       }
     end
   end

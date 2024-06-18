@@ -26,6 +26,6 @@ pub fn lineages(lca: u32, names: bool, lineage_store: &LineageStore, taxon_store
     }
 }
 
-fn get_name(taxon_id: Option<i32>, taxon_store: &TaxonStore) -> Option<String> {
-    taxon_id.and_then(|id| taxon_store.get(id.abs() as u32).map(|(name, _)| name.to_string()))
+fn get_name(taxon_id: Option<i32>, taxon_store: &TaxonStore) -> String {
+    taxon_id.and_then(|id| taxon_store.get(id.abs() as u32).map(|(name, _)| name.to_string())).unwrap_or("".to_string())
 }

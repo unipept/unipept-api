@@ -53,8 +53,6 @@ class Api::ApiController < HandleOptionsController
     @domains = params[:domains] == 'true'
     @extra_info = params[:extra] == 'true'
     @remove = params[:remove] == 'true'
-
-    @input = @input.map { |s| s.tr('I', 'L') } if @equate_il
   end
 
   # prepares the taxonomy query

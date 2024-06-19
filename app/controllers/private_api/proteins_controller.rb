@@ -19,8 +19,6 @@ class PrivateApi::ProteinsController < PrivateApi::PrivateApiController
       return
     end
 
-    puts peptide
-
     # Request the suffix array search service
     search_result = search([ peptide ], equate_il).first
 

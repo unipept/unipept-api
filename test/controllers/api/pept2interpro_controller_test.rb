@@ -4,6 +4,8 @@ class Api::Pept2interproControllerTest < ActionController::TestCase
   teardown :assert_success
 
   test 'should get pept2interpro' do
+    stub_http_request! 'test/fixtures/index/response.json'
+
     @expected = '[
       {"peptide":"AAIER","total_protein_count":3,"ipr":[]},
       {"peptide":"AAILER","total_protein_count":1,"ipr":[{"code":"IPR000169","protein_count":1}]}
@@ -13,6 +15,8 @@ class Api::Pept2interproControllerTest < ActionController::TestCase
   end
 
   test 'should get pept2interpro with il' do
+    stub_http_request! 'test/fixtures/index/response_equate.json'
+
     @expected = '[
       {"peptide":"AAIER","total_protein_count":22,"ipr":[{"code":"IPR000169","protein_count":1}]},
       {"peptide":"AAILER","total_protein_count":0,"ipr":[]}
@@ -22,6 +26,8 @@ class Api::Pept2interproControllerTest < ActionController::TestCase
   end
 
   test 'should get pept2interpro with extra' do
+    stub_http_request! 'test/fixtures/index/response.json'
+
     @expected = '[
       {"peptide":"AAIER","total_protein_count":3,"ipr":[]},
       {"peptide":"AAILER","total_protein_count":1,"ipr":[{"code":"IPR000169","protein_count":1,"name":"Cysteine peptidase, cysteine active site","type":"Active_site"}]}
@@ -31,6 +37,8 @@ class Api::Pept2interproControllerTest < ActionController::TestCase
   end
 
   test 'should get pept2interpro with domains' do
+    stub_http_request! 'test/fixtures/index/response.json'
+
     @expected = '[
       {"peptide":"AAIER","total_protein_count":3,"ipr":[]},
       {"peptide":"AAILER","total_protein_count":1,"ipr":[{"Active_site":[{"code":"IPR000169","protein_count":1}]}]}
@@ -40,6 +48,8 @@ class Api::Pept2interproControllerTest < ActionController::TestCase
   end
 
   test 'should get pept2interpro with extra and domains' do
+    stub_http_request! 'test/fixtures/index/response.json'
+
     @expected = '[
       {"peptide":"AAIER","total_protein_count":3,"ipr":[]},
       {"peptide":"AAILER","total_protein_count":1,"ipr":[{"Active_site":[{"code":"IPR000169","protein_count":1,"name":"Cysteine peptidase, cysteine active site"}]}]}
@@ -49,6 +59,8 @@ class Api::Pept2interproControllerTest < ActionController::TestCase
   end
 
   test 'should get pept2interpro with extra and domains and il' do
+    stub_http_request! 'test/fixtures/index/response_equate.json'
+
     @expected = '[
       {"peptide":"AAIER","total_protein_count":22,"ipr":[{"Active_site":[{"code":"IPR000169","protein_count":1,"name":"Cysteine peptidase, cysteine active site"}]}]},
       {"peptide":"AAILER","total_protein_count":0,"ipr":[]}

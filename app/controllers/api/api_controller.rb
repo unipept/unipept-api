@@ -70,18 +70,10 @@ class Api::ApiController < HandleOptionsController
              end
   end
 
-  # prepares the sequences query
-  def set_sequences
-    rel_name = @equate_il ? :peptides : :original_peptides
-    @sequences = Sequence.joins(rel_name => :uniprot_entry)
-                         .where(sequence: @input)
-  end
-
   # Reorders the results according to the input order
   def filter_input_order
     @input_order.select! do |s|
-      key = @equate_il ? s.tr('I', 'L') : s
-      @result.key? key
+      @result.key? s
     end
   end
 

@@ -4,6 +4,8 @@ class Api::Pept2ecControllerTest < ActionController::TestCase
   teardown :assert_success
 
   test 'should get pept2ec' do
+    stub_http_request! 'test/fixtures/index/response.json'
+
     @expected = '[
       {"peptide":"AAIER","total_protein_count":3,"ec":[]},
       {"peptide":"AAILER","total_protein_count":1,"ec":[{"ec_number":"4.2.1.11","protein_count":1}]}
@@ -13,6 +15,8 @@ class Api::Pept2ecControllerTest < ActionController::TestCase
   end
 
   test 'should get pept2ec with il' do
+    stub_http_request! 'test/fixtures/index/response_equate.json'
+
     @expected = '[
       {"peptide":"AAIER","total_protein_count":22,"ec":[{"ec_number":"2.7.11.1","protein_count":4}]},
       {"peptide":"AAILER","total_protein_count":0,"ec":[]}
@@ -22,6 +26,8 @@ class Api::Pept2ecControllerTest < ActionController::TestCase
   end
 
   test 'should get pept2ec with extra' do
+    stub_http_request! 'test/fixtures/index/response.json'
+
     @expected = '[
       {"peptide":"AAIER","total_protein_count":3,"ec":[]},
       {"peptide":"AAILER","total_protein_count":1,"ec":[{"ec_number":"4.2.1.11","protein_count":1,"name":"Some Enzyme3"}]}
@@ -31,6 +37,8 @@ class Api::Pept2ecControllerTest < ActionController::TestCase
   end
 
   test 'should get pept2ec with extra and il' do
+    stub_http_request! 'test/fixtures/index/response_equate.json'
+
     @expected = '[
       {"peptide":"AAIER","total_protein_count":22,"ec":[{"ec_number":"2.7.11.1","protein_count":4,"name":"Some Enzyme2"}]},
       {"peptide":"AAILER","total_protein_count":0,"ec":[]}

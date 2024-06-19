@@ -43,6 +43,9 @@ group :development, :test do
   #Codecov for coverage processing
   gem 'simplecov'
   gem 'simplecov-cobertura'
+
+  # Mocking HTTP requests to third parties.
+  gem 'webmock'
 end
 
 group :development do

@@ -19,6 +19,8 @@ class PrivateApi::ProteinsController < PrivateApi::PrivateApiController
       return
     end
 
+    puts peptide
+
     # Request the suffix array search service
     search_result = search([ peptide ], equate_il).first
 
@@ -28,8 +30,6 @@ class PrivateApi::ProteinsController < PrivateApi::PrivateApiController
     if search_result.nil?
       return
     end
-
-    puts search_result
 
     @lca = search_result["lca"]
     @proteins = UniprotEntry
@@ -48,7 +48,6 @@ class PrivateApi::ProteinsController < PrivateApi::PrivateApiController
 
     # Lineage van de lca ophalen
     lca_lineage = Lineage.find(@lca)
-    puts lca_lineage.inspect
     finished = (@lca == 1)
     while !finished && lca_lineage.has_next?
       next_rank = lca_lineage.next_t

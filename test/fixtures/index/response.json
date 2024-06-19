@@ -1,0 +1,60 @@
+{
+    "result": [
+        {
+            "sequence": "AAILER",
+            "lca": 1,
+            "taxa": [
+                1,
+                2
+            ],
+            "uniprot_accession_numbers": [
+                "nr3",
+                "nr4"
+            ],
+            "fa": {
+                "counts": {
+                    "GO": 1,
+                    "EC": 1,
+                    "all": 1,
+                    "IPR": 1
+                },
+                "data": {
+                    "EC:4.2.1.11": 1,
+                    "GO:0005576": 1,
+                    "GO:0000287": 1,
+                    "GO:0004634": 1,
+                    "GO:0000015": 1,
+                    "GO:0006096": 1,
+                    "GO:0009986": 1,
+                    "IPR:IPR000169": 1
+                }
+            },
+            "cutoff_used": false
+        },
+        {
+            "sequence": "AAIER",
+            "lca": 2,
+            "taxa": [
+                1
+            ],
+            "uniprot_accession_numbers": [
+                "nr"
+            ],
+            "fa": {
+                "counts": {
+                    "IPR": 0,
+                    "EC": 0,
+                    "all": 3,
+                    "GO": 3
+                },
+                "data": {
+                    "GO:0051301": 3,
+                    "GO:0005525": 3,
+                    "GO:0046872": 3,
+                    "GO:0007049": 3
+                }
+            },
+            "cutoff_used": false
+        }
+    ]
+}

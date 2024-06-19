@@ -27,15 +27,30 @@ ActiveRecord::Schema.define(version: 0) do
     t.string "project_website", limit: 200
   end
 
+  create_table "ec_cross_references", id: :integer, unsigned: true, options: "ENGINE=InnoDB DEFAULT CHARSET=ascii", force: :cascade do |t|
+    t.integer "uniprot_entry_id", null: false, unsigned: true
+    t.string "ec_number_code", limit: 15, null: false
+  end
+
   create_table "ec_numbers", id: :integer, limit: 2, unsigned: true, options: "ENGINE=InnoDB DEFAULT CHARSET=utf8", force: :cascade do |t|
     t.string "code", limit: 15, null: false
     t.string "name", limit: 155, null: false
+  end
+
+  create_table "go_cross_references", id: :integer, unsigned: true, options: "ENGINE=InnoDB DEFAULT CHARSET=ascii", force: :cascade do |t|
+    t.integer "uniprot_entry_id", null: false, unsigned: true
+    t.string "go_term_code", limit: 15, null: false
   end
 
   create_table "go_terms", id: :integer, unsigned: true, options: "ENGINE=InnoDB DEFAULT CHARSET=latin1", force: :cascade do |t|
     t.string "code", limit: 15, null: false
     t.string "namespace", limit: 18, null: false
     t.string "name", limit: 200, null: false
+  end
+
+  create_table "interpro_cross_references", id: :integer, unsigned: true, options: "ENGINE=InnoDB DEFAULT CHARSET=ascii", force: :cascade do |t|
+    t.integer "uniprot_entry_id", null: false, unsigned: true
+    t.string "interpro_entry_code", limit: 9, null: false
   end
 
   create_table "interpro_entries", id: :integer, unsigned: true, options: "ENGINE=InnoDB DEFAULT CHARSET=ascii", force: :cascade do |t|
@@ -88,7 +103,6 @@ ActiveRecord::Schema.define(version: 0) do
     t.string "type", limit: 9, null: false
     t.string "name", limit: 150, null: false
     t.text "protein", null: false
-    t.text "fa", null: false
   end
 
   create_table "users", id: :integer, options: "ENGINE=InnoDB DEFAULT CHARSET=latin1", force: :cascade do |t|

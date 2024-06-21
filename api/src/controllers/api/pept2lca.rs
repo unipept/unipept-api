@@ -1,7 +1,7 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::{controllers::api::{default_equate_il, default_extra, default_names}, helpers::lineage_helper::{lineages, Lineage, LineageVersion}, AppState};
+use crate::{controllers::api::{default_equate_il, default_extra, default_names}, helpers::lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion}, AppState};
 
 use super::Query;
 
@@ -59,10 +59,10 @@ fn handler(
     Json(result.into_iter().filter_map(|item| {
         let lca = item.lca?;
         let (name, rank) = taxon_store.get(lca as u32)?;
-        let lineage = if extra {
-            lineages(lca as u32, names, lineage_store, taxon_store, version)
-        } else {
-            None
+        let lineage = match (extra, names) {
+            (true, true)  => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
+            (true, false) => get_lineage(lca as u32, version, lineage_store),
+            (false, _)    => None    
         };
 
         Some(LcaInformation {

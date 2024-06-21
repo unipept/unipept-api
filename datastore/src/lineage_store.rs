@@ -2,7 +2,7 @@ use std::{collections::HashMap, io::{BufRead, BufReader}};
 
 use serde::Serialize;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Default)]
 pub struct Lineage {
     pub superkingdom: Option<i32>,
     pub kingdom: Option<i32>,
@@ -58,7 +58,7 @@ impl LineageStore {
                     superkingdom: parts[0],
                     kingdom: parts[1],
                     subkingdom: parts[2],
-                    superphylum: parts[4],
+                    superphylum: parts[3],
                     phylum: parts[4],
                     subphylum: parts[5],
                     superclass: parts[6],

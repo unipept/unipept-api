@@ -41,7 +41,7 @@ impl Index {
             peptides, 
             10_000, 
             equate_il, 
-            true
+            false
         )
     }
 }

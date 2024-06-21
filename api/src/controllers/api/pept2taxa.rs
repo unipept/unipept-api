@@ -1,7 +1,9 @@
+use std::collections::HashSet;
+
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::{controllers::api::{default_equate_il, default_extra, default_names}, helpers::lineage_helper::{lineages, Lineage, LineageVersion}, AppState};
+use crate::{controllers::api::{default_equate_il, default_extra, default_names}, helpers::lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion}, AppState};
 
 use super::Query;
 
@@ -57,12 +59,12 @@ fn handler(
     let lineage_store = datastore.lineage_store();
 
     Json(result.into_iter().map(|item| {
-        item.taxa.into_iter().filter_map(move |taxon| {
+        item.taxa.into_iter().collect::<HashSet<usize>>().into_iter().filter_map(move |taxon| {
             let (name, rank) = taxon_store.get(taxon as u32)?;
-            let lineage = if extra {
-                lineages(taxon as u32, names, lineage_store, taxon_store, version)
-            } else {
-                None
+            let lineage = match (extra, names) {
+                (true, true)  => get_lineage_with_names(taxon as u32, version, lineage_store, taxon_store),
+                (true, false) => get_lineage(taxon as u32, version, lineage_store),
+                (false, _)    => None    
             };
 
             Some(TaxaInformation {

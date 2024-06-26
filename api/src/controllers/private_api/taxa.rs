@@ -1,8 +1,7 @@
 use axum::{extract::State, Json};
-use datastore::Lineage;
 use serde::{Deserialize, Serialize};
 
-use crate::AppState;
+use crate::{helpers::lineage_helper::{get_lineage_array, LineageVersion}, AppState};
 
 #[derive(Serialize, Deserialize)]
 pub struct Body {
@@ -14,27 +13,31 @@ pub struct Taxon {
     id: usize,
     name: String,
     rank: String,
-    lineage: Lineage
+    lineage: Vec<Option<i32>>
 }
 
 pub async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
-    body: Json<Body>
+    Json(Body { taxids }): Json<Body>
 ) -> Json<Vec<Taxon>> {
+    if taxids.is_empty() {
+        return Json(Vec::new());
+    }
+
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
-    Json(body.taxids
-        .iter()
+    Json(taxids
+        .into_iter()
         .filter_map(|taxon_id| {
-            let (name, rank) = taxon_store.get(*taxon_id as u32)?;
-            let lineage = lineage_store.get(*taxon_id as u32)?;
+            let (name, rank) = taxon_store.get(taxon_id as u32)?;
+            let lineage = get_lineage_array(taxon_id as u32, LineageVersion::V2, lineage_store);
             
             Some(Taxon {
-                id: *taxon_id,
+                id: taxon_id,
                 name: name.clone(),
                 rank: rank.clone().into(),
-                lineage: lineage.clone()
+                lineage
             })
         })
         .collect()

@@ -101,3 +101,24 @@ pub fn get_lineage_with_names(taxon_id: u32, version: LineageVersion, lineage_st
         LineageVersion::V2 => v2::get_lineage_with_names(taxon_id, lineage_store, taxon_store).map(Lineage::NamesV2)
     }
 }
+
+pub fn get_amount_of_ranks(version: LineageVersion) -> u8 {
+    match version {
+        LineageVersion::V1 => 28,
+        LineageVersion::V2 => 27
+    }
+}
+
+pub fn get_genus_index(version: LineageVersion) -> u8 {
+    match version {
+        LineageVersion::V1 => 20,
+        LineageVersion::V2 => 18
+    }
+}
+
+pub fn get_species_index(version: LineageVersion) -> u8 {
+    match version {
+        LineageVersion::V1 => 24,
+        LineageVersion::V2 => 22
+    }
+}

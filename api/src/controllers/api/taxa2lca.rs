@@ -1,7 +1,7 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::{controllers::api::{default_extra, default_names}, helpers::lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion}, AppState};
+use crate::{controllers::api::{default_extra, default_names}, helpers::{lca_helper::calculate_lca, lineage_helper::{get_lineage, get_lineage_array, get_lineage_with_names, Lineage, LineageVersion}}, AppState};
 
 use super::Query;
 
@@ -45,16 +45,17 @@ pub async fn handler_v2(
 
 fn handler(
     State(AppState { datastore, .. }): State<AppState>,
-    Query(QueryParams { input: _input, extra, names }): Query<QueryParams>,
+    Query(QueryParams { input, extra, names }): Query<QueryParams>,
     version: LineageVersion
-) -> Json<LcaInformation> {    
+) -> Json<LcaInformation> {
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
-    // TODO: calculate the LCA
-    let lca: u32 = 1;
+    // Calculate the LCA of all taxa
+    let lca: i32 = calculate_lca(input, version, lineage_store);
 
-    let (name, rank) = taxon_store.get(lca).unwrap(); // TODO: We should not just call unwrap here
+    // Calculate the lineage of the LCA
+    let (name, rank) = taxon_store.get(lca as u32).unwrap(); // TODO: We should not just call unwrap here
     let lineage = match (extra, names) {
         (true, true)  => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
         (true, false) => get_lineage(lca as u32, version, lineage_store),
@@ -63,7 +64,7 @@ fn handler(
 
     Json(LcaInformation {
         taxon: Taxon {
-            taxon_id: lca,
+            taxon_id: lca as u32,
             taxon_name: name.to_string(),
             taxon_rank: rank.clone().into()
         },

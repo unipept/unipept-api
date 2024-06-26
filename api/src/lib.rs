@@ -15,13 +15,25 @@ pub struct AppState {
     pub index: Arc<Index>
 }
 
+const DEBUG_DATA_FOLDER_RICK: &str = "/mnt/data/uniprot-2024-03/suffix-array";
+
 pub async fn start() -> Result<(), errors::AppError> {
+    let sampledata = format!("{}/datastore/sampledata.json", DEBUG_DATA_FOLDER_RICK);
+    let ec_numbers = format!("{}/datastore/ec_numbers.tsv", DEBUG_DATA_FOLDER_RICK);
+    let go_terms = format!("{}/datastore/go_terms.tsv", DEBUG_DATA_FOLDER_RICK);
+    let interpro_entries = format!("{}/datastore/interpro_entries.tsv", DEBUG_DATA_FOLDER_RICK);
+    let lineages = format!("{}/datastore/lineages.tsv", DEBUG_DATA_FOLDER_RICK);
+    let taxons = format!("{}/datastore/taxons.tsv", DEBUG_DATA_FOLDER_RICK);
+
+    let sa = format!("{}/sa.bin", DEBUG_DATA_FOLDER_RICK);
+    let proteins = format!("{}/proteins.tsv", DEBUG_DATA_FOLDER_RICK);
+
     let datastore = DataStore::try_from_files(
-        "2024.01", "data/sampledata.json", "data/ec_numbers.tsv", "data/go_terms.tsv", "data/interpro_entries.tsv", "data/lineages.tsv", "data/taxons.tsv"
+        "2024.03", sampledata.as_str(), ec_numbers.as_str(), go_terms.as_str(), interpro_entries.as_str(), lineages.as_str(), taxons.as_str()
     ).map_err(|_| errors::AppError::ServerStartError)?;
 
     let index = Index::try_from_files(
-        "data/sa.bin", "data/proteins.tsv", "data/taxons.tsv"
+        sa.as_str(), proteins.as_str(), taxons.as_str()
     ).map_err(|_| errors::AppError::ServerStartError)?;
 
     let app_state = AppState { 

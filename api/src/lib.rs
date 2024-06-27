@@ -41,7 +41,7 @@ pub async fn start(index_location: &str) -> Result<(), errors::AppError> {
         
     let router = routes::create_router(app_state);
     
-    let listener = TcpListener::bind("0.0.0.0:4000").await?;
+    let listener = TcpListener::bind("0.0.0.0:80").await?;
 
     eprintln!("Server running on: http://{}", listener.local_addr()?);
 

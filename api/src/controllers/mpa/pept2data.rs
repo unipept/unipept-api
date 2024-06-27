@@ -2,7 +2,7 @@ use axum::{extract::State, Json};
 use sa_mappings::functionality::FunctionalAggregation;
 use serde::{Deserialize, Serialize};
 
-use crate::{helpers::lineage_helper::{get_lineage_array, LineageVersion}, AppState};
+use crate::{helpers::{lca_helper::calculate_lca, lineage_helper::{get_lineage_array, LineageVersion}}, AppState};
 
 #[derive(Serialize, Deserialize)]
 pub struct Body {
@@ -39,11 +39,12 @@ pub async fn handler(
     
     Json(Data {
         peptides: result.into_iter().map(|item| {
-            let lineage = get_lineage_array(item.lca.unwrap() as u32, LineageVersion::V2, lineage_store);
+            let lca = calculate_lca(item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(), LineageVersion::V2, lineage_store);
+            let lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store);
             
             DataItem { 
                 sequence: item.sequence, 
-                lca: item.lca, 
+                lca: Some(lca as usize), 
                 lineage,
                 fa: item.fa
             }

@@ -36,6 +36,7 @@ fn create_api_v1_routes() -> Router<AppState> {
         .route("/pept2go", get(pept2go::handler).post(pept2go::handler))
         .route("/pept2interpro", get(pept2interpro::handler).post(pept2interpro::handler))
         .route("/pept2lca", get(pept2lca::handler_v1).post(pept2lca::handler_v1))
+        .route("/pept2lca.json", get(pept2lca::handler_v1).post(pept2lca::handler_v1))
         .route("/pept2prot", get(pept2prot::handler).post(pept2prot::handler)) // TODO: implement
         .route("/pept2taxa", get(pept2taxa::handler_v1).post(pept2taxa::handler_v1))
         .route("/peptinfo", get(peptinfo::handler_v1).post(peptinfo::handler_v1))
@@ -52,6 +53,7 @@ fn create_api_v2_routes() -> Router<AppState> {
         .route("/pept2go", get(pept2go::handler).post(pept2go::handler))
         .route("/pept2interpro", get(pept2interpro::handler).post(pept2interpro::handler))
         .route("/pept2lca", get(pept2lca::handler_v2).post(pept2lca::handler_v2))
+        .route("/pept2lca.json", get(pept2lca::handler_v2).post(pept2lca::handler_v2))
         .route("/pept2prot", get(pept2prot::handler).post(pept2prot::handler)) // TODO: implement
         .route("/pept2taxa", get(pept2taxa::handler_v2).post(pept2taxa::handler_v2))
         .route("/peptinfo", get(peptinfo::handler_v2).post(peptinfo::handler_v2))
@@ -63,7 +65,7 @@ fn create_api_v2_routes() -> Router<AppState> {
 
 fn create_datasets_routes() -> Router<AppState> {
     Router::new()
-        .route("/sampledata", get(sampledata::handler))
+        .route("/sampledata", get(sampledata::handler).post(sampledata::handler))
 }
 
 fn create_mpa_routes() -> Router<AppState> {

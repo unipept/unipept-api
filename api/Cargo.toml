@@ -14,10 +14,10 @@ clap = { version = "4.5.1", features = ["derive"] }
 serde = "1.0.203"
 serde_qs = "0.13.0"
 
-sa-index = { git = "https://github.com/unipept/unipept-index.git", rev = "a181fa9e3560b838215186faf3f1a9eb80c18cd8" }
-sa-builder = { git = "https://github.com/unipept/unipept-index.git", rev = "a181fa9e3560b838215186faf3f1a9eb80c18cd8" }
-sa-mappings = { git = "https://github.com/unipept/unipept-index.git", rev = "a181fa9e3560b838215186faf3f1a9eb80c18cd8" }
-sa-compression = { git = "https://github.com/unipept/unipept-index.git", rev = "a181fa9e3560b838215186faf3f1a9eb80c18cd8" }
+sa-index = { path = "../sa-index" }
+sa-builder = { path = "../sa-builder" }
+sa-mappings = { path = "../sa-mappings" }
+sa-compression = { path = "../sa-compression" }
 paste = "1.0.15"
 thiserror = "1.0"
 tower-http = { version = "0.5.2", features = ["cors"] }

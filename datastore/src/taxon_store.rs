@@ -1,5 +1,7 @@
 use std::{collections::HashMap, io::{BufRead, BufReader}, str::FromStr};
 
+use crate::errors::TaxonStoreError;
+
 pub type TaxonInformation = (String, LineageRank);
 
 #[derive(Debug, Clone)]
@@ -39,7 +41,7 @@ pub struct TaxonStore {
 }
 
 impl TaxonStore {
-    pub fn try_from_file(file: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn try_from_file(file: &str) -> Result<Self, TaxonStoreError> {
         let file = std::fs::File::open(file)?;
 
         let mut mapper = HashMap::new();
@@ -53,7 +55,7 @@ impl TaxonStore {
             if parts.len() == 4 {
                 mapper.insert(taxon_id, (
                     parts[0].to_string(),
-                    parts[1].parse::<LineageRank>().unwrap()
+                    parts[1].parse::<LineageRank>()?
                 ));
             }
         }
@@ -67,7 +69,7 @@ impl TaxonStore {
 }
 
 impl FromStr for LineageRank {
-    type Err = ();
+    type Err = TaxonStoreError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -99,7 +101,7 @@ impl FromStr for LineageRank {
             "strain" => Ok(Self::Strain),
             "varietas" => Ok(Self::Varietas),
             "forma" => Ok(Self::Forma),
-            _ => Err(())
+            _ => Err(TaxonStoreError::InvalidRankError(s.to_string()))
         }
     }
 }

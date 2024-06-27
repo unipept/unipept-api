@@ -1,5 +1,7 @@
 use std::{collections::HashMap, io::{BufRead, BufReader}};
 
+use crate::errors::InterproStoreError;
+
 pub type InterproEntryDescription = (String, String);
 
 #[derive(Clone)]
@@ -8,7 +10,7 @@ pub struct InterproStore {
 }
 
 impl InterproStore {
-    pub fn try_from_file(file: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn try_from_file(file: &str) -> Result<Self, InterproStoreError> {
         let file = std::fs::File::open(file)?;
 
         let mut mapper = HashMap::new();

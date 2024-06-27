@@ -1,12 +1,14 @@
 use std::{collections::HashMap, io::{BufRead, BufReader}};
 
+use crate::errors::EcStoreError;
+
 #[derive(Clone)]
 pub struct EcStore {
     mapper: HashMap<String, String>
 }
 
 impl EcStore {
-    pub fn try_from_file(file: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn try_from_file(file: &str) -> Result<Self, EcStoreError> {
         let file = std::fs::File::open(file)?;
 
         let mut mapper = HashMap::new();

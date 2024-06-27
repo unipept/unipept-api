@@ -2,6 +2,8 @@ use std::{collections::HashMap, io::{BufRead, BufReader}};
 
 use serde::Serialize;
 
+use crate::errors::LineageStoreError;
+
 #[derive(Clone, Debug, Serialize, Default)]
 pub struct Lineage {
     pub superkingdom: Option<i32>,
@@ -40,7 +42,7 @@ pub struct LineageStore {
 }
 
 impl LineageStore {
-    pub fn try_from_file(file: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn try_from_file(file: &str) -> Result<Self, LineageStoreError> {
         let file = std::fs::File::open(file)?;
 
         let mut mapper = HashMap::new();

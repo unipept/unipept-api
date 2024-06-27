@@ -453,6 +453,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempdir",
+ "thiserror",
 ]
 
 [[package]]
@@ -882,6 +883,7 @@ dependencies = [
  "sa-mappings",
  "serde",
  "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -1832,6 +1834,7 @@ dependencies = [
  "sa-mappings",
  "serde",
  "serde_qs",
+ "thiserror",
  "tokio",
 ]
 

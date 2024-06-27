@@ -1,5 +1,7 @@
 use std::{collections::HashMap, io::{BufRead, BufReader}};
 
+use crate::errors::GoStoreError;
+
 pub type GoTermDescription = (String, String);
 
 #[derive(Clone)]
@@ -8,7 +10,7 @@ pub struct GoStore {
 }
 
 impl GoStore {
-    pub fn try_from_file(file: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn try_from_file(file: &str) -> Result<Self, GoStoreError> {
         let file = std::fs::File::open(file)?;
 
         let mut mapper = HashMap::new();

@@ -2,6 +2,8 @@ use core::str;
 
 use serde::{Deserialize, Serialize};
 
+use crate::errors::SampleStoreError;
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SampleStore {
     sample_data: Vec<SampleDataItem>
@@ -25,7 +27,7 @@ pub struct Dataset {
 }
 
 impl SampleStore {
-    pub fn try_from_file(file: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn try_from_file(file: &str) -> Result<Self, SampleStoreError> {
         let json = std::fs::read_to_string(file)?;
         Ok(serde_json::from_str(&json)?)
     }

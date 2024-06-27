@@ -4,8 +4,10 @@ mod interpro_store;
 mod lineage_store;
 mod sample_store;
 mod taxon_store;
+mod errors;
 
 pub use ec_store::EcStore;
+pub use errors::DataStoreError;
 pub use go_store::GoStore;
 pub use interpro_store::InterproStore;
 pub use lineage_store::{Lineage, LineageStore};
@@ -23,7 +25,7 @@ pub struct DataStore {
 }
 
 impl DataStore {
-    pub fn try_from_files(version: &str, sample_file: &str, ec_file: &str, go_file: &str, interpro_file: &str, lineage_file: &str, taxon_file: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn try_from_files(version: &str, sample_file: &str, ec_file: &str, go_file: &str, interpro_file: &str, lineage_file: &str, taxon_file: &str) -> Result<Self, DataStoreError> {
         Ok(Self {
             version: version.to_string(),
             sample_store: SampleStore::try_from_file(sample_file)?,

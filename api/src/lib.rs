@@ -15,26 +15,24 @@ pub struct AppState {
     pub index: Arc<Index>
 }
 
-const DEBUG_DATA_FOLDER_RICK: &str = "/mnt/data/uniprot-2024-03/suffix-array";
+pub async fn start(index_location: &str) -> Result<(), errors::AppError> {
+    let sampledata = format!("{}/datastore/sampledata.json", index_location);
+    let ec_numbers = format!("{}/datastore/ec_numbers.tsv", index_location);
+    let go_terms = format!("{}/datastore/go_terms.tsv", index_location);
+    let interpro_entries = format!("{}/datastore/interpro_entries.tsv", index_location);
+    let lineages = format!("{}/datastore/lineages.tsv", index_location);
+    let taxons = format!("{}/datastore/taxons.tsv", index_location);
 
-pub async fn start() -> Result<(), errors::AppError> {
-    let sampledata = format!("{}/datastore/sampledata.json", DEBUG_DATA_FOLDER_RICK);
-    let ec_numbers = format!("{}/datastore/ec_numbers.tsv", DEBUG_DATA_FOLDER_RICK);
-    let go_terms = format!("{}/datastore/go_terms.tsv", DEBUG_DATA_FOLDER_RICK);
-    let interpro_entries = format!("{}/datastore/interpro_entries.tsv", DEBUG_DATA_FOLDER_RICK);
-    let lineages = format!("{}/datastore/lineages.tsv", DEBUG_DATA_FOLDER_RICK);
-    let taxons = format!("{}/datastore/taxons.tsv", DEBUG_DATA_FOLDER_RICK);
-
-    let sa = format!("{}/sa.bin", DEBUG_DATA_FOLDER_RICK);
-    let proteins = format!("{}/proteins.tsv", DEBUG_DATA_FOLDER_RICK);
+    let sa = format!("{}/sa.bin", index_location);
+    let proteins = format!("{}/proteins.tsv", index_location);
 
     let datastore = DataStore::try_from_files(
         "2024.03", sampledata.as_str(), ec_numbers.as_str(), go_terms.as_str(), interpro_entries.as_str(), lineages.as_str(), taxons.as_str()
-    ).map_err(|_| errors::AppError::ServerStartError)?;
+    )?;
 
     let index = Index::try_from_files(
         sa.as_str(), proteins.as_str(), taxons.as_str()
-    ).map_err(|_| errors::AppError::ServerStartError)?;
+    )?;
 
     let app_state = AppState { 
         datastore: Arc::new(datastore),

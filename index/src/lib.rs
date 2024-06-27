@@ -1,8 +1,12 @@
 use std::{fs::File, io::{BufReader, Read}};
 
+pub use errors::IndexError;
+use errors::LoadIndexError;
 use sa_compression::load_compressed_suffix_array;
 use sa_index::{binary::load_suffix_array, peptide_search::{analyse_all_peptides, OutputData, SearchResultWithAnalysis}, sa_searcher::Searcher, suffix_to_protein_index::SparseSuffixToProtein, SuffixArray};
 use sa_mappings::{functionality::FunctionAggregator, proteins::Proteins, taxonomy::{AggregationMethod, TaxonAggregator}};
+
+mod errors;
 
 pub struct Index {
     searcher: Searcher
@@ -13,15 +17,18 @@ impl Index {
         index_file: &str,
         proteins_file: &str,
         taxonomy_file: &str
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        let suffix_array = load_index_file(index_file)?;
+    ) -> Result<Self, IndexError> {
+        let suffix_array = load_index_file(index_file)
+            .map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?;
 
         let taxon_id_calculator =
-            TaxonAggregator::try_from_taxonomy_file(taxonomy_file, AggregationMethod::LcaStar)?;
+            TaxonAggregator::try_from_taxonomy_file(taxonomy_file, AggregationMethod::LcaStar)
+                .map_err(|err| LoadIndexError::LoadTaxonomyError(err.to_string()))?;
 
         let function_aggregator = FunctionAggregator {};
 
-        let proteins = Proteins::try_from_database_file(proteins_file, &taxon_id_calculator)?;
+        let proteins = Proteins::try_from_database_file(proteins_file, &taxon_id_calculator)
+            .map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
         let suffix_index_to_protein = Box::new(SparseSuffixToProtein::new(&proteins.input_string));
 
         let searcher = Searcher::new(
@@ -46,7 +53,7 @@ impl Index {
     }
 }
 
-fn load_index_file(index_file: &str) -> Result<SuffixArray, Box<dyn std::error::Error>> {
+fn load_index_file(index_file: &str) -> Result<SuffixArray, LoadIndexError> {
     // Open the suffix array file
     let mut sa_file = File::open(index_file)?;
 
@@ -57,12 +64,12 @@ fn load_index_file(index_file: &str) -> Result<SuffixArray, Box<dyn std::error::
     let mut bits_per_value_buffer = [0_u8; 1];
     reader
         .read_exact(&mut bits_per_value_buffer)
-        .map_err(|_| "Could not read the flags from the binary file")?;
+        .map_err(|_| LoadIndexError::LoadSuffixArrayError("Could not read the flags from the binary file".to_string()))?;
     let bits_per_value = bits_per_value_buffer[0];
 
     if bits_per_value == 64 {
-        load_suffix_array(&mut reader)
+        Ok(load_suffix_array(&mut reader).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?)
     } else {
-        load_compressed_suffix_array(&mut reader, bits_per_value as usize)
+        Ok(load_compressed_suffix_array(&mut reader, bits_per_value as usize).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?)
     }
 }

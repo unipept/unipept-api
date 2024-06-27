@@ -1,4 +1,7 @@
-use axum::{routing::get, Router};
+use std::time::Duration;
+
+use axum::{http::{header::{CONTENT_TYPE, ETAG, IF_MODIFIED_SINCE, IF_NONE_MATCH}, Method}, routing::get, Router};
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::{controllers::{api::{pept2ec, pept2funct, pept2go, pept2interpro, pept2lca, pept2prot, pept2taxa, peptinfo, protinfo, taxa2lca, taxa2tree, taxonomy}, datasets::sampledata, mpa::{pept2data, pept2filtered}, private_api::{ecnumbers, goterms, interpros, metadata, proteins, taxa}}, AppState};
 
@@ -9,6 +12,14 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/datasets", create_datasets_routes())
         .nest("/mpa", create_mpa_routes())
         .nest("/private_api", create_private_api_routes())
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .expose_headers([ETAG])
+                .allow_methods([Method::GET, Method::POST])
+                .allow_headers([CONTENT_TYPE, IF_MODIFIED_SINCE, IF_NONE_MATCH])
+                .max_age(Duration::from_secs(86400))
+        )
         .with_state(state)
 }
 

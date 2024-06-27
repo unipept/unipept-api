@@ -24,8 +24,8 @@ pub async fn handler(
     Query(QueryParams { input }): Query<QueryParams>,
     Json(Body { counts }): Json<Body>
 ) -> Json<TaxonTree> {
-    let taxon_store = datastore.taxon_store();
-    let lineage_store = datastore.lineage_store();
+    let _taxon_store = datastore.taxon_store();
+    let _lineage_store = datastore.lineage_store();
 
     // Taxon counts
     let frequencies = if counts.is_empty() {

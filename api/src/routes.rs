@@ -31,32 +31,32 @@ fn create_api_routes() -> Router<AppState> {
 
 fn create_api_v1_routes() -> Router<AppState> {
     Router::new()
-        .route("/pept2ec", get(pept2ec::handler).post(pept2ec::handler))
-        .route("/pept2funct", get(pept2funct::handler).post(pept2funct::handler))
-        .route("/pept2go", get(pept2go::handler).post(pept2go::handler))
-        .route("/pept2interpro", get(pept2interpro::handler).post(pept2interpro::handler))
-        .route("/pept2lca", get(pept2lca::handler_v1).post(pept2lca::handler_v1))
+        .route("/pept2ec", get(pept2ec::get_handler).post(pept2ec::post_handler))
+        .route("/pept2funct", get(pept2funct::get_handler).post(pept2funct::post_handler))
+        .route("/pept2go", get(pept2go::get_handler).post(pept2go::post_handler))
+        .route("/pept2interpro", get(pept2interpro::get_handler).post(pept2interpro::post_handler))
+        .route("/pept2lca", get(pept2lca::get_handler_v1).post(pept2lca::post_handler_v1))
         .route("/pept2prot", get(pept2prot::handler).post(pept2prot::handler)) // TODO: implement
-        .route("/pept2taxa", get(pept2taxa::handler_v1).post(pept2taxa::handler_v1))
-        .route("/peptinfo", get(peptinfo::handler_v1).post(peptinfo::handler_v1))
-        .route("/protinfo", get(protinfo::handler).post(protinfo::handler))
-        .route("/taxa2lca", get(taxa2lca::handler_v1).post(taxa2lca::handler_v1)) // TODO: implement
+        .route("/pept2taxa", get(pept2taxa::get_handler_v1).post(pept2taxa::post_handler_v1))
+        .route("/peptinfo", get(peptinfo::get_handler_v1).post(peptinfo::post_handler_v1))
+        .route("/protinfo", get(protinfo::handler).post(protinfo::handler)) // TODO: implement
+        .route("/taxa2lca", get(taxa2lca::get_handler_v1).post(taxa2lca::post_handler_v1))
         .route("/taxa2tree", get(taxa2tree::handler).post(taxa2tree::handler)) // TODO: implement
         .route("/taxonomy", get(taxonomy::handler).post(taxonomy::handler)) // TODO: implement
 }
 
 fn create_api_v2_routes() -> Router<AppState> {
     Router::new()
-        .route("/pept2ec", get(pept2ec::handler).post(pept2ec::handler))
-        .route("/pept2funct", get(pept2funct::handler).post(pept2funct::handler))
-        .route("/pept2go", get(pept2go::handler).post(pept2go::handler))
-        .route("/pept2interpro", get(pept2interpro::handler).post(pept2interpro::handler))
-        .route("/pept2lca", get(pept2lca::handler_v2).post(pept2lca::handler_v2))
+        .route("/pept2ec", get(pept2ec::get_handler).post(pept2ec::post_handler))
+        .route("/pept2funct", get(pept2funct::get_handler).post(pept2funct::post_handler))
+        .route("/pept2go", get(pept2go::get_handler).post(pept2go::post_handler))
+        .route("/pept2interpro", get(pept2interpro::get_handler).post(pept2interpro::post_handler))
+        .route("/pept2lca", get(pept2lca::get_handler_v1).post(pept2lca::post_handler_v2))
         .route("/pept2prot", get(pept2prot::handler).post(pept2prot::handler)) // TODO: implement
-        .route("/pept2taxa", get(pept2taxa::handler_v2).post(pept2taxa::handler_v2))
-        .route("/peptinfo", get(peptinfo::handler_v2).post(peptinfo::handler_v2))
-        .route("/protinfo", get(protinfo::handler).post(protinfo::handler))
-        .route("/taxa2lca", get(taxa2lca::handler_v2).post(taxa2lca::handler_v2)) // TODO: implement
+        .route("/pept2taxa", get(pept2taxa::get_handler_v1).post(pept2taxa::post_handler_v2))
+        .route("/peptinfo", get(peptinfo::get_handler_v1).post(peptinfo::post_handler_v2))
+        .route("/protinfo", get(protinfo::handler).post(protinfo::handler)) // TODO: implement
+        .route("/taxa2lca", get(taxa2lca::get_handler_v1).post(taxa2lca::post_handler_v2))
         .route("/taxa2tree", get(taxa2tree::handler).post(taxa2tree::handler)) // TODO: implement
         .route("/taxonomy", get(taxonomy::handler).post(taxonomy::handler)) // TODO: implement
 }

@@ -3,10 +3,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{controllers::api::{default_domains, default_equate_il, default_extra}, helpers::interpro_helper::{interpro_entries, InterproEntries}, AppState};
 
-use super::Query;
+use super::generate_handlers;
 
 #[derive(Deserialize)]
-pub struct QueryParams {
+pub struct Parameters {
     input: Vec<String>,
     #[serde(default = "default_equate_il")]
     equate_il: bool,
@@ -23,24 +23,26 @@ pub struct InterproInformation {
     ipr: InterproEntries
 }
 
-pub async fn handler(
-    State(AppState { index, datastore }): State<AppState>,
-    Query(QueryParams { input, equate_il, extra, domains }): Query<QueryParams>
-) -> Json<Vec<InterproInformation>> {
-    let result = index.analyse(&input, equate_il).result;
-
-    let interpro_store = datastore.interpro_store();
-
-    Json(result.into_iter().filter_map(|item| {
-        let fa = item.fa?;
-
-        let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
-        let iprs = interpro_entries(&fa.data, interpro_store, extra, domains);
-
-        Some(InterproInformation {
-            peptide: item.sequence,
-            total_protein_count,
-            ipr: iprs
-        })
-    }).collect())
-}
+generate_handlers!(
+    fn handler(
+        State(AppState { index, datastore }): State<AppState>,
+        Parameters { input, equate_il, extra, domains } => Parameters
+    ) -> Json<Vec<InterproInformation>> {
+        let result = index.analyse(&input, equate_il).result;
+    
+        let interpro_store = datastore.interpro_store();
+    
+        Json(result.into_iter().filter_map(|item| {
+            let fa = item.fa?;
+    
+            let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
+            let iprs = interpro_entries(&fa.data, interpro_store, extra, domains);
+    
+            Some(InterproInformation {
+                peptide: item.sequence,
+                total_protein_count,
+                ipr: iprs
+            })
+        }).collect())
+    }
+);

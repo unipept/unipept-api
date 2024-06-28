@@ -1,12 +1,12 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::{controllers::api::{default_domains, default_equate_il, default_extra, default_names}, helpers::{ec_helper::{ec_numbers, EcNumber}, go_helper::{go_terms, GoTerms}, interpro_helper::{interpro_entries, InterproEntries}, lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion}}, AppState};
+use crate::{controllers::api::{default_domains, default_equate_il, default_extra, default_names}, helpers::{ec_helper::{ec_numbers, EcNumber}, go_helper::{go_terms, GoTerms}, interpro_helper::{interpro_entries, InterproEntries}, lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion::{self, *}}}, AppState};
 
-use super::Query;
+use super::generate_handlers;
 
 #[derive(Deserialize)]
-pub struct QueryParams {
+pub struct Parameters {
     input: Vec<String>,
     #[serde(default = "default_equate_il")]
     equate_il: bool,
@@ -38,61 +38,50 @@ pub struct Taxon {
     taxon_rank: String
 }
 
-pub async fn handler_v1(
-    state: State<AppState>,
-    query: Query<QueryParams>
-) -> Json<Vec<PeptInformation>> {
-    handler(state, query, LineageVersion::V1)
-}
-
-pub async fn handler_v2(
-    state: State<AppState>,
-    query: Query<QueryParams>
-) -> Json<Vec<PeptInformation>> {
-    handler(state, query, LineageVersion::V2)
-}
-
-fn handler(
-    State(AppState { index, datastore }): State<AppState>,
-    Query(QueryParams { input, equate_il, extra, domains, names }): Query<QueryParams>,
-    version: LineageVersion
-) -> Json<Vec<PeptInformation>> {
-    let result = index.analyse(&input, equate_il).result;
-    
-    let ec_store = datastore.ec_store();
-    let go_store = datastore.go_store();
-    let interpro_store = datastore.interpro_store();
-    let taxon_store = datastore.taxon_store();
-    let lineage_store = datastore.lineage_store();
-
-    Json(result.into_iter().filter_map(|item| {
-        let fa = item.fa?;
+generate_handlers!(
+    [ V1, V2 ]
+    fn handler(
+        State(AppState { index, datastore }): State<AppState>,
+        Parameters { input, equate_il, extra, domains, names } => Parameters,
+        version: LineageVersion
+    ) -> Json<Vec<PeptInformation>> {
+        let result = index.analyse(&input, equate_il).result;
         
-        let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
-        let ecs = ec_numbers(&fa.data, ec_store, extra);
-        let gos = go_terms(&fa.data, go_store, extra, domains);
-        let iprs = interpro_entries(&fa.data, interpro_store, extra, domains);
-
-        let lca = item.lca?;
-        let (name, rank) = taxon_store.get(lca as u32)?;
-        let lineage = match (extra, names) {
-            (true, true)  => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
-            (true, false) => get_lineage(lca as u32, version, lineage_store),
-            (false, _)    => None    
-        };
-
-        Some(PeptInformation {
-            peptide: item.sequence,
-            total_protein_count,
-            ec: ecs,
-            go: gos,
-            ipr: iprs,
-            taxon: Taxon {
-                taxon_id: lca as u32,
-                taxon_name: name.to_string(),
-                taxon_rank: rank.clone().into()
-            },
-            lineage
-        })
-    }).collect())
-}
+        let ec_store = datastore.ec_store();
+        let go_store = datastore.go_store();
+        let interpro_store = datastore.interpro_store();
+        let taxon_store = datastore.taxon_store();
+        let lineage_store = datastore.lineage_store();
+    
+        Json(result.into_iter().filter_map(|item| {
+            let fa = item.fa?;
+            
+            let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
+            let ecs = ec_numbers(&fa.data, ec_store, extra);
+            let gos = go_terms(&fa.data, go_store, extra, domains);
+            let iprs = interpro_entries(&fa.data, interpro_store, extra, domains);
+    
+            let lca = item.lca?;
+            let (name, rank) = taxon_store.get(lca as u32)?;
+            let lineage = match (extra, names) {
+                (true, true)  => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
+                (true, false) => get_lineage(lca as u32, version, lineage_store),
+                (false, _)    => None    
+            };
+    
+            Some(PeptInformation {
+                peptide: item.sequence,
+                total_protein_count,
+                ec: ecs,
+                go: gos,
+                ipr: iprs,
+                taxon: Taxon {
+                    taxon_id: lca as u32,
+                    taxon_name: name.to_string(),
+                    taxon_rank: rank.clone().into()
+                },
+                lineage
+            })
+        }).collect())
+    }
+);

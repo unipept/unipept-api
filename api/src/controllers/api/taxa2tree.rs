@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{helpers::tree_helper::{frequency::FrequencyTable, node::Node}, AppState};
 
-use super::Query;
+use crate::controllers::Query;
 
 #[derive(Serialize, Deserialize)]
 pub struct Body {

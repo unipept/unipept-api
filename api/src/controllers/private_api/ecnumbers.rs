@@ -1,10 +1,10 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::AppState;
+use crate::{controllers::generate_handlers, AppState};
 
 #[derive(Serialize, Deserialize)]
-pub struct Body {
+pub struct Parameters {
     ecnumbers: Vec<String>
 }
 
@@ -14,19 +14,21 @@ pub struct EcNumber {
     name: String
 }
 
-pub async fn handler(
-    State(AppState { datastore, .. }): State<AppState>,
-    body: Json<Body>
-) -> Json<Vec<EcNumber>> {
-    Json(body.ecnumbers
-        .iter()
-        .map(|ec_number| ec_number.trim())
-        .filter_map(|ec_number| {
-            datastore.ec_store().get(ec_number).map(|ec| EcNumber {
-                code: ec_number.to_string(),
-                name: ec.clone()
+generate_handlers!(
+    async fn handler(
+        State(AppState { datastore, .. }): State<AppState>,
+        Parameters { ecnumbers } => Parameters
+    ) -> Json<Vec<EcNumber>> {
+        Json(ecnumbers
+            .iter()
+            .map(|ec_number| ec_number.trim())
+            .filter_map(|ec_number| {
+                datastore.ec_store().get(ec_number).map(|ec| EcNumber {
+                    code: ec_number.to_string(),
+                    name: ec.clone()
+                })
             })
-        })
-        .collect()
-    )
-}
+            .collect()
+        )
+    }
+);

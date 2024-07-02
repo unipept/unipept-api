@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{controllers::api::{default_domains, default_equate_il, default_extra}, helpers::go_helper::{go_terms_from_map, GoTerms}, AppState};
 
-use super::generate_handlers;
+use crate::controllers::generate_handlers;
 
 #[derive(Deserialize)]
 pub struct Parameters {

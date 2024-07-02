@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{controllers::api::{default_equate_il, default_extra}, AppState};
 
-use super::generate_handlers;
+use crate::controllers::generate_handlers;
 
 #[derive(Deserialize)]
 pub struct Parameters {

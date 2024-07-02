@@ -63,21 +63,21 @@ fn create_api_v2_routes() -> Router<AppState> {
 
 fn create_datasets_routes() -> Router<AppState> {
     Router::new()
-        .route("/sampledata", get(sampledata::handler))
+        .route("/sampledata", get(sampledata::get_handler).post(sampledata::post_handler))
 }
 
 fn create_mpa_routes() -> Router<AppState> {
     Router::new()
-        .route("/pept2data", get(pept2data::handler).post(pept2data::handler))
-        .route("/pept2filtered", get(pept2filtered::handler).post(pept2filtered::handler))
+        .route("/pept2data", get(pept2data::get_handler).post(pept2data::post_handler))
+        .route("/pept2filtered", get(pept2filtered::get_handler).post(pept2filtered::post_handler))
 }
 
 fn create_private_api_routes() -> Router<AppState> {
     Router::new()
-        .route("/ecnumbers", get(ecnumbers::handler).post(ecnumbers::handler))
-        .route("/goterms", get(goterms::handler).post(goterms::handler))
-        .route("/interpros", get(interpros::handler).post(interpros::handler))
-        .route("/metadata", get(metadata::handler).post(metadata::handler))
-        .route("/proteins", get(proteins::handler).post(proteins::handler))
-        .route("/taxa", get(taxa::handler).post(taxa::handler))
+        .route("/ecnumbers", get(ecnumbers::get_handler).post(ecnumbers::post_handler))
+        .route("/goterms", get(goterms::get_handler).post(goterms::post_handler))
+        .route("/interpros", get(interpros::get_handler).post(interpros::post_handler))
+        .route("/metadata", get(metadata::get_handler).post(metadata::post_handler))
+        .route("/proteins", get(proteins::get_handler).post(proteins::post_handler))
+        .route("/taxa", get(taxa::get_handler).post(taxa::post_handler))
 }

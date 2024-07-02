@@ -1,8 +1,12 @@
 use axum::{extract::State, Json};
 use datastore::SampleStore;
 
-use crate::AppState;
+use crate::{controllers::generate_handlers, AppState};
 
-pub async fn handler(State(AppState { datastore, .. }): State<AppState>) -> Json<SampleStore> {
-    Json(datastore.sample_store().to_owned())
-}
+generate_handlers!(
+    async fn handler(
+        State(AppState { datastore, .. }): State<AppState>
+    ) -> Json<SampleStore> {
+        Json(datastore.sample_store().to_owned())
+    }
+);

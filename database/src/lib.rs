@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ops::Deref;
 
 use deadpool_diesel::mysql::{Manager, Pool};
@@ -25,6 +26,15 @@ pub fn get_accessions(conn: &mut MysqlConnection, accessions: &Vec<String>) -> R
     uniprot_entries
         .filter(uniprot_accession_number.eq_any(accessions))
         .load(conn)
+}
+
+pub fn get_accessions_map(conn: &mut MysqlConnection, accessions: &Vec<String>) -> Result<HashMap<String, models::UniprotEntry>, diesel::result::Error> {
+    Ok(
+        get_accessions(conn, accessions)?
+            .into_iter()
+            .map(|entry| (entry.uniprot_accession_number.clone(), entry))
+            .collect()
+    )
 }
 
 impl Deref for Database {

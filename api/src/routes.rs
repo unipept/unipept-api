@@ -36,7 +36,7 @@ fn create_api_v1_routes() -> Router<AppState> {
         .route("/pept2go", get(pept2go::get_handler).post(pept2go::post_handler))
         .route("/pept2interpro", get(pept2interpro::get_handler).post(pept2interpro::post_handler))
         .route("/pept2lca", get(pept2lca::get_handler_v1).post(pept2lca::post_handler_v1))
-        .route("/pept2prot", get(pept2prot::handler).post(pept2prot::handler)) // TODO: implement
+        .route("/pept2prot", get(pept2prot::get_handler).post(pept2prot::post_handler))
         .route("/pept2taxa", get(pept2taxa::get_handler_v1).post(pept2taxa::post_handler_v1))
         .route("/peptinfo", get(peptinfo::get_handler_v1).post(peptinfo::post_handler_v1))
         .route("/protinfo", get(protinfo::get_handler_v1).post(protinfo::post_handler_v1))
@@ -52,7 +52,7 @@ fn create_api_v2_routes() -> Router<AppState> {
         .route("/pept2go", get(pept2go::get_handler).post(pept2go::post_handler))
         .route("/pept2interpro", get(pept2interpro::get_handler).post(pept2interpro::post_handler))
         .route("/pept2lca", get(pept2lca::get_handler_v2).post(pept2lca::post_handler_v2))
-        .route("/pept2prot", get(pept2prot::handler).post(pept2prot::handler)) // TODO: implement
+        .route("/pept2prot", get(pept2prot::get_handler).post(pept2prot::post_handler))
         .route("/pept2taxa", get(pept2taxa::get_handler_v2).post(pept2taxa::post_handler_v2))
         .route("/peptinfo", get(peptinfo::get_handler_v2).post(peptinfo::post_handler_v2))
         .route("/protinfo", get(protinfo::get_handler_v2).post(protinfo::post_handler_v2))
@@ -78,6 +78,6 @@ fn create_private_api_routes() -> Router<AppState> {
         .route("/goterms", get(goterms::handler).post(goterms::handler))
         .route("/interpros", get(interpros::handler).post(interpros::handler))
         .route("/metadata", get(metadata::handler).post(metadata::handler))
-        .route("/proteins", get(proteins::handler).post(proteins::handler)) // TODO: implement
+        .route("/proteins", get(proteins::handler).post(proteins::handler))
         .route("/taxa", get(taxa::handler).post(taxa::handler))
 }

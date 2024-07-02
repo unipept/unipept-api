@@ -39,10 +39,10 @@ fn create_api_v1_routes() -> Router<AppState> {
         .route("/pept2prot", get(pept2prot::handler).post(pept2prot::handler)) // TODO: implement
         .route("/pept2taxa", get(pept2taxa::get_handler_v1).post(pept2taxa::post_handler_v1))
         .route("/peptinfo", get(peptinfo::get_handler_v1).post(peptinfo::post_handler_v1))
-        .route("/protinfo", get(protinfo::handler).post(protinfo::handler)) // TODO: implement
+        .route("/protinfo", get(protinfo::get_handler_v1).post(protinfo::post_handler_v1))
         .route("/taxa2lca", get(taxa2lca::get_handler_v1).post(taxa2lca::post_handler_v1))
         .route("/taxa2tree", get(taxa2tree::handler).post(taxa2tree::handler)) // TODO: implement
-        .route("/taxonomy", get(taxonomy::handler).post(taxonomy::handler)) // TODO: implement
+        .route("/taxonomy", get(taxonomy::get_handler_v1).post(taxonomy::post_handler_v1))
 }
 
 fn create_api_v2_routes() -> Router<AppState> {
@@ -51,14 +51,14 @@ fn create_api_v2_routes() -> Router<AppState> {
         .route("/pept2funct", get(pept2funct::get_handler).post(pept2funct::post_handler))
         .route("/pept2go", get(pept2go::get_handler).post(pept2go::post_handler))
         .route("/pept2interpro", get(pept2interpro::get_handler).post(pept2interpro::post_handler))
-        .route("/pept2lca", get(pept2lca::get_handler_v1).post(pept2lca::post_handler_v2))
+        .route("/pept2lca", get(pept2lca::get_handler_v2).post(pept2lca::post_handler_v2))
         .route("/pept2prot", get(pept2prot::handler).post(pept2prot::handler)) // TODO: implement
-        .route("/pept2taxa", get(pept2taxa::get_handler_v1).post(pept2taxa::post_handler_v2))
-        .route("/peptinfo", get(peptinfo::get_handler_v1).post(peptinfo::post_handler_v2))
-        .route("/protinfo", get(protinfo::handler).post(protinfo::handler)) // TODO: implement
-        .route("/taxa2lca", get(taxa2lca::get_handler_v1).post(taxa2lca::post_handler_v2))
+        .route("/pept2taxa", get(pept2taxa::get_handler_v2).post(pept2taxa::post_handler_v2))
+        .route("/peptinfo", get(peptinfo::get_handler_v2).post(peptinfo::post_handler_v2))
+        .route("/protinfo", get(protinfo::get_handler_v2).post(protinfo::post_handler_v2))
+        .route("/taxa2lca", get(taxa2lca::get_handler_v2).post(taxa2lca::post_handler_v2))
         .route("/taxa2tree", get(taxa2tree::handler).post(taxa2tree::handler)) // TODO: implement
-        .route("/taxonomy", get(taxonomy::handler).post(taxonomy::handler)) // TODO: implement
+        .route("/taxonomy", get(taxonomy::get_handler_v2).post(taxonomy::post_handler_v2))
 }
 
 fn create_datasets_routes() -> Router<AppState> {

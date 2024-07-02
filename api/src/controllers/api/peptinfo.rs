@@ -1,7 +1,7 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::{controllers::api::{default_domains, default_equate_il, default_extra, default_names}, helpers::{ec_helper::{ec_numbers, EcNumber}, go_helper::{go_terms, GoTerms}, interpro_helper::{interpro_entries, InterproEntries}, lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion::{self, *}}}, AppState};
+use crate::{controllers::api::{default_domains, default_equate_il, default_extra, default_names}, helpers::{ec_helper::{ec_numbers_from_map, EcNumber}, go_helper::{go_terms_from_map, GoTerms}, interpro_helper::{interpro_entries_from_map, InterproEntries}, lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion::{self, *}}}, AppState};
 
 use super::generate_handlers;
 
@@ -40,8 +40,8 @@ pub struct Taxon {
 
 generate_handlers!(
     [ V1, V2 ]
-    fn handler(
-        State(AppState { index, datastore }): State<AppState>,
+    async fn handler(
+        State(AppState { index, datastore, .. }): State<AppState>,
         Parameters { input, equate_il, extra, domains, names } => Parameters,
         version: LineageVersion
     ) -> Json<Vec<PeptInformation>> {
@@ -57,9 +57,9 @@ generate_handlers!(
             let fa = item.fa?;
             
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
-            let ecs = ec_numbers(&fa.data, ec_store, extra);
-            let gos = go_terms(&fa.data, go_store, extra, domains);
-            let iprs = interpro_entries(&fa.data, interpro_store, extra, domains);
+            let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
+            let gos = go_terms_from_map(&fa.data, go_store, extra, domains);
+            let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
     
             let lca = item.lca?;
             let (name, rank) = taxon_store.get(lca as u32)?;

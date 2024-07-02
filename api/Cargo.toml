@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 datastore = { path = "../datastore" }
+database = { path = "../database" }
 index = { path = "../index" }
 axum = { version = "0.7.4", features = ["macros"] }
 tokio = { version = "1.36.0", features = ["rt", "rt-multi-thread", "macros"] }

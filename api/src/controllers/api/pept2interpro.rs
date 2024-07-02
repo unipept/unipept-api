@@ -1,7 +1,7 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::{controllers::api::{default_domains, default_equate_il, default_extra}, helpers::interpro_helper::{interpro_entries, InterproEntries}, AppState};
+use crate::{controllers::api::{default_domains, default_equate_il, default_extra}, helpers::interpro_helper::{interpro_entries_from_map, InterproEntries}, AppState};
 
 use super::generate_handlers;
 
@@ -24,8 +24,8 @@ pub struct InterproInformation {
 }
 
 generate_handlers!(
-    fn handler(
-        State(AppState { index, datastore }): State<AppState>,
+    async fn handler(
+        State(AppState { index, datastore, .. }): State<AppState>,
         Parameters { input, equate_il, extra, domains } => Parameters
     ) -> Json<Vec<InterproInformation>> {
         let result = index.analyse(&input, equate_il).result;
@@ -36,7 +36,7 @@ generate_handlers!(
             let fa = item.fa?;
     
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
-            let iprs = interpro_entries(&fa.data, interpro_store, extra, domains);
+            let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
     
             Some(InterproInformation {
                 peptide: item.sequence,

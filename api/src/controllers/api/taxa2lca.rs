@@ -31,7 +31,7 @@ pub struct Taxon {
 
 generate_handlers!(
     [ V1, V2 ]
-    fn handler(
+    async fn handler(
         State(AppState { datastore, .. }): State<AppState>,
         Parameters { input, extra, names } => Parameters,
         version: LineageVersion

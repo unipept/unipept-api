@@ -3,20 +3,25 @@ use std::collections::HashMap;
 use datastore::InterproStore;
 use serde::Serialize;
 
+use crate::helpers::is_zero;
+
 #[derive(Serialize)]
 #[serde(untagged)]
 pub enum InterproEntry {
     Default {
         code: String,
-        protein_count: u32,
+        #[serde(skip_serializing_if = "is_zero")]
+        protein_count: u32
     },
     Extra {
         code: String,
+        #[serde(skip_serializing_if = "is_zero")]
         protein_count: u32,
         name: String
     },
     ExtraDomains {
         code: String,
+        #[serde(skip_serializing_if = "is_zero")]
         protein_count: u32,
         name: String,
         #[serde(rename = "type")]
@@ -31,55 +36,110 @@ pub enum InterproEntries {
     Domains (Vec<HashMap<String, Vec<InterproEntry>>>)
 }
 
-pub fn interpro_entries(fa_data: &HashMap<String, u32>, interpro_store: &InterproStore, extra: bool, domains: bool) -> InterproEntries {
-    let iprs = fa_data.into_iter().filter(|(key, _)| key.starts_with("IPR:"));
+pub fn interpro_entries_from_map(
+    fa_data: &HashMap<String, u32>,
+    interpro_store: &InterproStore,
+    extra: bool,
+    domains: bool,
+) -> InterproEntries {
+    let interpro_entries = fa_data
+        .iter()
+        .filter(|(key, _)| key.starts_with("IPR:"));
 
     if domains {
-        let mut interpro_domains = HashMap::new();
-        for (key, &count) in iprs {
-            if let Some((domain, name)) = interpro_store.get(&key[4..]) {
-                if extra {
-                    interpro_domains.entry(domain.to_string()).or_insert_with(Vec::new).push(InterproEntry::Extra {
-                        code: key[4..].to_string(),
-                        protein_count: count,
-                        name: name.to_string()
-                    });
-                } else {
-                    interpro_domains.entry(domain.to_string()).or_insert_with(Vec::new).push(InterproEntry::Default {
-                        code: key[4..].to_string(),
-                        protein_count: count
-                    });
-                }
-            }
-        }
-
-        let mut result = Vec::new();
-        for (key, value) in interpro_domains.into_iter() {
-            let mut mapping = HashMap::new();
-            mapping.insert(key, value);
-            result.push(mapping);
-        }
-
-        InterproEntries::Domains(result)
-    } else if extra {
-        InterproEntries::Default(
-            iprs.filter_map(|(key, &count)| {
-                if let Some((domain, name)) = interpro_store.get(&key[4..]) {
-                    Some(InterproEntry::ExtraDomains {
-                        code: key[4..].to_string(),
-                        protein_count: count,
-                        name: name.to_string(),
-                        domain: domain.to_string()
-                    })
-                } else { None }
-            }).collect()
-        )
+        handle_domains(interpro_entries.map(|(key, count)| (key.as_str(), count)), interpro_store, extra)
     } else {
         InterproEntries::Default(
-            iprs.map(|(key, &count)| InterproEntry::Default {
-                code: key[4..].to_string(),
-                protein_count: count
-            }).collect()
+            interpro_entries
+                .filter_map(|(key, &count)| interpro_entry(key, count, interpro_store, extra, false))
+                .collect(),
         )
+    }
+}
+
+pub fn interpro_entries_from_list(
+    fa_data: &Vec<&str>,
+    interpro_store: &InterproStore,
+    extra: bool,
+    domains: bool,
+) -> InterproEntries {
+    let interpro_entries = fa_data
+        .iter()
+        .filter(|key| key.starts_with("IPR:"));
+
+    if domains {
+        handle_domains(interpro_entries.map(|&key| (key, &0u32)), interpro_store, extra)
+    } else {
+        InterproEntries::Default(
+            interpro_entries
+                .filter_map(|key| interpro_entry(key, 0, interpro_store, extra, false))
+                .collect(),
+        )
+    }
+}
+
+fn handle_domains<'a>(
+    iprs: impl Iterator<Item = (&'a str, &'a u32)>,
+    interpro_store: &InterproStore,
+    extra: bool,
+) -> InterproEntries {
+    let mut interpro_domains = HashMap::new();
+    for (key, &count) in iprs {
+        if let Some(entry) = interpro_entry(key, count, interpro_store, extra, true) {
+            if let InterproEntry::ExtraDomains { domain, .. } | InterproEntry::Default { code: domain, .. } = &entry {
+                interpro_domains.entry(domain.to_string()).or_insert_with(Vec::new).push(entry);
+            }
+        }
+    }
+
+    let result: Vec<HashMap<String, Vec<InterproEntry>>> = interpro_domains.into_iter()
+        .map(|(key, value)| {
+            let mut mapping = HashMap::new();
+            mapping.insert(key, value);
+            mapping
+        })
+        .collect();
+
+    InterproEntries::Domains(result)
+}
+
+fn interpro_entry(
+    key: &str,
+    count: u32,
+    interpro_store: &InterproStore,
+    extra: bool,
+    domains: bool,
+) -> Option<InterproEntry> {
+    let trimmed_key = &key[4..];
+
+    let (domain, name) = interpro_store.get(trimmed_key)?;
+
+    if domains {
+        if extra {
+            Some(InterproEntry::ExtraDomains {
+                code: trimmed_key.to_string(),
+                protein_count: count,
+                name: name.to_string(),
+                domain: domain.to_string(),
+            })
+        } else {
+            Some(InterproEntry::Default {
+                code: trimmed_key.to_string(),
+                protein_count: count,
+            })
+        }
+    } else {
+        if extra {
+            Some(InterproEntry::Extra {
+                code: trimmed_key.to_string(),
+                protein_count: count,
+                name: name.to_string(),
+            })
+        } else {
+            Some(InterproEntry::Default {
+                code: trimmed_key.to_string(),
+                protein_count: count,
+            })
+        }
     }
 }

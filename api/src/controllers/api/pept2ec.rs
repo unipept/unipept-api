@@ -1,7 +1,7 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::{controllers::api::{default_equate_il, default_extra}, helpers::ec_helper::{ec_numbers, EcNumber}, AppState};
+use crate::{controllers::api::{default_equate_il, default_extra}, helpers::ec_helper::{ec_numbers_from_map, EcNumber}, AppState};
 
 use super::generate_handlers;
 
@@ -22,8 +22,8 @@ pub struct EcInformation {
 }
 
 generate_handlers!(
-    fn handler(
-        State(AppState { index, datastore }): State<AppState>,
+    async fn handler(
+        State(AppState { index, datastore, .. }): State<AppState>,
         Parameters { input, equate_il, extra } => Parameters
     ) -> Json<Vec<EcInformation>> {
         let result = index.analyse(&input, equate_il).result;
@@ -34,7 +34,7 @@ generate_handlers!(
             let fa = item.fa?;
     
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
-            let ecs = ec_numbers(&fa.data, ec_store, extra);
+            let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
     
             Some(EcInformation {
                 peptide: item.sequence,

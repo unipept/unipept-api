@@ -24,7 +24,7 @@ pub struct Data {
 }
 
 pub async fn handler(
-    State(AppState { index, datastore }): State<AppState>,
+    State(AppState { index, datastore, .. }): State<AppState>,
     Json(Body { mut peptides, equate_il }): Json<Body>
 ) -> Json<Data> {
     if peptides.is_empty() {

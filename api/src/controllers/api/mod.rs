@@ -47,12 +47,12 @@ where
 
 macro_rules! generate_handlers {
     (
-        fn $handler_name:ident(
+        async fn $handler_name:ident(
             State($state_pattern:pat): State<$state_type:ty>,
             $params_pattern:pat => $params_type:ty
         ) -> Json<$ret:ty> $body:block
     ) => {
-        fn $handler_name(
+        async fn $handler_name(
             State($state_pattern): State<$state_type>,
             $params_pattern: $params_type
         ) -> Json<$ret> $body
@@ -61,26 +61,26 @@ macro_rules! generate_handlers {
             state: State<$state_type>,
             $crate::controllers::api::Query(params): $crate::controllers::api::Query<$params_type>
         ) -> Json<$ret> {
-            $handler_name(state, params)
+            $handler_name(state, params).await
         }
 
         pub async fn post_handler(
             state: State<$state_type>,
             Json(params): Json<$params_type>
         ) -> Json<$ret> {
-            $handler_name(state, params)
+            $handler_name(state, params).await
         }
     };
 
     (
         [ $($version:ident),* ]
-        fn $handler_name:ident(
+        async fn $handler_name:ident(
             State($state_pattern:pat): State<$state_type:ty>,
             $params_pattern:pat => $params_type:ty,
             $version_param:ident : LineageVersion
         ) -> Json<$ret:ty> $body:block
     ) => {
-        fn $handler_name(
+        async fn $handler_name(
             State($state_pattern): State<$state_type>,
             $params_pattern: $params_type,
             $version_param: LineageVersion
@@ -92,14 +92,14 @@ macro_rules! generate_handlers {
                     state: State<$state_type>,
                     $crate::controllers::api::Query(params): $crate::controllers::api::Query<$params_type>
                 ) -> Json<$ret> {
-                    $handler_name(state, params, $version)
+                    $handler_name(state, params, $version).await
                 }
 
                 pub async fn [<post_handler_ $version:lower>](
                     state: State<$state_type>,
                     Json(params): Json<$params_type>
                 ) -> Json<$ret> {
-                    $handler_name(state, params, $version)
+                    $handler_name(state, params, $version).await
                 }
             }
         )*

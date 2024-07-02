@@ -36,8 +36,8 @@ pub struct Taxon {
 
 generate_handlers!(
     [ V1, V2 ]
-    fn handler(
-        State(AppState { index, datastore }): State<AppState>,
+    async fn handler(
+        State(AppState { index, datastore, .. }): State<AppState>,
         Parameters { input, equate_il, extra, names } => Parameters,
         version: LineageVersion
     ) -> Json<Vec<TaxaInformation>> {

@@ -1,7 +1,7 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::{controllers::api::{default_domains, default_equate_il, default_extra, default_names}, helpers::{ec_helper::{ec_numbers_from_map, EcNumber}, go_helper::{go_terms_from_map, GoTerms}, interpro_helper::{interpro_entries_from_map, InterproEntries}, lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion::{self, *}}}, AppState};
+use crate::{controllers::api::{default_domains, default_equate_il, default_extra, default_names}, helpers::{ec_helper::{ec_numbers_from_map, EcNumber}, go_helper::{go_terms_from_map, GoTerms}, interpro_helper::{interpro_entries_from_map, InterproEntries}, lca_helper::calculate_lca, lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion::{self, *}}}, AppState};
 
 use crate::controllers::generate_handlers;
 
@@ -61,7 +61,7 @@ generate_handlers!(
             let gos = go_terms_from_map(&fa.data, go_store, extra, domains);
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
     
-            let lca = item.lca?;
+            let lca = calculate_lca(item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(), version, lineage_store);
             let (name, rank) = taxon_store.get(lca as u32)?;
             let lineage = match (extra, names) {
                 (true, true)  => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),

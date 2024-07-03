@@ -26,3 +26,7 @@ pub fn default_domains() -> bool {
 pub fn default_names() -> bool {
   false
 }
+
+pub fn default_link() -> bool {
+  false
+}

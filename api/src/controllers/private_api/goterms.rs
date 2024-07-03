@@ -1,10 +1,10 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::AppState;
+use crate::{controllers::generate_handlers, AppState};
 
 #[derive(Serialize, Deserialize)]
-pub struct Body {
+pub struct Parameters {
     goterms: Vec<String>
 }
 
@@ -15,20 +15,22 @@ pub struct GoTerm {
     namespace: String
 }
 
-pub async fn handler(
-    State(AppState { datastore, .. }): State<AppState>,
-    body: Json<Body>
-) -> Json<Vec<GoTerm>> {
-    Json(body.goterms
-        .iter()
-        .map(|go_term| go_term.trim())
-        .filter_map(|go_term| {
-            datastore.go_store().get(go_term).map(|(ns, go)| GoTerm {
-                code: go_term.to_string(),
-                name: go.clone(),
-                namespace: ns.clone()
+generate_handlers!(
+    async fn handler(
+        State(AppState { datastore, .. }): State<AppState>,
+        Parameters { goterms } => Parameters
+    ) -> Json<Vec<GoTerm>> {
+        Json(goterms
+            .iter()
+            .map(|go_term| go_term.trim())
+            .filter_map(|go_term| {
+                datastore.go_store().get(go_term).map(|(ns, go)| GoTerm {
+                    code: go_term.to_string(),
+                    name: go.clone(),
+                    namespace: ns.clone()
+                })
             })
-        })
-        .collect()
-    )
-}
+            .collect()
+        )
+    }
+);

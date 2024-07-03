@@ -1,12 +1,12 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::{controllers::api::{default_equate_il, default_extra, default_names}, helpers::{lca_helper::calculate_lca, lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion}}, AppState};
+use crate::{controllers::api::{default_equate_il, default_extra, default_names}, helpers::{lca_helper::calculate_lca, lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion::{self, *}}}, AppState};
 
-use super::Query;
+use crate::controllers::generate_handlers;
 
 #[derive(Deserialize)]
-pub struct QueryParams {
+pub struct Parameters {
     input: Vec<String>,
     #[serde(default = "default_equate_il")]
     equate_il: bool,
@@ -32,48 +32,37 @@ pub struct Taxon {
     taxon_rank: String
 }
 
-pub async fn handler_v1(
-    state: State<AppState>,
-    query: Query<QueryParams>
-) -> Json<Vec<LcaInformation>> {
-    handler(state, query, LineageVersion::V1)
-}
-
-pub async fn handler_v2(
-    state: State<AppState>,
-    query: Query<QueryParams>
-) -> Json<Vec<LcaInformation>> {
-    handler(state, query, LineageVersion::V2)
-}
-
-fn handler(
-    State(AppState { index, datastore }): State<AppState>,
-    Query(QueryParams { input, equate_il, extra, names }): Query<QueryParams>,
-    version: LineageVersion
-) -> Json<Vec<LcaInformation>> {
-    let result = index.analyse(&input, equate_il).result;
+generate_handlers! (
+    [ V1, V2 ]
+    async fn handler(
+        State(AppState { index, datastore, .. }): State<AppState>,
+        Parameters { input, equate_il, extra, names } => Parameters,
+        version: LineageVersion
+    ) -> Json<Vec<LcaInformation>> {
+        let result = index.analyse(&input, equate_il).result;
+        
+        let taxon_store = datastore.taxon_store();
+        let lineage_store = datastore.lineage_store();
     
-    let taxon_store = datastore.taxon_store();
-    let lineage_store = datastore.lineage_store();
-
-    Json(result.into_iter().filter_map(|item| {
-        let lca = calculate_lca(item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(), version, lineage_store);
-
-        let (name, rank) = taxon_store.get(lca as u32)?;
-        let lineage = match (extra, names) {
-            (true, true)  => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
-            (true, false) => get_lineage(lca as u32, version, lineage_store),
-            (false, _)    => None    
-        };
-
-        Some(LcaInformation {
-            peptide: item.sequence,
-            taxon: Taxon {
-                taxon_id: lca as u32,
-                taxon_name: name.to_string(),
-                taxon_rank: rank.clone().into()
-            },
-            lineage
-        })
-    }).collect())
-}
+        Json(result.into_iter().filter_map(|item| {
+            let lca = calculate_lca(item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(), version, lineage_store);
+    
+            let (name, rank) = taxon_store.get(lca as u32)?;
+            let lineage = match (extra, names) {
+                (true, true)  => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
+                (true, false) => get_lineage(lca as u32, version, lineage_store),
+                (false, _)    => None    
+            };
+    
+            Some(LcaInformation {
+                peptide: item.sequence,
+                taxon: Taxon {
+                    taxon_id: lca as u32,
+                    taxon_name: name.to_string(),
+                    taxon_rank: rank.clone().into()
+                },
+                lineage
+            })
+        }).collect())
+    }
+);

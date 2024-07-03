@@ -18,7 +18,7 @@ where
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let query = parts.uri.query().ok_or((StatusCode::BAD_REQUEST, "missing query string"))?;
-        Ok(Self(serde_qs::from_str(query).map_err(|err| {
+        Ok(Self(serde_qs::from_str(&urlencoding::decode(query).unwrap()).map_err(|err| {
             eprintln!("{:?}", err);
             (StatusCode::BAD_REQUEST, "invalid query string")
         })?))

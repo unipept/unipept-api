@@ -13,18 +13,27 @@ pub enum InterproEntry {
         #[serde(skip_serializing_if = "is_zero")]
         protein_count: u32
     },
+    Domains {
+        code: String,
+        #[serde(skip_serializing_if = "is_zero")]
+        protein_count: u32,
+        #[serde(skip_serializing)]
+        domain: String
+    },
     Extra {
         code: String,
         #[serde(skip_serializing_if = "is_zero")]
         protein_count: u32,
-        name: String
+        name: String,
+        #[serde(rename = "type")]
+        domain: String
     },
     ExtraDomains {
         code: String,
         #[serde(skip_serializing_if = "is_zero")]
         protein_count: u32,
         name: String,
-        #[serde(rename = "type")]
+        #[serde(skip_serializing)]
         domain: String
     }
 }
@@ -86,7 +95,7 @@ fn handle_domains<'a>(
     let mut interpro_domains = HashMap::new();
     for (key, &count) in iprs {
         if let Some(entry) = interpro_entry(key, count, interpro_store, extra, true) {
-            if let InterproEntry::ExtraDomains { domain, .. } | InterproEntry::Default { code: domain, .. } = &entry {
+            if let InterproEntry::Domains { domain, .. } | InterproEntry::ExtraDomains { domain, .. } = &entry {
                 interpro_domains.entry(domain.to_string()).or_insert_with(Vec::new).push(entry);
             }
         }
@@ -123,9 +132,10 @@ fn interpro_entry(
                 domain: domain.to_string(),
             })
         } else {
-            Some(InterproEntry::Default {
+            Some(InterproEntry::Domains {
                 code: trimmed_key.to_string(),
                 protein_count: count,
+                domain: domain.to_string(),
             })
         }
     } else {
@@ -134,6 +144,7 @@ fn interpro_entry(
                 code: trimmed_key.to_string(),
                 protein_count: count,
                 name: name.to_string(),
+                domain: domain.to_string(),
             })
         } else {
             Some(InterproEntry::Default {

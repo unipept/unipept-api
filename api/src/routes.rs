@@ -43,7 +43,7 @@ fn create_api_v1_routes() -> Router<AppState> {
         "/taxa2lca", get(taxa2lca::get_handler_v1).post(taxa2lca::post_handler_v1),
         "/taxa2tree", get(taxa2tree::get_handler_v1).post(taxa2tree::post_handler_v1),
         "/taxonomy", get(taxonomy::get_handler_v1).post(taxonomy::post_handler_v1)
-    )
+    ).route("/taxa2tree.html", get(taxa2tree::get_html_handler_v1).post(taxa2tree::post_html_handler_v1))
 }
 
 fn create_api_v2_routes() -> Router<AppState> {
@@ -60,7 +60,7 @@ fn create_api_v2_routes() -> Router<AppState> {
         "/taxa2lca", get(taxa2lca::get_handler_v2).post(taxa2lca::post_handler_v2),
         "/taxa2tree", get(taxa2tree::get_handler_v2).post(taxa2tree::post_handler_v2),
         "/taxonomy", get(taxonomy::get_handler_v2).post(taxonomy::post_handler_v2)
-    )
+    ).route("/taxa2tree.html", get(taxa2tree::get_html_handler_v2).post(taxa2tree::post_html_handler_v2))
 }
 
 fn create_datasets_routes() -> Router<AppState> {

@@ -42,7 +42,7 @@ generate_handlers!(
     async fn handler(
         State(AppState { index, datastore, database }): State<AppState>,
         Parameters { input, equate_il, extra } => Parameters
-    ) -> Json<Vec<ProtInformation>> {
+    ) -> Vec<ProtInformation> {
         let connection = database.get().await.unwrap();
 
         let result = index.analyse(&input, equate_il).result;
@@ -58,7 +58,7 @@ generate_handlers!(
 
         let taxon_store = datastore.taxon_store();
         
-        Json(result.into_iter().map(|item| {
+        result.into_iter().map(|item| {
             item.uniprot_accession_numbers.into_iter().map(|accession| {
                 let uniprot_entry = accessions_map.get(&accession).unwrap();
 
@@ -91,6 +91,6 @@ generate_handlers!(
                     }
                 }
             }).collect::<Vec<ProtInformation>>()
-        }).flatten().collect())
+        }).flatten().collect()
     }
 );

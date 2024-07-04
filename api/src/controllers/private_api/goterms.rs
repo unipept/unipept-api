@@ -19,8 +19,8 @@ generate_handlers!(
     async fn handler(
         State(AppState { datastore, .. }): State<AppState>,
         Parameters { goterms } => Parameters
-    ) -> Json<Vec<GoTerm>> {
-        Json(goterms
+    ) -> Vec<GoTerm> {
+        goterms
             .iter()
             .map(|go_term| go_term.trim())
             .filter_map(|go_term| {
@@ -31,6 +31,5 @@ generate_handlers!(
                 })
             })
             .collect()
-        )
     }
 );

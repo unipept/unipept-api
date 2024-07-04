@@ -32,10 +32,10 @@ pub struct Taxon {
 generate_handlers!(
     [ V1, V2 ]
     async fn handler(
-        State(AppState { datastore, .. }): State<AppState>,
+        State(AppState { datastore, .. }) => State<AppState>,
         Parameters { input, extra, names } => Parameters,
         version: LineageVersion
-    ) -> Json<LcaInformation> {
+    ) -> impl IntoResponse {
         let taxon_store = datastore.taxon_store();
         let lineage_store = datastore.lineage_store();
 

@@ -30,9 +30,9 @@ generate_handlers!(
     async fn handler(
         State(AppState { index, .. }): State<AppState>,
         Parameters { mut peptides, taxa, equate_il } => Parameters
-    ) -> Json<FilteredData> {
+    ) -> FilteredData {
         if peptides.is_empty() {
-            return Json(FilteredData { peptides: Vec::new() });
+            return FilteredData { peptides: Vec::new() };
         }
     
         peptides.sort();
@@ -41,7 +41,7 @@ generate_handlers!(
     
         let taxa_set: HashSet<usize> = HashSet::from_iter(taxa.iter().cloned());
     
-        Json(FilteredData {
+        FilteredData {
             peptides: result.into_iter().filter_map(|mut item| {
                 item.taxa = HashSet::from_iter(item.taxa.iter().cloned()).intersection(&taxa_set).cloned().collect();
                 
@@ -55,6 +55,6 @@ generate_handlers!(
                     fa: item.fa
                 })
             }).collect()
-        })
+        }
     }
 );

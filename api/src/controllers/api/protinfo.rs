@@ -39,10 +39,10 @@ pub struct Taxon {
 generate_handlers!(
     [ V1, V2 ]
     async fn handler(
-        State(AppState { datastore, database, .. }): State<AppState>,
+        State(AppState { datastore, database, .. }) => State<AppState>,
         Parameters { input, extra, domains, names } => Parameters,
         version: LineageVersion
-    ) -> Json<Vec<ProtInformation>> {
+    ) -> impl IntoResponse {
         let connection = database.get().await.unwrap();
     
         let entries = connection.interact(move |conn| 
@@ -80,6 +80,6 @@ generate_handlers!(
                 ipr: iprs,
                 lineage
             }
-        }).collect())
+        }).collect::<Vec<ProtInformation>>())
     }
 );

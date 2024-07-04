@@ -11,9 +11,9 @@ pub struct Version {
 generate_handlers!(
     async fn handler(
         State(AppState { datastore, .. }): State<AppState>
-    ) -> Json<Version> {
-        Json(Version {
+    ) -> Version {
+        Version {
             db_version: datastore.version().to_string()
-        })
+        }
     }
 );

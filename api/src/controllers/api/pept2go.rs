@@ -26,12 +26,12 @@ generate_handlers!(
     async fn handler(
         State(AppState { index, datastore, .. }): State<AppState>,
         Parameters { input, equate_il, extra, domains } => Parameters
-    ) -> Json<Vec<GoInformation>> {
+    ) -> Vec<GoInformation> {
         let result = index.analyse(&input, equate_il).result;
     
         let go_store = datastore.go_store();
     
-        Json(result.into_iter().filter_map(|item| {
+        result.into_iter().filter_map(|item| {
             let fa = item.fa?;
     
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
@@ -42,6 +42,6 @@ generate_handlers!(
                 total_protein_count,
                 go: gos
             })
-        }).collect())
+        }).collect()
     }
 );

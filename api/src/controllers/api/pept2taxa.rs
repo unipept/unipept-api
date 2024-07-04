@@ -37,10 +37,10 @@ pub struct Taxon {
 generate_handlers!(
     [ V1, V2 ]
     async fn handler(
-        State(AppState { index, datastore, .. }): State<AppState>,
+        State(AppState { index, datastore, .. }) => State<AppState>,
         Parameters { input, equate_il, extra, names } => Parameters,
         version: LineageVersion
-    ) -> Json<Vec<TaxaInformation>> {
+    ) -> impl IntoResponse {
         let result = index.analyse(&input, equate_il).result;
         
         let taxon_store = datastore.taxon_store();
@@ -65,6 +65,6 @@ generate_handlers!(
                     lineage
                 })
             })
-        }).flatten().collect())
+        }).flatten().collect::<Vec<TaxaInformation>>())
     }
 );

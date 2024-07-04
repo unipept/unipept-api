@@ -32,10 +32,10 @@ pub struct Taxon {
 generate_handlers!(
     [ V1, V2 ]
     async fn handler(
-        State(AppState { datastore, .. }): State<AppState>,
+        State(AppState { datastore, .. }) => State<AppState>,
         Parameters { input, extra, names } => Parameters,
         version: LineageVersion
-    ) -> Json<Vec<TaxaInformation>> {
+    ) -> impl IntoResponse {
         if input.is_empty() {
             return Json(Vec::new());
         }
@@ -62,7 +62,7 @@ generate_handlers!(
                     lineage
                 })
             })
-            .collect()
+            .collect::<Vec<TaxaInformation>>()
         )
     }
 );

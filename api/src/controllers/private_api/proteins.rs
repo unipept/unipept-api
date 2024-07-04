@@ -45,13 +45,13 @@ generate_handlers!(
     async fn handler(
         State(AppState { index, datastore, database }): State<AppState>,
         Parameters { peptide, equate_il } => Parameters
-    ) -> Json<ProteinInformation> {
+    ) -> ProteinInformation {
         let connection = database.get().await.unwrap();
     
         let result = index.analyse(&vec![ peptide ], equate_il).result;
     
         if result.is_empty() {
-            return Json(ProteinInformation::default());
+            return ProteinInformation::default();
         }
     
         let accession_numbers: Vec<String> = result
@@ -74,7 +74,7 @@ generate_handlers!(
             .map(|taxon_id| taxon_id.unwrap())
             .collect::<Vec<i32>>();
     
-        Json(ProteinInformation {
+        ProteinInformation {
             lca,
             common_lineage,
             proteins: result[0].uniprot_accession_numbers.iter().map(|accession| {
@@ -94,6 +94,6 @@ generate_handlers!(
                     interpro_entries
                 }
             }).collect()
-        })
+        }
     }
 );

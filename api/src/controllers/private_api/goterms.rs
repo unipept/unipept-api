@@ -1,7 +1,7 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::{controllers::generate_handlers, AppState};
+use crate::{controllers::generate_json_handlers, AppState};
 
 #[derive(Serialize, Deserialize)]
 pub struct Parameters {
@@ -15,7 +15,7 @@ pub struct GoTerm {
     namespace: String
 }
 
-generate_handlers!(
+generate_json_handlers!(
     async fn handler(
         State(AppState { datastore, .. }): State<AppState>,
         Parameters { goterms } => Parameters

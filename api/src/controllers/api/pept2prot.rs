@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{controllers::api::{default_equate_il, default_extra}, AppState};
 
-use crate::controllers::generate_handlers;
+use crate::controllers::generate_json_handlers;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -38,7 +38,7 @@ pub enum ProtInformation {
     }
 }
 
-generate_handlers!(
+generate_json_handlers!(
     async fn handler(
         State(AppState { index, datastore, database }): State<AppState>,
         Parameters { input, equate_il, extra } => Parameters

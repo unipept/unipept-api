@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{controllers::api::{default_extra, default_names}, helpers::{lca_helper::calculate_lca, lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion::{self, *}}}, AppState};
 
-use crate::controllers::generate_handlers;
+use crate::controllers::generate_json_handlers;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -29,13 +29,13 @@ pub struct Taxon {
     taxon_rank: String
 }
 
-generate_handlers!(
+generate_json_handlers!(
     [ V1, V2 ]
     async fn handler(
         State(AppState { datastore, .. }) => State<AppState>,
         Parameters { input, extra, names } => Parameters,
         version: LineageVersion
-    ) -> impl IntoResponse {
+    ) -> LcaInformation {
         let taxon_store = datastore.taxon_store();
         let lineage_store = datastore.lineage_store();
 
@@ -50,13 +50,13 @@ generate_handlers!(
             (false, _)    => None    
         };
 
-        Json(LcaInformation {
+        LcaInformation {
             taxon: Taxon {
                 taxon_id: lca as u32,
                 taxon_name: name.to_string(),
                 taxon_rank: rank.clone().into()
             },
             lineage
-        })
+        }
     }
 );

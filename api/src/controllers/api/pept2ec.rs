@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{controllers::api::{default_equate_il, default_extra}, helpers::ec_helper::{ec_numbers_from_map, EcNumber}, AppState};
 
-use crate::controllers::generate_handlers;
+use crate::controllers::generate_json_handlers;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -21,7 +21,7 @@ pub struct EcInformation {
     ec: Vec<EcNumber>
 }
 
-generate_handlers!(
+generate_json_handlers!(
     async fn handler(
         State(AppState { index, datastore, .. }): State<AppState>,
         Parameters { input, equate_il, extra } => Parameters

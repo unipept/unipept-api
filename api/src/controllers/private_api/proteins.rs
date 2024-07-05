@@ -2,7 +2,7 @@ use axum::{extract::State, Json};
 use database::get_accessions_map;
 use serde::{Deserialize, Serialize};
 
-use crate::{controllers::generate_handlers, helpers::{lca_helper::calculate_lca, lineage_helper::{get_lineage_array, LineageVersion}}, AppState};
+use crate::{controllers::generate_json_handlers, helpers::{lca_helper::calculate_lca, lineage_helper::{get_lineage_array, LineageVersion}}, AppState};
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -41,7 +41,7 @@ impl Default for ProteinInformation {
     }
 }
 
-generate_handlers!(
+generate_json_handlers!(
     async fn handler(
         State(AppState { index, datastore, database }): State<AppState>,
         Parameters { peptide, equate_il } => Parameters

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{controllers::api::{default_equate_il, default_extra, default_names}, helpers::lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion::{self, *}}, AppState};
 
-use crate::controllers::generate_handlers;
+use crate::controllers::generate_json_handlers;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -34,19 +34,19 @@ pub struct Taxon {
     taxon_rank: String
 }
 
-generate_handlers!(
+generate_json_handlers!(
     [ V1, V2 ]
     async fn handler(
         State(AppState { index, datastore, .. }) => State<AppState>,
         Parameters { input, equate_il, extra, names } => Parameters,
         version: LineageVersion
-    ) -> impl IntoResponse {
+    ) -> Vec<TaxaInformation> {
         let result = index.analyse(&input, equate_il).result;
         
         let taxon_store = datastore.taxon_store();
         let lineage_store = datastore.lineage_store();
     
-        Json(result.into_iter().map(|item| {
+        result.into_iter().map(|item| {
             item.taxa.into_iter().collect::<HashSet<usize>>().into_iter().filter_map(move |taxon| {
                 let (name, rank) = taxon_store.get(taxon as u32)?;
                 let lineage = match (extra, names) {
@@ -65,6 +65,6 @@ generate_handlers!(
                     lineage
                 })
             })
-        }).flatten().collect::<Vec<TaxaInformation>>())
+        }).flatten().collect()
     }
 );

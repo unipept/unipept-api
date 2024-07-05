@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{controllers::api::{default_domains, default_extra, default_names}, helpers::{ec_helper::{ec_numbers_from_list, EcNumber}, go_helper::{go_terms_from_list, GoTerms}, interpro_helper::{interpro_entries_from_list, InterproEntries}, lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion::{self, *}}}, AppState};
 
-use crate::controllers::generate_handlers;
+use crate::controllers::generate_json_handlers;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -36,13 +36,13 @@ pub struct Taxon {
     taxon_rank: String
 }
 
-generate_handlers!(
+generate_json_handlers!(
     [ V1, V2 ]
     async fn handler(
         State(AppState { datastore, database, .. }) => State<AppState>,
         Parameters { input, extra, domains, names } => Parameters,
         version: LineageVersion
-    ) -> impl IntoResponse {
+    ) -> Vec<ProtInformation> {
         let connection = database.get().await.unwrap();
     
         let entries = connection.interact(move |conn| 
@@ -55,7 +55,7 @@ generate_handlers!(
         let taxon_store = datastore.taxon_store();
         let lineage_store = datastore.lineage_store();
     
-        Json(entries.into_iter().map(|entry| {
+        entries.into_iter().map(|entry| {
             let fa: Vec<&str> = entry.fa.split(';').collect();
             let ecs = ec_numbers_from_list(&fa, ec_store, extra);
             let gos = go_terms_from_list(&fa, go_store, extra, domains);
@@ -80,6 +80,6 @@ generate_handlers!(
                 ipr: iprs,
                 lineage
             }
-        }).collect::<Vec<ProtInformation>>())
+        }).collect()
     }
 );

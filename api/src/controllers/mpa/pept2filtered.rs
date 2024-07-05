@@ -4,7 +4,7 @@ use axum::{extract::State, Json};
 use sa_mappings::functionality::FunctionalAggregation;
 use serde::{Deserialize, Serialize};
 
-use crate::{controllers::{generate_handlers, mpa::default_equate_il}, AppState};
+use crate::{controllers::{generate_json_handlers, mpa::default_equate_il}, AppState};
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -26,7 +26,7 @@ pub struct FilteredData {
     peptides: Vec<FilteredDataItem>
 }
 
-generate_handlers!(
+generate_json_handlers!(
     async fn handler(
         State(AppState { index, .. }): State<AppState>,
         Parameters { mut peptides, taxa, equate_il } => Parameters

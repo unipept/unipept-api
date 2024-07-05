@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{controllers::api::{default_domains, default_equate_il, default_extra}, helpers::go_helper::{go_terms_from_map, GoTerms}, AppState};
 
-use crate::controllers::generate_handlers;
+use crate::controllers::generate_json_handlers;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -22,7 +22,7 @@ pub struct GoInformation {
     total_protein_count: usize,
     go: GoTerms
 }
-generate_handlers!(
+generate_json_handlers!(
     async fn handler(
         State(AppState { index, datastore, .. }): State<AppState>,
         Parameters { input, equate_il, extra, domains } => Parameters

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{controllers::api::{default_domains, default_equate_il, default_extra, default_names}, helpers::{ec_helper::{ec_numbers_from_map, EcNumber}, go_helper::{go_terms_from_map, GoTerms}, interpro_helper::{interpro_entries_from_map, InterproEntries}, lca_helper::calculate_lca, lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion::{self, *}}}, AppState};
 
-use crate::controllers::generate_handlers;
+use crate::controllers::generate_json_handlers;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -38,13 +38,13 @@ pub struct Taxon {
     taxon_rank: String
 }
 
-generate_handlers!(
+generate_json_handlers!(
     [ V1, V2 ]
     async fn handler(
         State(AppState { index, datastore, .. }) => State<AppState>,
         Parameters { input, equate_il, extra, domains, names } => Parameters,
         version: LineageVersion
-    ) -> impl IntoResponse {
+    ) -> Vec<PeptInformation> {
         let result = index.analyse(&input, equate_il).result;
         
         let ec_store = datastore.ec_store();
@@ -53,7 +53,7 @@ generate_handlers!(
         let taxon_store = datastore.taxon_store();
         let lineage_store = datastore.lineage_store();
     
-        Json(result.into_iter().filter_map(|item| {
+        result.into_iter().filter_map(|item| {
             let fa = item.fa?;
             
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
@@ -82,6 +82,6 @@ generate_handlers!(
                 },
                 lineage
             })
-        }).collect::<Vec<PeptInformation>>())
+        }).collect()
     }
 );

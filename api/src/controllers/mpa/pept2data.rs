@@ -43,9 +43,9 @@ generate_json_handlers!(
     async fn handler(
         State(AppState { index, datastore, .. }): State<AppState>,
         Parameters { mut peptides, equate_il } => Parameters
-    ) -> Data {
+    ) -> Result<Data, ()> {
         if peptides.is_empty() {
-            return Data { peptides: Vec::new() };
+            return Ok(Data { peptides: Vec::new() });
         }
 
         peptides.sort();
@@ -54,7 +54,7 @@ generate_json_handlers!(
 
         let lineage_store = datastore.lineage_store();
 
-        Data {
+        Ok(Data {
             peptides: result.into_iter().map(|item| {
                 let lca = calculate_lca(item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(), LineageVersion::V2, lineage_store);
                 let lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store);
@@ -66,6 +66,6 @@ generate_json_handlers!(
                     fa: item.fa
                 }
             }).collect()
-        }
+        })
     }
 );

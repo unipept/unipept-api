@@ -33,15 +33,15 @@ generate_json_handlers!(
     async fn handler(
         State(AppState { datastore, .. }): State<AppState>,
         Parameters { taxids } => Parameters
-    ) -> Vec<Taxon> {
+    ) -> Result<Vec<Taxon>, ()> {
         if taxids.is_empty() {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
         let taxon_store = datastore.taxon_store();
         let lineage_store = datastore.lineage_store();
 
-        taxids
+        Ok(taxids
             .into_iter()
             .filter_map(|taxon_id| {
                 let (name, rank) = taxon_store.get(taxon_id as u32)?;
@@ -54,6 +54,6 @@ generate_json_handlers!(
                     lineage
                 })
             })
-            .collect()
+            .collect())
     }
 );

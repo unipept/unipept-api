@@ -15,8 +15,7 @@ use crate::{
             default_extra
         },
         generate_json_handlers
-    },
-    AppState
+    }, errors::ApiError, AppState
 };
 
 #[derive(Deserialize)]
@@ -55,8 +54,8 @@ generate_json_handlers!(
     async fn handler(
         State(AppState { index, datastore, database }): State<AppState>,
         Parameters { input, equate_il, extra } => Parameters
-    ) -> Vec<ProtInformation> {
-        let connection = database.get().await.unwrap();
+    ) -> Result<Vec<ProtInformation>, ApiError> {
+        let connection = database.get_conn().await?;
 
         let result = index.analyse(&input, equate_il).result;
 
@@ -66,24 +65,24 @@ generate_json_handlers!(
             .collect();
 
         let accessions_map = connection.interact(move |conn| {
-            get_accessions_map(conn, &accession_numbers).unwrap()
-        }).await.unwrap();
+            get_accessions_map(conn, &accession_numbers)
+        }).await??;
 
         let taxon_store = datastore.taxon_store();
 
-        result.into_iter().flat_map(|item| {
-            item.uniprot_accession_numbers.into_iter().map(|accession| {
-                let uniprot_entry = accessions_map.get(&accession).unwrap();
+        Ok(result.into_iter().flat_map(|item| {
+            item.uniprot_accession_numbers.into_iter().filter_map(|accession| {
+                let uniprot_entry = accessions_map.get(&accession)?;
 
                 if extra {
-                    let (taxon_name, _) = taxon_store.get(uniprot_entry.taxon_id).unwrap();
+                    let taxon_name = taxon_store.get_name(uniprot_entry.taxon_id)?;
 
                     let fa: Vec<&str> = uniprot_entry.fa.split(';').collect();
                     let ec_references = fa.iter().filter(|key| key.starts_with("EC:")).map(ToString::to_string).collect::<Vec<String>>().join(" ");
                     let go_references = fa.iter().filter(|key| key.starts_with("GO:")).map(ToString::to_string).collect::<Vec<String>>().join(" ");
                     let interpro_references = fa.iter().filter(|key| key.starts_with("IPR:")).map(|k| k[4..].to_string()).collect::<Vec<String>>().join(" ");
 
-                    ProtInformation::Extra {
+                    Some(ProtInformation::Extra {
                         peptide: item.sequence.clone(),
                         uniprot_id: accession.clone(),
                         protein_name: uniprot_entry.name.clone(),
@@ -93,17 +92,17 @@ generate_json_handlers!(
                         ec_references,
                         go_references,
                         interpro_references
-                    }
+                    })
                 } else {
-                    ProtInformation::Default {
+                    Some(ProtInformation::Default {
                         peptide: item.sequence.clone(),
                         uniprot_id: accession.clone(),
                         protein_name: uniprot_entry.name.clone(),
                         taxon_id: uniprot_entry.taxon_id,
                         protein: uniprot_entry.protein.clone()
-                    }
+                    })
                 }
             }).collect::<Vec<ProtInformation>>()
-        }).collect()
+        }).collect())
     }
 );

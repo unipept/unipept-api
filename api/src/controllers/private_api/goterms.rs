@@ -28,8 +28,8 @@ generate_json_handlers!(
     async fn handler(
         State(AppState { datastore, .. }): State<AppState>,
         Parameters { goterms } => Parameters
-    ) -> Vec<GoTerm> {
-        goterms
+    ) -> Result<Vec<GoTerm>, ()> {
+        Ok(goterms
             .iter()
             .map(|go_term| go_term.trim())
             .filter_map(|go_term| {
@@ -39,6 +39,6 @@ generate_json_handlers!(
                     namespace: ns.clone()
                 })
             })
-            .collect()
+            .collect())
     }
 );

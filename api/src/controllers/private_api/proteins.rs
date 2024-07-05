@@ -9,15 +9,13 @@ use serde::{
 };
 
 use crate::{
-    controllers::generate_json_handlers,
-    helpers::{
+    controllers::generate_json_handlers, errors::ApiError, helpers::{
         lca_helper::calculate_lca,
         lineage_helper::{
             get_lineage_array,
             LineageVersion
         }
-    },
-    AppState
+    }, AppState
 };
 
 #[derive(Deserialize)]
@@ -61,13 +59,13 @@ generate_json_handlers!(
     async fn handler(
         State(AppState { index, datastore, database }): State<AppState>,
         Parameters { peptide, equate_il } => Parameters
-    ) -> ProteinInformation {
-        let connection = database.get().await.unwrap();
+    ) -> Result<ProteinInformation, ApiError> {
+        let connection = database.get_conn().await?;
 
         let result = index.analyse(&vec![ peptide ], equate_il).result;
 
         if result.is_empty() {
-            return ProteinInformation::default();
+            return Ok(ProteinInformation::default());
         }
 
         let accession_numbers: Vec<String> = result
@@ -76,8 +74,8 @@ generate_json_handlers!(
             .collect();
 
         let accessions_map = connection.interact(move |conn| {
-            get_accessions_map(conn, &accession_numbers).unwrap()
-        }).await.unwrap();
+            get_accessions_map(conn, &accession_numbers)
+        }).await??;
 
         let lineage_store = datastore.lineage_store();
 
@@ -89,26 +87,26 @@ generate_json_handlers!(
             .filter_map(|taxon_id| *taxon_id)
             .collect::<Vec<i32>>();
 
-        ProteinInformation {
+        Ok(ProteinInformation {
             lca,
             common_lineage,
-            proteins: result[0].uniprot_accession_numbers.iter().map(|accession| {
-                let uniprot_entry = accessions_map.get(accession).unwrap();
+            proteins: result[0].uniprot_accession_numbers.iter().filter_map(|accession| {
+                let uniprot_entry = accessions_map.get(accession)?;
 
                 let fa: Vec<&str> = uniprot_entry.fa.split(';').collect();
                 let ec_numbers = fa.iter().filter(|key| key.starts_with("EC:")).map(ToString::to_string).collect::<Vec<String>>();
                 let go_terms = fa.iter().filter(|key| key.starts_with("GO:")).map(ToString::to_string).collect::<Vec<String>>();
                 let interpro_entries = fa.iter().filter(|key| key.starts_with("IPR:")).map(|k| k[4..].to_string()).collect::<Vec<String>>();
 
-                Protein {
+                Some(Protein {
                     uniprot_accession_id: accession.clone(),
                     name: uniprot_entry.name.clone(),
                     organism: uniprot_entry.taxon_id,
                     ec_numbers,
                     go_terms,
                     interpro_entries
-                }
+                })
             }).collect()
-        }
+        })
     }
 );

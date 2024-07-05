@@ -27,8 +27,8 @@ generate_json_handlers!(
     async fn handler(
         State(AppState { datastore, .. }): State<AppState>,
         Parameters { ecnumbers } => Parameters
-    ) -> Vec<EcNumber> {
-        ecnumbers
+    ) -> Result<Vec<EcNumber>, ()> {
+        Ok(ecnumbers
             .iter()
             .map(|ec_number| ec_number.trim())
             .filter_map(|ec_number| {
@@ -37,6 +37,6 @@ generate_json_handlers!(
                     name: ec.clone()
                 })
             })
-            .collect()
+            .collect())
     }
 );

@@ -41,8 +41,8 @@ pub struct Parameters {
 
 #[derive(Serialize)]
 pub struct LcaInformation {
-    #[serde(flatten)]
-    taxon:   Taxon,
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    taxon:   Option<Taxon>,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     lineage: Option<Lineage>
 }
@@ -60,28 +60,31 @@ generate_json_handlers!(
         State(AppState { datastore, .. }) => State<AppState>,
         Parameters { input, extra, names } => Parameters,
         version: LineageVersion
-    ) -> LcaInformation {
+    ) -> Result<LcaInformation, ()> {
         let taxon_store = datastore.taxon_store();
         let lineage_store = datastore.lineage_store();
 
         // Calculate the LCA of all taxa
         let lca: i32 = calculate_lca(input, version, lineage_store);
 
-        // Calculate the lineage of the LCA
-        let (name, rank) = taxon_store.get(lca as u32).unwrap(); // TODO: We should not just call unwrap here
-        let lineage = match (extra, names) {
-            (true, true)  => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
-            (true, false) => get_lineage(lca as u32, version, lineage_store),
-            (false, _)    => None
-        };
+        if let Some((taxon_name, taxon_rank)) = taxon_store.get(lca as u32) {
+            // Calculate the lineage of the LCA
+            let lineage = match (extra, names) {
+                (true, true)  => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
+                (true, false) => get_lineage(lca as u32, version, lineage_store),
+                (false, _)    => None
+            };
 
-        LcaInformation {
-            taxon: Taxon {
-                taxon_id: lca as u32,
-                taxon_name: name.to_string(),
-                taxon_rank: rank.clone().into()
-            },
-            lineage
+            return Ok(LcaInformation {
+                taxon: Some(Taxon {
+                    taxon_id: lca as u32,
+                    taxon_name: taxon_name.to_string(),
+                    taxon_rank: taxon_rank.clone().into()
+                }),
+                lineage
+            })
         }
+
+        Ok(LcaInformation { taxon: None, lineage: None })
     }
 );

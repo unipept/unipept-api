@@ -19,9 +19,9 @@ generate_json_handlers!(
         State(AppState {
             datastore, ..
         }): State<AppState>
-    ) -> Version {
-        Version {
+    ) -> Result<Version, ()> {
+        Ok(Version {
             db_version: datastore.version().to_string()
-        }
+        })
     }
 );

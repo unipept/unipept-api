@@ -5,8 +5,7 @@ use axum::{
 use datastore::SampleStore;
 
 use crate::{
-    controllers::generate_json_handlers,
-    AppState
+    controllers::generate_json_handlers, AppState
 };
 
 generate_json_handlers!(
@@ -14,7 +13,7 @@ generate_json_handlers!(
         State(AppState {
             datastore, ..
         }): State<AppState>
-    ) -> SampleStore {
-        datastore.sample_store().to_owned()
+    ) -> Result<SampleStore, ()> {
+        Ok(datastore.sample_store().to_owned())
     }
 );

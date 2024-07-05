@@ -3,8 +3,6 @@ use std::collections::HashMap;
 use askama::Template;
 use axum::{
     extract::State,
-    http::StatusCode,
-    response::IntoResponse,
     Json
 };
 use serde::{
@@ -20,16 +18,14 @@ use crate::{
             PostContent
         },
         response::HtmlTemplate
-    },
-    helpers::{
+    }, errors::ApiError, helpers::{
         lineage_helper::LineageVersion,
         tree_helper::{
             build_tree,
             frequency::FrequencyTable,
             node::Node
         }
-    },
-    AppState
+    }, AppState
 };
 
 #[derive(Deserialize)]
@@ -67,81 +63,78 @@ pub enum TreeInformation {
 
 #[derive(Template)]
 #[template(path = "taxa2tree.html", escape = "none")]
-struct TreeTemplate {
+pub struct TreeTemplate {
     json_data: String
 }
 
 pub async fn get_handler_v1(
     state: State<AppState>,
     GetContent(params): GetContent<GetParameters>
-) -> Json<TreeInformation> {
-    Json(create_tree_information(state, Parameters::Get(params), LineageVersion::V1))
+) -> Result<Json<TreeInformation>, ()> {
+    Ok(Json(create_tree_information(state, Parameters::Get(params), LineageVersion::V1)))
 }
 
 pub async fn post_handler_v1(
     state: State<AppState>,
     PostContent(params): PostContent<PostParameters>
-) -> Json<TreeInformation> {
-    Json(create_tree_information(state, Parameters::Post(params), LineageVersion::V1))
+) -> Result<Json<TreeInformation>, ()> {
+    Ok(Json(create_tree_information(state, Parameters::Post(params), LineageVersion::V1)))
 }
 
 pub async fn get_handler_v2(
     state: State<AppState>,
     GetContent(params): GetContent<GetParameters>
-) -> Json<TreeInformation> {
-    Json(create_tree_information(state, Parameters::Get(params), LineageVersion::V2))
+) -> Result<Json<TreeInformation>, ()> {
+    Ok(Json(create_tree_information(state, Parameters::Get(params), LineageVersion::V2)))
 }
 
 pub async fn post_handler_v2(
     state: State<AppState>,
     PostContent(params): PostContent<PostParameters>
-) -> Json<TreeInformation> {
-    Json(create_tree_information(state, Parameters::Post(params), LineageVersion::V2))
+) -> Result<Json<TreeInformation>, ()> {
+    Ok(Json(create_tree_information(state, Parameters::Post(params), LineageVersion::V2)))
 }
 
 fn html_handler(
     state: State<AppState>,
     params: Parameters,
     version: LineageVersion
-) -> impl IntoResponse {
-    if let TreeInformation::Tree {
-        root
-    } = create_tree_information(state, params, version)
-    {
-        HtmlTemplate(TreeTemplate {
-            json_data: serde_json::to_string(&root).unwrap()
-        })
-        .into_response()
-    } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, "Link not implemented").into_response()
+) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
+    match create_tree_information(state, params, version) {
+        TreeInformation::Tree { root } => Ok(HtmlTemplate(TreeTemplate {
+            json_data: serde_json::to_string(&root)?
+        })),
+        TreeInformation::Link { .. } => Err(ApiError::NotImplementedError(
+            "HTML output is not implemented when using the link option".to_string()
+        ))
     }
 }
 
 pub async fn get_html_handler_v1(
     state: State<AppState>,
     GetContent(params): GetContent<GetParameters>
-) -> impl IntoResponse {
+) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
     html_handler(state, Parameters::Get(params), LineageVersion::V1)
 }
 
 pub async fn post_html_handler_v1(
     state: State<AppState>,
     PostContent(params): PostContent<PostParameters>
-) -> impl IntoResponse {
+) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
     html_handler(state, Parameters::Post(params), LineageVersion::V1)
 }
 
 pub async fn get_html_handler_v2(
     state: State<AppState>,
     GetContent(params): GetContent<GetParameters>
-) -> impl IntoResponse {
+) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
     html_handler(state, Parameters::Get(params), LineageVersion::V2)
 }
 
 pub async fn post_html_handler_v2(
     state: State<AppState>,
     PostContent(params): PostContent<PostParameters>
-) -> impl IntoResponse {
+) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
     html_handler(state, Parameters::Post(params), LineageVersion::V2)
 }
 

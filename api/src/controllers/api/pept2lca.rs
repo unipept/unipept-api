@@ -64,13 +64,13 @@ generate_json_handlers! (
         State(AppState { index, datastore, .. }) => State<AppState>,
         Parameters { input, equate_il, extra, names } => Parameters,
         version: LineageVersion
-    ) -> Vec<LcaInformation> {
+    ) -> Result<Vec<LcaInformation>, ()> {
         let result = index.analyse(&input, equate_il).result;
 
         let taxon_store = datastore.taxon_store();
         let lineage_store = datastore.lineage_store();
 
-        result.into_iter().filter_map(|item| {
+        Ok(result.into_iter().filter_map(|item| {
             let lca = calculate_lca(item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(), version, lineage_store);
 
             let (name, rank) = taxon_store.get(lca as u32)?;
@@ -89,6 +89,6 @@ generate_json_handlers! (
                 },
                 lineage
             })
-        }).collect::<Vec<LcaInformation>>()
+        }).collect())
     }
 );

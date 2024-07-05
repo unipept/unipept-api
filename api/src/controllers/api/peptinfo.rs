@@ -83,7 +83,7 @@ generate_json_handlers!(
         State(AppState { index, datastore, .. }) => State<AppState>,
         Parameters { input, equate_il, extra, domains, names } => Parameters,
         version: LineageVersion
-    ) -> Vec<PeptInformation> {
+    ) -> Result<Vec<PeptInformation>, ()> {
         let result = index.analyse(&input, equate_il).result;
 
         let ec_store = datastore.ec_store();
@@ -92,7 +92,7 @@ generate_json_handlers!(
         let taxon_store = datastore.taxon_store();
         let lineage_store = datastore.lineage_store();
 
-        result.into_iter().filter_map(|item| {
+        Ok(result.into_iter().filter_map(|item| {
             let fa = item.fa?;
 
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
@@ -121,6 +121,6 @@ generate_json_handlers!(
                 },
                 lineage
             })
-        }).collect()
+        }).collect())
     }
 );

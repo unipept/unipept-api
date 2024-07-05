@@ -57,15 +57,15 @@ generate_json_handlers!(
         State(AppState { datastore, .. }) => State<AppState>,
         Parameters { input, extra, names } => Parameters,
         version: LineageVersion
-    ) -> Vec<TaxaInformation> {
+    ) -> Result<Vec<TaxaInformation>, ()> {
         if input.is_empty() {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
         let taxon_store = datastore.taxon_store();
         let lineage_store = datastore.lineage_store();
 
-        input
+        Ok(input
             .into_iter()
             .filter_map(|taxon_id| {
                 let (name, rank) = taxon_store.get(taxon_id)?;
@@ -84,6 +84,6 @@ generate_json_handlers!(
                     lineage
                 })
             })
-            .collect()
+            .collect())
     }
 );

@@ -72,6 +72,10 @@ impl TaxonStore {
     pub fn get(&self, key: u32) -> Option<&TaxonInformation> {
         self.mapper.get(&key)
     }
+
+    pub fn get_name(&self, key: u32) -> Option<&String> {
+        self.mapper.get(&key).map(|(name, _)| name)
+    }
 }
 
 impl FromStr for LineageRank {

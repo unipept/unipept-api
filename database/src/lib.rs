@@ -4,8 +4,7 @@ use std::{
 };
 
 use deadpool_diesel::mysql::{
-    Manager,
-    Pool
+    Manager, Object, Pool
 };
 use diesel::{
     prelude::*,
@@ -13,6 +12,7 @@ use diesel::{
     QueryDsl
 };
 pub use errors::DatabaseError;
+pub use deadpool_diesel::InteractError;
 use models::UniprotEntry;
 
 mod errors;
@@ -32,6 +32,10 @@ impl Database {
         Ok(Self {
             pool
         })
+    }
+
+    pub async fn get_conn(&self) -> Result<Object, DatabaseError> {
+        Ok(self.pool.get().await?)
     }
 }
 

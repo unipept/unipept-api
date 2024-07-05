@@ -57,14 +57,14 @@ generate_json_handlers!(
     async fn handler(
         State(AppState { index, datastore, .. }): State<AppState>,
         Parameters { input, equate_il, extra, domains } => Parameters
-    ) -> Vec<FunctInformation> {
+    ) -> Result<Vec<FunctInformation>, ()> {
         let result = index.analyse(&input, equate_il).result;
 
         let ec_store = datastore.ec_store();
         let go_store = datastore.go_store();
         let interpro_store = datastore.interpro_store();
 
-        result.into_iter().filter_map(|item| {
+        Ok(result.into_iter().filter_map(|item| {
             let fa = item.fa?;
 
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
@@ -79,6 +79,6 @@ generate_json_handlers!(
                 go: gos,
                 ipr: iprs
             })
-        }).collect()
+        }).collect())
     }
 );

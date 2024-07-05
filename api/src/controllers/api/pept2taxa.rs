@@ -63,13 +63,13 @@ generate_json_handlers!(
         State(AppState { index, datastore, .. }) => State<AppState>,
         Parameters { input, equate_il, extra, names } => Parameters,
         version: LineageVersion
-    ) -> Vec<TaxaInformation> {
+    ) -> Result<Vec<TaxaInformation>, ()> {
         let result = index.analyse(&input, equate_il).result;
 
         let taxon_store = datastore.taxon_store();
         let lineage_store = datastore.lineage_store();
 
-        result.into_iter().flat_map(|item| {
+        Ok(result.into_iter().flat_map(|item| {
             item.taxa.into_iter().collect::<HashSet<usize>>().into_iter().filter_map(move |taxon| {
                 let (name, rank) = taxon_store.get(taxon as u32)?;
                 let lineage = match (extra, names) {
@@ -88,6 +88,6 @@ generate_json_handlers!(
                     lineage
                 })
             })
-        }).collect()
+        }).collect())
     }
 );

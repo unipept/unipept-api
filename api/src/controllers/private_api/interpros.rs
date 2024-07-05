@@ -28,8 +28,8 @@ generate_json_handlers!(
     async fn handler(
         State(AppState { datastore, .. }): State<AppState>,
         Parameters { interpros } => Parameters
-    ) -> Vec<InterproEntry> {
-        interpros
+    ) -> Result<Vec<InterproEntry>, ()> {
+        Ok(interpros
             .iter()
             .map(|interpro_entry| interpro_entry.trim())
             .filter_map(|interpro_entry| {
@@ -39,6 +39,6 @@ generate_json_handlers!(
                     category: cat.clone()
                 })
             })
-            .collect()
+            .collect())
     }
 );

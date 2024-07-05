@@ -8,7 +8,7 @@ use serde::{
 };
 
 use crate::{
-    controllers::generate_json_handlers,
+    controllers::generate_handlers,
     helpers::lineage_helper::{
         get_lineage_array,
         LineageVersion
@@ -29,31 +29,42 @@ pub struct Taxon {
     lineage: Vec<Option<i32>>
 }
 
-generate_json_handlers!(
-    async fn handler(
-        State(AppState { datastore, .. }): State<AppState>,
-        Parameters { taxids } => Parameters
-    ) -> Result<Vec<Taxon>, ()> {
-        if taxids.is_empty() {
-            return Ok(Vec::new());
-        }
+async fn handler(
+    State(AppState {
+        datastore, ..
+    }): State<AppState>,
+    Parameters {
+        taxids
+    }: Parameters
+) -> Result<Vec<Taxon>, ()> {
+    if taxids.is_empty() {
+        return Ok(Vec::new());
+    }
 
-        let taxon_store = datastore.taxon_store();
-        let lineage_store = datastore.lineage_store();
+    let taxon_store = datastore.taxon_store();
+    let lineage_store = datastore.lineage_store();
 
-        Ok(taxids
-            .into_iter()
-            .filter_map(|taxon_id| {
-                let (name, rank) = taxon_store.get(taxon_id as u32)?;
-                let lineage = get_lineage_array(taxon_id as u32, LineageVersion::V2, lineage_store);
+    Ok(taxids
+        .into_iter()
+        .filter_map(|taxon_id| {
+            let (name, rank) = taxon_store.get(taxon_id as u32)?;
+            let lineage = get_lineage_array(taxon_id as u32, LineageVersion::V2, lineage_store);
 
-                Some(Taxon {
-                    id: taxon_id,
-                    name: name.clone(),
-                    rank: rank.clone().into(),
-                    lineage
-                })
+            Some(Taxon {
+                id: taxon_id,
+                name: name.clone(),
+                rank: rank.clone().into(),
+                lineage
             })
-            .collect())
+        })
+        .collect())
+}
+
+generate_handlers!(
+    async fn json_handler(
+        state => State<AppState>,
+        params => Parameters
+    ) -> Result<Json<Vec<Taxon>>, ()> {
+        Ok(Json(handler(state, params).await?))
     }
 );

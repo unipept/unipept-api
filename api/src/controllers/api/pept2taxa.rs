@@ -16,7 +16,7 @@ use crate::{
             default_extra,
             default_names
         },
-        generate_json_handlers
+        generate_handlers
     },
     helpers::lineage_helper::{
         get_lineage,
@@ -57,37 +57,66 @@ pub struct Taxon {
     taxon_rank: String
 }
 
-generate_json_handlers!(
-    [ V1, V2 ]
-    async fn handler(
-        State(AppState { index, datastore, .. }) => State<AppState>,
-        Parameters { input, equate_il, extra, names } => Parameters,
-        version: LineageVersion
-    ) -> Result<Vec<TaxaInformation>, ()> {
-        let result = index.analyse(&input, equate_il).result;
+async fn handler(
+    State(AppState {
+        index,
+        datastore,
+        ..
+    }): State<AppState>,
+    Parameters {
+        input,
+        equate_il,
+        extra,
+        names
+    }: Parameters,
+    version: LineageVersion
+) -> Result<Vec<TaxaInformation>, ()> {
+    let result = index.analyse(&input, equate_il).result;
 
-        let taxon_store = datastore.taxon_store();
-        let lineage_store = datastore.lineage_store();
+    let taxon_store = datastore.taxon_store();
+    let lineage_store = datastore.lineage_store();
 
-        Ok(result.into_iter().flat_map(|item| {
-            item.taxa.into_iter().collect::<HashSet<usize>>().into_iter().filter_map(move |taxon| {
-                let (name, rank) = taxon_store.get(taxon as u32)?;
-                let lineage = match (extra, names) {
-                    (true, true)  => get_lineage_with_names(taxon as u32, version, lineage_store, taxon_store),
-                    (true, false) => get_lineage(taxon as u32, version, lineage_store),
-                    (false, _)    => None
-                };
+    Ok(result
+        .into_iter()
+        .flat_map(|item| {
+            item.taxa
+                .into_iter()
+                .collect::<HashSet<usize>>()
+                .into_iter()
+                .filter_map(move |taxon| {
+                    let (name, rank) = taxon_store.get(taxon as u32)?;
+                    let lineage = match (extra, names) {
+                        (true, true) => get_lineage_with_names(
+                            taxon as u32,
+                            version,
+                            lineage_store,
+                            taxon_store
+                        ),
+                        (true, false) => get_lineage(taxon as u32, version, lineage_store),
+                        (false, _) => None
+                    };
 
-                Some(TaxaInformation {
-                    peptide: item.sequence.clone(),
-                    taxon: Taxon {
-                        taxon_id: taxon as u32,
-                        taxon_name: name.to_string(),
-                        taxon_rank: rank.clone().into()
-                    },
-                    lineage
+                    Some(TaxaInformation {
+                        peptide: item.sequence.clone(),
+                        taxon: Taxon {
+                            taxon_id:   taxon as u32,
+                            taxon_name: name.to_string(),
+                            taxon_rank: rank.clone().into()
+                        },
+                        lineage
+                    })
                 })
-            })
-        }).collect())
+        })
+        .collect())
+}
+
+generate_handlers! (
+    [ V1, V2 ]
+    async fn json_handler(
+        state => State<AppState>,
+        params => Parameters,
+        version: LineageVersion
+    ) -> Result<Json<Vec<TaxaInformation>>, ()> {
+        Ok(Json(handler(state, params, version).await?))
     }
 );

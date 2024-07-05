@@ -13,7 +13,7 @@ use crate::{
             default_extra,
             default_names
         },
-        generate_json_handlers
+        generate_handlers
     },
     helpers::{
         lca_helper::calculate_lca,
@@ -54,37 +54,54 @@ pub struct Taxon {
     taxon_rank: String
 }
 
-generate_json_handlers!(
+async fn handler(
+    State(AppState {
+        datastore, ..
+    }): State<AppState>,
+    Parameters {
+        input,
+        extra,
+        names
+    }: Parameters,
+    version: LineageVersion
+) -> Result<LcaInformation, ()> {
+    let taxon_store = datastore.taxon_store();
+    let lineage_store = datastore.lineage_store();
+
+    // Calculate the LCA of all taxa
+    let lca: i32 = calculate_lca(input, version, lineage_store);
+
+    if let Some((taxon_name, taxon_rank)) = taxon_store.get(lca as u32) {
+        // Calculate the lineage of the LCA
+        let lineage = match (extra, names) {
+            (true, true) => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
+            (true, false) => get_lineage(lca as u32, version, lineage_store),
+            (false, _) => None
+        };
+
+        return Ok(LcaInformation {
+            taxon: Some(Taxon {
+                taxon_id:   lca as u32,
+                taxon_name: taxon_name.to_string(),
+                taxon_rank: taxon_rank.clone().into()
+            }),
+            lineage
+        });
+    }
+
+    Ok(LcaInformation {
+        taxon:   None,
+        lineage: None
+    })
+}
+
+generate_handlers! (
     [ V1, V2 ]
-    async fn handler(
-        State(AppState { datastore, .. }) => State<AppState>,
-        Parameters { input, extra, names } => Parameters,
+    async fn json_handler(
+        state => State<AppState>,
+        params => Parameters,
         version: LineageVersion
-    ) -> Result<LcaInformation, ()> {
-        let taxon_store = datastore.taxon_store();
-        let lineage_store = datastore.lineage_store();
-
-        // Calculate the LCA of all taxa
-        let lca: i32 = calculate_lca(input, version, lineage_store);
-
-        if let Some((taxon_name, taxon_rank)) = taxon_store.get(lca as u32) {
-            // Calculate the lineage of the LCA
-            let lineage = match (extra, names) {
-                (true, true)  => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
-                (true, false) => get_lineage(lca as u32, version, lineage_store),
-                (false, _)    => None
-            };
-
-            return Ok(LcaInformation {
-                taxon: Some(Taxon {
-                    taxon_id: lca as u32,
-                    taxon_name: taxon_name.to_string(),
-                    taxon_rank: taxon_rank.clone().into()
-                }),
-                lineage
-            })
-        }
-
-        Ok(LcaInformation { taxon: None, lineage: None })
+    ) -> Result<Json<LcaInformation>, ()> {
+        Ok(Json(handler(state, params, version).await?))
     }
 );

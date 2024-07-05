@@ -34,9 +34,7 @@ pub fn go_terms_from_map(
     extra: bool,
     domains: bool
 ) -> GoTerms {
-    let go_terms = fa_data
-        .iter()
-        .filter(|(key, _)| key.starts_with("GO:"));
+    let go_terms = fa_data.iter().filter(|(key, _)| key.starts_with("GO:"));
 
     if domains {
         handle_domains(go_terms.map(|(key, count)| (key.as_str(), count)), go_store, extra)

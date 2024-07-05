@@ -13,19 +13,26 @@ use serde::{
 use crate::{
     controllers::{
         api::default_link,
+        generate_handlers,
         request::{
             GetContent,
             PostContent
         },
         response::HtmlTemplate
-    }, errors::ApiError, helpers::{
-        lineage_helper::LineageVersion,
+    },
+    errors::ApiError,
+    helpers::{
+        lineage_helper::LineageVersion::{
+            self,
+            *
+        },
         tree_helper::{
             build_tree,
             frequency::FrequencyTable,
             node::Node
         }
-    }, AppState
+    },
+    AppState
 };
 
 #[derive(Deserialize)]
@@ -67,78 +74,7 @@ pub struct TreeTemplate {
     json_data: String
 }
 
-pub async fn get_handler_v1(
-    state: State<AppState>,
-    GetContent(params): GetContent<GetParameters>
-) -> Result<Json<TreeInformation>, ()> {
-    Ok(Json(create_tree_information(state, Parameters::Get(params), LineageVersion::V1)))
-}
-
-pub async fn post_handler_v1(
-    state: State<AppState>,
-    PostContent(params): PostContent<PostParameters>
-) -> Result<Json<TreeInformation>, ()> {
-    Ok(Json(create_tree_information(state, Parameters::Post(params), LineageVersion::V1)))
-}
-
-pub async fn get_handler_v2(
-    state: State<AppState>,
-    GetContent(params): GetContent<GetParameters>
-) -> Result<Json<TreeInformation>, ()> {
-    Ok(Json(create_tree_information(state, Parameters::Get(params), LineageVersion::V2)))
-}
-
-pub async fn post_handler_v2(
-    state: State<AppState>,
-    PostContent(params): PostContent<PostParameters>
-) -> Result<Json<TreeInformation>, ()> {
-    Ok(Json(create_tree_information(state, Parameters::Post(params), LineageVersion::V2)))
-}
-
-fn html_handler(
-    state: State<AppState>,
-    params: Parameters,
-    version: LineageVersion
-) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
-    match create_tree_information(state, params, version) {
-        TreeInformation::Tree { root } => Ok(HtmlTemplate(TreeTemplate {
-            json_data: serde_json::to_string(&root)?
-        })),
-        TreeInformation::Link { .. } => Err(ApiError::NotImplementedError(
-            "HTML output is not implemented when using the link option".to_string()
-        ))
-    }
-}
-
-pub async fn get_html_handler_v1(
-    state: State<AppState>,
-    GetContent(params): GetContent<GetParameters>
-) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
-    html_handler(state, Parameters::Get(params), LineageVersion::V1)
-}
-
-pub async fn post_html_handler_v1(
-    state: State<AppState>,
-    PostContent(params): PostContent<PostParameters>
-) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
-    html_handler(state, Parameters::Post(params), LineageVersion::V1)
-}
-
-pub async fn get_html_handler_v2(
-    state: State<AppState>,
-    GetContent(params): GetContent<GetParameters>
-) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
-    html_handler(state, Parameters::Get(params), LineageVersion::V2)
-}
-
-pub async fn post_html_handler_v2(
-    state: State<AppState>,
-    PostContent(params): PostContent<PostParameters>
-) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
-    html_handler(state, Parameters::Post(params), LineageVersion::V2)
-}
-
-fn create_tree_information(
+fn handler(
     State(AppState {
         datastore, ..
     }): State<AppState>,
@@ -171,3 +107,61 @@ fn create_tree_information(
         root
     }
 }
+
+generate_handlers!(
+    [ V1, V2 ]
+    async fn json_handler(
+        state => State<AppState>,
+        GetContent(params) => GetContent<GetParameters>,
+        version: LineageVersion
+    ) -> Result<Json<TreeInformation>, ()> {
+        Ok(Json(handler(state, Parameters::Get(params), version)))
+    }
+);
+
+generate_handlers!(
+    [ V1, V2 ]
+    async fn json_handler(
+        state => State<AppState>,
+        PostContent(params) => PostContent<PostParameters>,
+        version: LineageVersion
+    ) -> Result<Json<TreeInformation>, ()> {
+        Ok(Json(handler(state, Parameters::Post(params), version)))
+    }
+);
+
+generate_handlers!(
+    [ V1, V2 ]
+    async fn html_handler(
+        state => State<AppState>,
+        GetContent(params) => GetContent<GetParameters>,
+        version: LineageVersion
+    ) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
+        match handler(state, Parameters::Get(params), version) {
+            TreeInformation::Tree { root } => Ok(HtmlTemplate(TreeTemplate {
+                json_data: serde_json::to_string(&root)?
+            })),
+            TreeInformation::Link { .. } => Err(ApiError::NotImplementedError(
+                "HTML output is not supported when using the link option".to_string()
+            ))
+        }
+    }
+);
+
+generate_handlers!(
+    [ V1, V2 ]
+    async fn html_handler(
+        state => State<AppState>,
+        PostContent(params) => PostContent<PostParameters>,
+        version: LineageVersion
+    ) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
+        match handler(state, Parameters::Post(params), version) {
+            TreeInformation::Tree { root } => Ok(HtmlTemplate(TreeTemplate {
+                json_data: serde_json::to_string(&root)?
+            })),
+            TreeInformation::Link { .. } => Err(ApiError::NotImplementedError(
+                "HTML output is not supported when using the link option".to_string()
+            ))
+        }
+    }
+);

@@ -9,7 +9,7 @@ use serde::{
 };
 
 use crate::{
-    controllers::generate_json_handlers,
+    controllers::generate_handlers,
     helpers::{
         lca_helper::calculate_lca,
         lineage_helper::{
@@ -39,24 +39,38 @@ pub struct Data {
     peptides: Vec<DataItem>
 }
 
-generate_json_handlers!(
-    async fn handler(
-        State(AppState { index, datastore, .. }): State<AppState>,
-        Parameters { mut peptides, equate_il } => Parameters
-    ) -> Result<Data, ()> {
-        if peptides.is_empty() {
-            return Ok(Data { peptides: Vec::new() });
-        }
+async fn handler(
+    State(AppState {
+        index,
+        datastore,
+        ..
+    }): State<AppState>,
+    Parameters {
+        mut peptides,
+        equate_il
+    }: Parameters
+) -> Result<Data, ()> {
+    if peptides.is_empty() {
+        return Ok(Data {
+            peptides: Vec::new()
+        });
+    }
 
-        peptides.sort();
-        peptides.dedup();
-        let result = index.analyse(&peptides, equate_il).result;
+    peptides.sort();
+    peptides.dedup();
+    let result = index.analyse(&peptides, equate_il).result;
 
-        let lineage_store = datastore.lineage_store();
+    let lineage_store = datastore.lineage_store();
 
-        Ok(Data {
-            peptides: result.into_iter().map(|item| {
-                let lca = calculate_lca(item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(), LineageVersion::V2, lineage_store);
+    Ok(Data {
+        peptides: result
+            .into_iter()
+            .map(|item| {
+                let lca = calculate_lca(
+                    item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(),
+                    LineageVersion::V2,
+                    lineage_store
+                );
                 let lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store);
 
                 DataItem {
@@ -65,7 +79,16 @@ generate_json_handlers!(
                     lineage,
                     fa: item.fa
                 }
-            }).collect()
-        })
+            })
+            .collect()
+    })
+}
+
+generate_handlers!(
+    async fn json_handler(
+        state=> State<AppState>,
+        params => Parameters
+    ) -> Result<Json<Data>, ()> {
+        Ok(Json(handler(state, params).await?))
     }
 );

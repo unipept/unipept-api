@@ -12,7 +12,7 @@ use serde::{
 
 use crate::{
     controllers::{
-        generate_json_handlers,
+        generate_handlers,
         mpa::default_equate_il
     },
     AppState
@@ -38,24 +38,36 @@ pub struct FilteredData {
     peptides: Vec<FilteredDataItem>
 }
 
-generate_json_handlers!(
-    async fn handler(
-        State(AppState { index, .. }): State<AppState>,
-        Parameters { mut peptides, taxa, equate_il } => Parameters
-    ) -> Result<FilteredData, ()> {
-        if peptides.is_empty() {
-            return Ok(FilteredData { peptides: Vec::new() });
-        }
+async fn handler(
+    State(AppState {
+        index, ..
+    }): State<AppState>,
+    Parameters {
+        mut peptides,
+        taxa,
+        equate_il
+    }: Parameters
+) -> Result<FilteredData, ()> {
+    if peptides.is_empty() {
+        return Ok(FilteredData {
+            peptides: Vec::new()
+        });
+    }
 
-        peptides.sort();
-        peptides.dedup();
-        let result = index.analyse(&peptides, equate_il).result;
+    peptides.sort();
+    peptides.dedup();
+    let result = index.analyse(&peptides, equate_il).result;
 
-        let taxa_set: HashSet<usize> = HashSet::from_iter(taxa.iter().cloned());
+    let taxa_set: HashSet<usize> = HashSet::from_iter(taxa.iter().cloned());
 
-        Ok(FilteredData {
-            peptides: result.into_iter().filter_map(|mut item| {
-                item.taxa = HashSet::from_iter(item.taxa.iter().cloned()).intersection(&taxa_set).cloned().collect();
+    Ok(FilteredData {
+        peptides: result
+            .into_iter()
+            .filter_map(|mut item| {
+                item.taxa = HashSet::from_iter(item.taxa.iter().cloned())
+                    .intersection(&taxa_set)
+                    .cloned()
+                    .collect();
 
                 if item.taxa.is_empty() {
                     return None;
@@ -63,10 +75,19 @@ generate_json_handlers!(
 
                 Some(FilteredDataItem {
                     sequence: item.sequence,
-                    taxa: item.taxa,
-                    fa: item.fa
+                    taxa:     item.taxa,
+                    fa:       item.fa
                 })
-            }).collect()
-        })
+            })
+            .collect()
+    })
+}
+
+generate_handlers!(
+    async fn json_handler(
+        state=> State<AppState>,
+        params => Parameters
+    ) -> Result<Json<FilteredData>, ()> {
+        Ok(Json(handler(state, params).await?))
     }
 );

@@ -1,4 +1,10 @@
-use axum::{http::StatusCode, response::{IntoResponse, Response}};
+use axum::{
+    http::StatusCode,
+    response::{
+        IntoResponse,
+        Response
+    }
+};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -30,8 +36,12 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
             ApiError::JsonError(_) => (StatusCode::BAD_REQUEST, "Invalid JSON".to_string()),
-            ApiError::DatabaseError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
-            ApiError::DatabaseInteractionError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
+            ApiError::DatabaseError(_) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
+            }
+            ApiError::DatabaseInteractionError(_) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
+            }
             ApiError::NotImplementedError(message) => (StatusCode::NOT_IMPLEMENTED, message)
         };
 
@@ -46,9 +56,9 @@ impl IntoResponse for ApiError {
 //     fn into_response(self) -> Response {
 //         let (status, message) = match self {
 //             AppError::IoError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
-//             AppError::DataStoreError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
-//             AppError::IndexError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
-//             AppError::DatabaseError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
-//         };
+//             AppError::DataStoreError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server
+// error"),             AppError::IndexError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal
+// server error"),             AppError::DatabaseError(_) => (StatusCode::INTERNAL_SERVER_ERROR,
+// "Internal server error")         };
 //     }
 // }

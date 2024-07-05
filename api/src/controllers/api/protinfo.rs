@@ -15,8 +15,10 @@ use crate::{
             default_extra,
             default_names
         },
-        generate_json_handlers
-    }, errors::ApiError, helpers::{
+        generate_handlers
+    },
+    errors::ApiError,
+    helpers::{
         ec_helper::{
             ec_numbers_from_list,
             EcNumber
@@ -38,7 +40,8 @@ use crate::{
                 *
             }
         }
-    }, AppState
+    },
+    AppState
 };
 
 #[derive(Deserialize)]
@@ -71,26 +74,35 @@ pub struct Taxon {
     taxon_rank: String
 }
 
-generate_json_handlers!(
-    [ V1, V2 ]
-    async fn handler(
-        State(AppState { datastore, database, .. }) => State<AppState>,
-        Parameters { input, extra, domains, names } => Parameters,
-        version: LineageVersion
-    ) -> Result<Vec<ProtInformation>, ApiError> {
-        let connection = database.get_conn().await?;
+async fn handler(
+    State(AppState {
+        datastore,
+        database,
+        ..
+    }): State<AppState>,
+    Parameters {
+        input,
+        extra,
+        domains,
+        names
+    }: Parameters,
+    version: LineageVersion
+) -> Result<Vec<ProtInformation>, ApiError> {
+    let connection = database.get_conn().await?;
 
-        let entries = connection.interact(move |conn|
-            get_accessions(conn, &input)
-        ).await??;
+    let entries = connection
+        .interact(move |conn| get_accessions(conn, &input))
+        .await??;
 
-        let ec_store = datastore.ec_store();
-        let go_store = datastore.go_store();
-        let interpro_store = datastore.interpro_store();
-        let taxon_store = datastore.taxon_store();
-        let lineage_store = datastore.lineage_store();
+    let ec_store = datastore.ec_store();
+    let go_store = datastore.go_store();
+    let interpro_store = datastore.interpro_store();
+    let taxon_store = datastore.taxon_store();
+    let lineage_store = datastore.lineage_store();
 
-        Ok(entries.into_iter().filter_map(|entry| {
+    Ok(entries
+        .into_iter()
+        .filter_map(|entry| {
             let fa: Vec<&str> = entry.fa.split(';').collect();
             let ecs = ec_numbers_from_list(&fa, ec_store, extra);
             let gos = go_terms_from_list(&fa, go_store, extra, domains);
@@ -98,15 +110,17 @@ generate_json_handlers!(
 
             let (name, rank) = taxon_store.get(entry.taxon_id)?;
             let lineage = match (extra, names) {
-                (true, true)  => get_lineage_with_names(entry.taxon_id, version, lineage_store, taxon_store),
+                (true, true) => {
+                    get_lineage_with_names(entry.taxon_id, version, lineage_store, taxon_store)
+                }
                 (true, false) => get_lineage(entry.taxon_id, version, lineage_store),
-                (false, _)    => None
+                (false, _) => None
             };
 
             Some(ProtInformation {
                 protein: entry.uniprot_accession_number,
                 taxon: Taxon {
-                    taxon_id: entry.taxon_id,
+                    taxon_id:   entry.taxon_id,
                     taxon_name: name.to_string(),
                     taxon_rank: rank.clone().into()
                 },
@@ -115,6 +129,17 @@ generate_json_handlers!(
                 ipr: iprs,
                 lineage
             })
-        }).collect())
+        })
+        .collect())
+}
+
+generate_handlers! (
+    [ V1, V2 ]
+    async fn json_handler(
+        state => State<AppState>,
+        params => Parameters,
+        version: LineageVersion
+    ) -> Result<Json<Vec<ProtInformation>>, ApiError> {
+        Ok(Json(handler(state, params, version).await?))
     }
 );

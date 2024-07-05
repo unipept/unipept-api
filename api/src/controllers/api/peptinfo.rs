@@ -15,7 +15,7 @@ use crate::{
             default_extra,
             default_names
         },
-        generate_json_handlers
+        generate_handlers
     },
     helpers::{
         ec_helper::{
@@ -77,22 +77,32 @@ pub struct Taxon {
     taxon_rank: String
 }
 
-generate_json_handlers!(
-    [ V1, V2 ]
-    async fn handler(
-        State(AppState { index, datastore, .. }) => State<AppState>,
-        Parameters { input, equate_il, extra, domains, names } => Parameters,
-        version: LineageVersion
-    ) -> Result<Vec<PeptInformation>, ()> {
-        let result = index.analyse(&input, equate_il).result;
+async fn handler(
+    State(AppState {
+        index,
+        datastore,
+        ..
+    }): State<AppState>,
+    Parameters {
+        input,
+        equate_il,
+        extra,
+        domains,
+        names
+    }: Parameters,
+    version: LineageVersion
+) -> Result<Vec<PeptInformation>, ()> {
+    let result = index.analyse(&input, equate_il).result;
 
-        let ec_store = datastore.ec_store();
-        let go_store = datastore.go_store();
-        let interpro_store = datastore.interpro_store();
-        let taxon_store = datastore.taxon_store();
-        let lineage_store = datastore.lineage_store();
+    let ec_store = datastore.ec_store();
+    let go_store = datastore.go_store();
+    let interpro_store = datastore.interpro_store();
+    let taxon_store = datastore.taxon_store();
+    let lineage_store = datastore.lineage_store();
 
-        Ok(result.into_iter().filter_map(|item| {
+    Ok(result
+        .into_iter()
+        .filter_map(|item| {
             let fa = item.fa?;
 
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
@@ -100,12 +110,18 @@ generate_json_handlers!(
             let gos = go_terms_from_map(&fa.data, go_store, extra, domains);
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
 
-            let lca = calculate_lca(item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(), version, lineage_store);
+            let lca = calculate_lca(
+                item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(),
+                version,
+                lineage_store
+            );
             let (name, rank) = taxon_store.get(lca as u32)?;
             let lineage = match (extra, names) {
-                (true, true)  => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
+                (true, true) => {
+                    get_lineage_with_names(lca as u32, version, lineage_store, taxon_store)
+                }
                 (true, false) => get_lineage(lca as u32, version, lineage_store),
-                (false, _)    => None
+                (false, _) => None
             };
 
             Some(PeptInformation {
@@ -115,12 +131,23 @@ generate_json_handlers!(
                 go: gos,
                 ipr: iprs,
                 taxon: Taxon {
-                    taxon_id: lca as u32,
+                    taxon_id:   lca as u32,
                     taxon_name: name.to_string(),
                     taxon_rank: rank.clone().into()
                 },
                 lineage
             })
-        }).collect())
+        })
+        .collect())
+}
+
+generate_handlers! (
+    [ V1, V2 ]
+    async fn json_handler(
+        state => State<AppState>,
+        params => Parameters,
+        version: LineageVersion
+    ) -> Result<Json<Vec<PeptInformation>>, ()> {
+        Ok(Json(handler(state, params, version).await?))
     }
 );

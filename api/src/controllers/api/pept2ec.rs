@@ -13,7 +13,7 @@ use crate::{
             default_equate_il,
             default_extra
         },
-        generate_json_handlers
+        generate_handlers
     },
     helpers::ec_helper::{
         ec_numbers_from_map,
@@ -38,16 +38,25 @@ pub struct EcInformation {
     ec:                  Vec<EcNumber>
 }
 
-generate_json_handlers!(
-    async fn handler(
-        State(AppState { index, datastore, .. }): State<AppState>,
-        Parameters { input, equate_il, extra } => Parameters
-    ) -> Result<Vec<EcInformation>, ()> {
-        let result = index.analyse(&input, equate_il).result;
+async fn handler(
+    State(AppState {
+        index,
+        datastore,
+        ..
+    }): State<AppState>,
+    Parameters {
+        input,
+        equate_il,
+        extra
+    }: Parameters
+) -> Result<Vec<EcInformation>, ()> {
+    let result = index.analyse(&input, equate_il).result;
 
-        let ec_store = datastore.ec_store();
+    let ec_store = datastore.ec_store();
 
-        Ok(result.into_iter().filter_map(|item| {
+    Ok(result
+        .into_iter()
+        .filter_map(|item| {
             let fa = item.fa?;
 
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
@@ -58,6 +67,15 @@ generate_json_handlers!(
                 total_protein_count,
                 ec: ecs
             })
-        }).collect())
+        })
+        .collect())
+}
+
+generate_handlers!(
+    async fn json_handler(
+        state => State<AppState>,
+        params => Parameters
+    ) -> Result<Json<Vec<EcInformation>>, ()> {
+        Ok(Json(handler(state, params).await?))
     }
 );

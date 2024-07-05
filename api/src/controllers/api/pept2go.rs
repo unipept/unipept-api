@@ -14,7 +14,7 @@ use crate::{
             default_equate_il,
             default_extra
         },
-        generate_json_handlers
+        generate_handlers
     },
     helpers::go_helper::{
         go_terms_from_map,
@@ -40,16 +40,27 @@ pub struct GoInformation {
     total_protein_count: usize,
     go:                  GoTerms
 }
-generate_json_handlers!(
-    async fn handler(
-        State(AppState { index, datastore, .. }): State<AppState>,
-        Parameters { input, equate_il, extra, domains } => Parameters
-    ) -> Result<Vec<GoInformation>, ()> {
-        let result = index.analyse(&input, equate_il).result;
 
-        let go_store = datastore.go_store();
+async fn handler(
+    State(AppState {
+        index,
+        datastore,
+        ..
+    }): State<AppState>,
+    Parameters {
+        input,
+        equate_il,
+        extra,
+        domains
+    }: Parameters
+) -> Result<Vec<GoInformation>, ()> {
+    let result = index.analyse(&input, equate_il).result;
 
-        Ok(result.into_iter().filter_map(|item| {
+    let go_store = datastore.go_store();
+
+    Ok(result
+        .into_iter()
+        .filter_map(|item| {
             let fa = item.fa?;
 
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
@@ -60,6 +71,15 @@ generate_json_handlers!(
                 total_protein_count,
                 go: gos
             })
-        }).collect())
+        })
+        .collect())
+}
+
+generate_handlers!(
+    async fn json_handler(
+        state => State<AppState>,
+        params => Parameters
+    ) -> Result<Json<Vec<GoInformation>>, ()> {
+        Ok(Json(handler(state, params).await?))
     }
 );

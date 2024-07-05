@@ -13,7 +13,7 @@ use crate::{
             default_extra,
             default_names
         },
-        generate_json_handlers
+        generate_handlers
     },
     helpers::lineage_helper::{
         get_lineage,
@@ -51,39 +51,55 @@ pub struct Taxon {
     taxon_rank: String
 }
 
-generate_json_handlers!(
-    [ V1, V2 ]
-    async fn handler(
-        State(AppState { datastore, .. }) => State<AppState>,
-        Parameters { input, extra, names } => Parameters,
-        version: LineageVersion
-    ) -> Result<Vec<TaxaInformation>, ()> {
-        if input.is_empty() {
-            return Ok(Vec::new());
-        }
+async fn handler(
+    State(AppState {
+        datastore, ..
+    }): State<AppState>,
+    Parameters {
+        input,
+        extra,
+        names
+    }: Parameters,
+    version: LineageVersion
+) -> Result<Vec<TaxaInformation>, ()> {
+    if input.is_empty() {
+        return Ok(Vec::new());
+    }
 
-        let taxon_store = datastore.taxon_store();
-        let lineage_store = datastore.lineage_store();
+    let taxon_store = datastore.taxon_store();
+    let lineage_store = datastore.lineage_store();
 
-        Ok(input
-            .into_iter()
-            .filter_map(|taxon_id| {
-                let (name, rank) = taxon_store.get(taxon_id)?;
-                let lineage = match (extra, names) {
-                    (true, true)  => get_lineage_with_names(taxon_id, version, lineage_store, taxon_store),
-                    (true, false) => get_lineage(taxon_id, version, lineage_store),
-                    (false, _)    => None
-                };
+    Ok(input
+        .into_iter()
+        .filter_map(|taxon_id| {
+            let (name, rank) = taxon_store.get(taxon_id)?;
+            let lineage = match (extra, names) {
+                (true, true) => {
+                    get_lineage_with_names(taxon_id, version, lineage_store, taxon_store)
+                }
+                (true, false) => get_lineage(taxon_id, version, lineage_store),
+                (false, _) => None
+            };
 
-                Some(TaxaInformation {
-                    taxon: Taxon {
-                        taxon_id,
-                        taxon_name: name.to_string(),
-                        taxon_rank: rank.clone().into()
-                    },
-                    lineage
-                })
+            Some(TaxaInformation {
+                taxon: Taxon {
+                    taxon_id,
+                    taxon_name: name.to_string(),
+                    taxon_rank: rank.clone().into()
+                },
+                lineage
             })
-            .collect())
+        })
+        .collect())
+}
+
+generate_handlers! (
+    [ V1, V2 ]
+    async fn json_handler(
+        state => State<AppState>,
+        params => Parameters,
+        version: LineageVersion
+    ) -> Result<Json<Vec<TaxaInformation>>, ()> {
+        Ok(Json(handler(state, params, version).await?))
     }
 );

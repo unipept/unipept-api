@@ -4,15 +4,17 @@ use std::{
 };
 
 use deadpool_diesel::mysql::{
-    Manager, Object, Pool
+    Manager,
+    Object,
+    Pool
 };
+pub use deadpool_diesel::InteractError;
 use diesel::{
     prelude::*,
     MysqlConnection,
     QueryDsl
 };
 pub use errors::DatabaseError;
-pub use deadpool_diesel::InteractError;
 use models::UniprotEntry;
 
 mod errors;

@@ -12,21 +12,21 @@ pub mod taxa2tree;
 pub mod taxonomy;
 
 pub fn default_equate_il() -> bool {
-  true
+    true
 }
 
 pub fn default_extra() -> bool {
-  false
+    false
 }
 
 pub fn default_domains() -> bool {
-  false
+    false
 }
 
 pub fn default_names() -> bool {
-  false
+    false
 }
 
 pub fn default_link() -> bool {
-  false
+    false
 }

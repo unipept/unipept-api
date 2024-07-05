@@ -5,7 +5,7 @@ pub enum IndexError {
     #[error("{0}")]
     IoError(#[from] std::io::Error),
     #[error("{0}")]
-    LoadError(#[from] LoadIndexError),
+    LoadError(#[from] LoadIndexError)
 }
 
 #[derive(Error, Debug)]

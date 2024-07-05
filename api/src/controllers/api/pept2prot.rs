@@ -1,48 +1,61 @@
-use axum::{extract::State, Json};
+use axum::{
+    extract::State,
+    Json
+};
 use database::get_accessions_map;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize
+};
 
-use crate::{controllers::api::{default_equate_il, default_extra}, AppState};
-
-use crate::controllers::generate_handlers;
+use crate::{
+    controllers::{
+        api::{
+            default_equate_il,
+            default_extra
+        },
+        generate_json_handlers
+    },
+    AppState
+};
 
 #[derive(Deserialize)]
 pub struct Parameters {
-    input: Vec<String>,
+    input:     Vec<String>,
     #[serde(default = "default_equate_il")]
     equate_il: bool,
     #[serde(default = "default_extra")]
-    extra: bool
+    extra:     bool
 }
 
 #[derive(Serialize)]
 #[serde(untagged)]
 pub enum ProtInformation {
     Default {
-        peptide: String,
-        uniprot_id: String,
+        peptide:      String,
+        uniprot_id:   String,
         protein_name: String,
-        taxon_id: u32,
-        protein: String,
+        taxon_id:     u32,
+        protein:      String
     },
     Extra {
-        peptide: String,
-        uniprot_id: String,
-        protein_name: String,
-        taxon_id: u32,
-        taxon_name: String,
-        protein: String,
-        ec_references: String,
-        go_references: String,
+        peptide:             String,
+        uniprot_id:          String,
+        protein_name:        String,
+        taxon_id:            u32,
+        taxon_name:          String,
+        protein:             String,
+        ec_references:       String,
+        go_references:       String,
         interpro_references: String
     }
 }
 
-generate_handlers!(
+generate_json_handlers!(
     async fn handler(
         State(AppState { index, datastore, database }): State<AppState>,
         Parameters { input, equate_il, extra } => Parameters
-    ) -> Json<Vec<ProtInformation>> {
+    ) -> Vec<ProtInformation> {
         let connection = database.get().await.unwrap();
 
         let result = index.analyse(&input, equate_il).result;
@@ -57,8 +70,8 @@ generate_handlers!(
         }).await.unwrap();
 
         let taxon_store = datastore.taxon_store();
-        
-        Json(result.into_iter().map(|item| {
+
+        result.into_iter().flat_map(|item| {
             item.uniprot_accession_numbers.into_iter().map(|accession| {
                 let uniprot_entry = accessions_map.get(&accession).unwrap();
 
@@ -91,6 +104,6 @@ generate_handlers!(
                     }
                 }
             }).collect::<Vec<ProtInformation>>()
-        }).flatten().collect())
+        }).collect()
     }
 );

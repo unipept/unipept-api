@@ -1,7 +1,16 @@
-use axum::{extract::State, Json};
-use serde::{Deserialize, Serialize};
+use axum::{
+    extract::State,
+    Json
+};
+use serde::{
+    Deserialize,
+    Serialize
+};
 
-use crate::{controllers::generate_handlers, AppState};
+use crate::{
+    controllers::generate_json_handlers,
+    AppState
+};
 
 #[derive(Serialize, Deserialize)]
 pub struct Parameters {
@@ -10,17 +19,17 @@ pub struct Parameters {
 
 #[derive(Serialize)]
 pub struct InterproEntry {
-    code: String,
-    name: String,
+    code:     String,
+    name:     String,
     category: String
 }
 
-generate_handlers!(
+generate_json_handlers!(
     async fn handler(
         State(AppState { datastore, .. }): State<AppState>,
         Parameters { interpros } => Parameters
-    ) -> Json<Vec<InterproEntry>> {
-        Json(interpros
+    ) -> Vec<InterproEntry> {
+        interpros
             .iter()
             .map(|interpro_entry| interpro_entry.trim())
             .filter_map(|interpro_entry| {
@@ -31,6 +40,5 @@ generate_handlers!(
                 })
             })
             .collect()
-        )
     }
 );

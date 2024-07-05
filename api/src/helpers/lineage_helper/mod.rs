@@ -1,7 +1,10 @@
 pub mod v1;
 pub mod v2;
 
-use datastore::{LineageStore, TaxonStore};
+use datastore::{
+    LineageStore,
+    TaxonStore
+};
 use serde::Serialize;
 
 macro_rules! create_lineages {
@@ -25,7 +28,7 @@ macro_rules! create_lineages {
             fn get_id(taxon_id: Option<i32>) -> Option<i32> {
                 taxon_id.filter(|&id| id != -1).map(|id| id.abs())
             }
-            
+
             fn get_name(taxon_id: Option<i32>, taxon_store: &TaxonStore) -> String {
                 get_id(taxon_id).and_then(|id| taxon_store.get(id as u32).map(|(name, _)| name.to_string())).unwrap_or_default()
             }
@@ -81,24 +84,41 @@ pub enum Lineage {
     NamesV2(v2::LineageWithNames)
 }
 
-pub fn get_lineage(taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore) -> Option<Lineage> {
+pub fn get_lineage(
+    taxon_id: u32,
+    version: LineageVersion,
+    lineage_store: &LineageStore
+) -> Option<Lineage> {
     match version {
         LineageVersion::V1 => v1::get_lineage(taxon_id, lineage_store).map(Lineage::DefaultV1),
         LineageVersion::V2 => v2::get_lineage(taxon_id, lineage_store).map(Lineage::DefaultV2)
     }
 }
 
-pub fn get_lineage_array(taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore) -> Vec<Option<i32>> {
+pub fn get_lineage_array(
+    taxon_id: u32,
+    version: LineageVersion,
+    lineage_store: &LineageStore
+) -> Vec<Option<i32>> {
     match version {
         LineageVersion::V1 => v1::get_lineage_array(taxon_id, lineage_store),
         LineageVersion::V2 => v2::get_lineage_array(taxon_id, lineage_store)
     }
 }
 
-pub fn get_lineage_with_names(taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore, taxon_store: &TaxonStore) -> Option<Lineage> {
+pub fn get_lineage_with_names(
+    taxon_id: u32,
+    version: LineageVersion,
+    lineage_store: &LineageStore,
+    taxon_store: &TaxonStore
+) -> Option<Lineage> {
     match version {
-        LineageVersion::V1 => v1::get_lineage_with_names(taxon_id, lineage_store, taxon_store).map(Lineage::NamesV1),
-        LineageVersion::V2 => v2::get_lineage_with_names(taxon_id, lineage_store, taxon_store).map(Lineage::NamesV2)
+        LineageVersion::V1 => {
+            v1::get_lineage_with_names(taxon_id, lineage_store, taxon_store).map(Lineage::NamesV1)
+        }
+        LineageVersion::V2 => {
+            v2::get_lineage_with_names(taxon_id, lineage_store, taxon_store).map(Lineage::NamesV2)
+        }
     }
 }
 

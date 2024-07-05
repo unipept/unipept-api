@@ -1,6 +1,9 @@
 use core::str;
 
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize
+};
 
 use crate::errors::SampleStoreError;
 
@@ -11,19 +14,19 @@ pub struct SampleStore {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SampleDataItem {
-    id: i32,
-    environment: String,
-    reference: String,
-    url: String,
+    id:              i32,
+    environment:     String,
+    reference:       String,
+    url:             String,
     project_website: String,
-    datasets: Vec<Dataset>
+    datasets:        Vec<Dataset>
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Dataset {
-    name: String,
+    name:  String,
     order: i32,
-    data: Vec<String>
+    data:  Vec<String>
 }
 
 impl SampleStore {

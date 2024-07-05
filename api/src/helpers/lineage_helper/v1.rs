@@ -1,7 +1,11 @@
-use super::create_lineages;
-use serde::Serialize;
+use datastore::{
+    LineageStore,
+    TaxonStore
+};
 pub use paste::paste;
-use datastore::{LineageStore, TaxonStore};
+use serde::Serialize;
+
+use super::create_lineages;
 
 create_lineages!(
     superkingdom,

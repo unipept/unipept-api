@@ -1,39 +1,53 @@
 mod ec_store;
+mod errors;
 mod go_store;
 mod interpro_store;
 mod lineage_store;
 mod sample_store;
 mod taxon_store;
-mod errors;
 
 pub use ec_store::EcStore;
 pub use errors::DataStoreError;
 pub use go_store::GoStore;
 pub use interpro_store::InterproStore;
-pub use lineage_store::{Lineage, LineageStore};
+pub use lineage_store::{
+    Lineage,
+    LineageStore
+};
 pub use sample_store::SampleStore;
-pub use taxon_store::{TaxonStore, LineageRank};
+pub use taxon_store::{
+    LineageRank,
+    TaxonStore
+};
 
 pub struct DataStore {
-    version: String,
-    sample_store: SampleStore,
-    ec_store: EcStore,
-    go_store: GoStore,
+    version:        String,
+    sample_store:   SampleStore,
+    ec_store:       EcStore,
+    go_store:       GoStore,
     interpro_store: InterproStore,
-    lineage_store: LineageStore,
-    taxon_store: TaxonStore
+    lineage_store:  LineageStore,
+    taxon_store:    TaxonStore
 }
 
 impl DataStore {
-    pub fn try_from_files(version: &str, sample_file: &str, ec_file: &str, go_file: &str, interpro_file: &str, lineage_file: &str, taxon_file: &str) -> Result<Self, DataStoreError> {
+    pub fn try_from_files(
+        version: &str,
+        sample_file: &str,
+        ec_file: &str,
+        go_file: &str,
+        interpro_file: &str,
+        lineage_file: &str,
+        taxon_file: &str
+    ) -> Result<Self, DataStoreError> {
         Ok(Self {
-            version: version.to_string(),
-            sample_store: SampleStore::try_from_file(sample_file)?,
-            ec_store: EcStore::try_from_file(ec_file)?,
-            go_store: GoStore::try_from_file(go_file)?,
+            version:        version.to_string(),
+            sample_store:   SampleStore::try_from_file(sample_file)?,
+            ec_store:       EcStore::try_from_file(ec_file)?,
+            go_store:       GoStore::try_from_file(go_file)?,
             interpro_store: InterproStore::try_from_file(interpro_file)?,
-            lineage_store: LineageStore::try_from_file(lineage_file)?,
-            taxon_store: TaxonStore::try_from_file(taxon_file)?
+            lineage_store:  LineageStore::try_from_file(lineage_file)?,
+            taxon_store:    TaxonStore::try_from_file(taxon_file)?
         })
     }
 

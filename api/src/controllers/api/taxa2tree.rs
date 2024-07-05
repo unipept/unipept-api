@@ -1,23 +1,49 @@
 use std::collections::HashMap;
 
 use askama::Template;
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use serde::{Deserialize, Serialize};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::IntoResponse,
+    Json
+};
+use serde::{
+    Deserialize,
+    Serialize
+};
 
-use crate::{controllers::{api::default_link, request::{GetContent, PostContent}, response::HtmlTemplate}, helpers::{lineage_helper::LineageVersion, tree_helper::{build_tree, frequency::FrequencyTable, node::Node}}, AppState};
+use crate::{
+    controllers::{
+        api::default_link,
+        request::{
+            GetContent,
+            PostContent
+        },
+        response::HtmlTemplate
+    },
+    helpers::{
+        lineage_helper::LineageVersion,
+        tree_helper::{
+            build_tree,
+            frequency::FrequencyTable,
+            node::Node
+        }
+    },
+    AppState
+};
 
 #[derive(Deserialize)]
 pub struct GetParameters {
     input: Vec<u32>,
     #[serde(default = "default_link")]
-    link: bool
+    link:  bool
 }
 
 #[derive(Deserialize)]
 pub struct PostParameters {
     counts: HashMap<u32, usize>,
     #[serde(default = "default_link")]
-    link: bool
+    link:   bool
 }
 
 #[derive(Deserialize)]
@@ -42,7 +68,7 @@ pub enum TreeInformation {
 #[derive(Template)]
 #[template(path = "taxa2tree.html", escape = "none")]
 struct TreeTemplate {
-    json_data: String,
+    json_data: String
 }
 
 pub async fn get_handler_v1(
@@ -78,8 +104,14 @@ fn html_handler(
     params: Parameters,
     version: LineageVersion
 ) -> impl IntoResponse {
-    if let TreeInformation::Tree { root } = create_tree_information(state, params, version){
-        HtmlTemplate(TreeTemplate { json_data: serde_json::to_string(&root).unwrap() }).into_response()
+    if let TreeInformation::Tree {
+        root
+    } = create_tree_information(state, params, version)
+    {
+        HtmlTemplate(TreeTemplate {
+            json_data: serde_json::to_string(&root).unwrap()
+        })
+        .into_response()
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, "Link not implemented").into_response()
     }
@@ -114,7 +146,9 @@ pub async fn post_html_handler_v2(
 }
 
 fn create_tree_information(
-    State(AppState { datastore, .. }): State<AppState>,
+    State(AppState {
+        datastore, ..
+    }): State<AppState>,
     params: Parameters,
     version: LineageVersion
 ) -> TreeInformation {
@@ -122,19 +156,25 @@ fn create_tree_information(
     let lineage_store = datastore.lineage_store();
 
     let (frequencies, link) = match params {
-        Parameters::Get(GetParameters { input, link }) => {
-            (FrequencyTable::from_data(&input), link)
-        },
-        Parameters::Post(PostParameters { counts, link }) => {
-            (FrequencyTable::from_counts(counts), link)
-        }
+        Parameters::Get(GetParameters {
+            input,
+            link
+        }) => (FrequencyTable::from_data(&input), link),
+        Parameters::Post(PostParameters {
+            counts,
+            link
+        }) => (FrequencyTable::from_counts(counts), link)
     };
 
     let root = build_tree(frequencies, version, lineage_store, taxon_store);
 
     if link {
-        return TreeInformation::Link { gist: "test".to_string() };
+        return TreeInformation::Link {
+            gist: "test".to_string()
+        };
     }
 
-    TreeInformation::Tree { root }
+    TreeInformation::Tree {
+        root
+    }
 }

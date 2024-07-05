@@ -1,33 +1,59 @@
-use axum::{extract::State, Json};
-use serde::{Deserialize, Serialize};
+use axum::{
+    extract::State,
+    Json
+};
+use serde::{
+    Deserialize,
+    Serialize
+};
 
-use crate::{controllers::api::{default_equate_il, default_extra, default_names}, helpers::{lca_helper::calculate_lca, lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion::{self, *}}}, AppState};
-
-use crate::controllers::generate_json_handlers;
+use crate::{
+    controllers::{
+        api::{
+            default_equate_il,
+            default_extra,
+            default_names
+        },
+        generate_json_handlers
+    },
+    helpers::{
+        lca_helper::calculate_lca,
+        lineage_helper::{
+            get_lineage,
+            get_lineage_with_names,
+            Lineage,
+            LineageVersion::{
+                self,
+                *
+            }
+        }
+    },
+    AppState
+};
 
 #[derive(Deserialize)]
 pub struct Parameters {
-    input: Vec<String>,
+    input:     Vec<String>,
     #[serde(default = "default_equate_il")]
     equate_il: bool,
     #[serde(default = "default_extra")]
-    extra: bool,
+    extra:     bool,
     #[serde(default = "default_names")]
-    names: bool
+    names:     bool
 }
 
 #[derive(Serialize)]
 pub struct LcaInformation {
     peptide: String,
     #[serde(flatten)]
-    taxon: Taxon,
+    taxon:   Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     lineage: Option<Lineage>
 }
 
 #[derive(Serialize)]
 pub struct Taxon {
-    taxon_id: u32,
+    taxon_id:   u32,
     taxon_name: String,
     taxon_rank: String
 }
@@ -40,7 +66,7 @@ generate_json_handlers! (
         version: LineageVersion
     ) -> Vec<LcaInformation> {
         let result = index.analyse(&input, equate_il).result;
-        
+
         let taxon_store = datastore.taxon_store();
         let lineage_store = datastore.lineage_store();
 
@@ -51,7 +77,7 @@ generate_json_handlers! (
             let lineage = match (extra, names) {
                 (true, true)  => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
                 (true, false) => get_lineage(lca as u32, version, lineage_store),
-                (false, _)    => None    
+                (false, _)    => None
             };
 
             Some(LcaInformation {

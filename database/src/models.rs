@@ -1,4 +1,5 @@
 use diesel::prelude::*;
+
 use crate::schema::uniprot_entries;
 
 #[derive(Selectable, Queryable, Debug)]
@@ -12,5 +13,5 @@ pub struct UniprotEntry {
     pub db_type: String,
     pub name: String,
     pub protein: String,
-    pub fa: String,
+    pub fa: String
 }

@@ -1,9 +1,31 @@
-use axum::{extract::State, Json};
-use serde::{Deserialize, Serialize};
+use axum::{
+    extract::State,
+    Json
+};
+use serde::{
+    Deserialize,
+    Serialize
+};
 
-use crate::{controllers::api::{default_extra, default_names}, helpers::lineage_helper::{get_lineage, get_lineage_with_names, Lineage, LineageVersion::{self, *}}, AppState};
-
-use crate::controllers::generate_json_handlers;
+use crate::{
+    controllers::{
+        api::{
+            default_extra,
+            default_names
+        },
+        generate_json_handlers
+    },
+    helpers::lineage_helper::{
+        get_lineage,
+        get_lineage_with_names,
+        Lineage,
+        LineageVersion::{
+            self,
+            *
+        }
+    },
+    AppState
+};
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -17,14 +39,14 @@ pub struct Parameters {
 #[derive(Serialize)]
 pub struct TaxaInformation {
     #[serde(flatten)]
-    taxon: Taxon,
+    taxon:   Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     lineage: Option<Lineage>
 }
 
 #[derive(Serialize)]
 pub struct Taxon {
-    taxon_id: u32,
+    taxon_id:   u32,
     taxon_name: String,
     taxon_rank: String
 }
@@ -39,10 +61,10 @@ generate_json_handlers!(
         if input.is_empty() {
             return Vec::new();
         }
-    
+
         let taxon_store = datastore.taxon_store();
         let lineage_store = datastore.lineage_store();
-    
+
         input
             .into_iter()
             .filter_map(|taxon_id| {
@@ -50,9 +72,9 @@ generate_json_handlers!(
                 let lineage = match (extra, names) {
                     (true, true)  => get_lineage_with_names(taxon_id, version, lineage_store, taxon_store),
                     (true, false) => get_lineage(taxon_id, version, lineage_store),
-                    (false, _)    => None    
+                    (false, _)    => None
                 };
-                
+
                 Some(TaxaInformation {
                     taxon: Taxon {
                         taxon_id: taxon_id,

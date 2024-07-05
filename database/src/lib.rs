@@ -1,15 +1,23 @@
-use std::collections::HashMap;
-use std::ops::Deref;
+use std::{
+    collections::HashMap,
+    ops::Deref
+};
 
-use deadpool_diesel::mysql::{Manager, Pool};
-use diesel::{MysqlConnection, QueryDsl};
-use diesel::prelude::*;
+use deadpool_diesel::mysql::{
+    Manager,
+    Pool
+};
+use diesel::{
+    prelude::*,
+    MysqlConnection,
+    QueryDsl
+};
 pub use errors::DatabaseError;
 use models::UniprotEntry;
 
 mod errors;
-mod schema;
 mod models;
+mod schema;
 
 pub struct Database {
     pool: Pool
@@ -18,8 +26,12 @@ pub struct Database {
 impl Database {
     pub fn try_from_url(url: &str) -> Result<Self, DatabaseError> {
         let manager = Manager::new(url, deadpool_diesel::Runtime::Tokio1);
-        let pool = Pool::builder(manager).build().map_err(|err| DatabaseError::BuildPoolError(err.to_string()))?;        
-        Ok(Self { pool })
+        let pool = Pool::builder(manager)
+            .build()
+            .map_err(|err| DatabaseError::BuildPoolError(err.to_string()))?;
+        Ok(Self {
+            pool
+        })
     }
 }
 
@@ -31,7 +43,10 @@ impl Deref for Database {
     }
 }
 
-pub fn get_accessions(conn: &mut MysqlConnection, accessions: &Vec<String>) -> Result<Vec<UniprotEntry>, DatabaseError> {
+pub fn get_accessions(
+    conn: &mut MysqlConnection,
+    accessions: &Vec<String>
+) -> Result<Vec<UniprotEntry>, DatabaseError> {
     use schema::uniprot_entries::dsl::*;
 
     Ok(uniprot_entries
@@ -39,11 +54,12 @@ pub fn get_accessions(conn: &mut MysqlConnection, accessions: &Vec<String>) -> R
         .load(conn)?)
 }
 
-pub fn get_accessions_map(conn: &mut MysqlConnection, accessions: &Vec<String>) -> Result<HashMap<String, UniprotEntry>, DatabaseError> {
-    Ok(
-        get_accessions(conn, accessions)?
-            .into_iter()
-            .map(|entry| (entry.uniprot_accession_number.clone(), entry))
-            .collect()
-    )
+pub fn get_accessions_map(
+    conn: &mut MysqlConnection,
+    accessions: &Vec<String>
+) -> Result<HashMap<String, UniprotEntry>, DatabaseError> {
+    Ok(get_accessions(conn, accessions)?
+        .into_iter()
+        .map(|entry| (entry.uniprot_accession_number.clone(), entry))
+        .collect())
 }

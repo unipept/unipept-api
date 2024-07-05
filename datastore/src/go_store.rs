@@ -1,4 +1,10 @@
-use std::{collections::HashMap, io::{BufRead, BufReader}};
+use std::{
+    collections::HashMap,
+    io::{
+        BufRead,
+        BufReader
+    }
+};
 
 use crate::errors::GoStoreError;
 
@@ -18,14 +24,13 @@ impl GoStore {
             let line = line?;
             let parts: Vec<&str> = line.split('\t').collect();
             if parts.len() == 4 {
-                mapper.insert(parts[1].to_string(), (
-                    parts[2].to_string(),
-                    parts[3].to_string()
-                ));
+                mapper.insert(parts[1].to_string(), (parts[2].to_string(), parts[3].to_string()));
             }
         }
 
-        Ok(GoStore { mapper })
+        Ok(GoStore {
+            mapper
+        })
     }
 
     pub fn get(&self, key: &str) -> Option<&GoTermDescription> {

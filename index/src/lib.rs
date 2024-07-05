@@ -1,10 +1,33 @@
-use std::{fs::File, io::{BufReader, Read}};
+use std::{
+    fs::File,
+    io::{
+        BufReader,
+        Read
+    }
+};
 
 pub use errors::IndexError;
 use errors::LoadIndexError;
 use sa_compression::load_compressed_suffix_array;
-use sa_index::{binary::load_suffix_array, peptide_search::{analyse_all_peptides, OutputData, SearchResultWithAnalysis}, sa_searcher::Searcher, suffix_to_protein_index::SparseSuffixToProtein, SuffixArray};
-use sa_mappings::{functionality::FunctionAggregator, proteins::Proteins, taxonomy::{AggregationMethod, TaxonAggregator}};
+use sa_index::{
+    binary::load_suffix_array,
+    peptide_search::{
+        analyse_all_peptides,
+        OutputData,
+        SearchResultWithAnalysis
+    },
+    sa_searcher::Searcher,
+    suffix_to_protein_index::SparseSuffixToProtein,
+    SuffixArray
+};
+use sa_mappings::{
+    functionality::FunctionAggregator,
+    proteins::Proteins,
+    taxonomy::{
+        AggregationMethod,
+        TaxonAggregator
+    }
+};
 
 mod errors;
 
@@ -39,17 +62,17 @@ impl Index {
             function_aggregator
         );
 
-        Ok(Self { searcher })
+        Ok(Self {
+            searcher
+        })
     }
 
-    pub fn analyse(&self, peptides: &Vec<String>, equate_il: bool) -> OutputData<SearchResultWithAnalysis> {
-        analyse_all_peptides(
-            &self.searcher, 
-            peptides, 
-            10_000, 
-            equate_il, 
-            false
-        )
+    pub fn analyse(
+        &self,
+        peptides: &Vec<String>,
+        equate_il: bool
+    ) -> OutputData<SearchResultWithAnalysis> {
+        analyse_all_peptides(&self.searcher, peptides, 10_000, equate_il, false)
     }
 }
 
@@ -62,14 +85,18 @@ fn load_index_file(index_file: &str) -> Result<SuffixArray, LoadIndexError> {
 
     // Read the bits per value from the binary file (1 byte)
     let mut bits_per_value_buffer = [0_u8; 1];
-    reader
-        .read_exact(&mut bits_per_value_buffer)
-        .map_err(|_| LoadIndexError::LoadSuffixArrayError("Could not read the flags from the binary file".to_string()))?;
+    reader.read_exact(&mut bits_per_value_buffer).map_err(|_| {
+        LoadIndexError::LoadSuffixArrayError(
+            "Could not read the flags from the binary file".to_string()
+        )
+    })?;
     let bits_per_value = bits_per_value_buffer[0];
 
     if bits_per_value == 64 {
-        Ok(load_suffix_array(&mut reader).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?)
+        Ok(load_suffix_array(&mut reader)
+            .map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?)
     } else {
-        Ok(load_compressed_suffix_array(&mut reader, bits_per_value as usize).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?)
+        Ok(load_compressed_suffix_array(&mut reader, bits_per_value as usize)
+            .map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?)
     }
 }

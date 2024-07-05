@@ -1,7 +1,11 @@
-use std::{collections::HashMap, ops::Deref, hash::Hash};
+use std::{
+    collections::HashMap,
+    hash::Hash,
+    ops::Deref
+};
 
 #[derive(Debug)]
-pub struct FrequencyTable<T: Hash + Eq + Clone> (HashMap<T, usize>);
+pub struct FrequencyTable<T: Hash + Eq + Clone>(HashMap<T, usize>);
 
 impl<T: Hash + Eq + Clone> FrequencyTable<T> {
     pub fn from_data(data: &[T]) -> Self {

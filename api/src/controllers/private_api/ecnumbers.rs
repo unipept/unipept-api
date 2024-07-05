@@ -1,7 +1,16 @@
-use axum::{extract::State, Json};
-use serde::{Deserialize, Serialize};
+use axum::{
+    extract::State,
+    Json
+};
+use serde::{
+    Deserialize,
+    Serialize
+};
 
-use crate::{controllers::generate_json_handlers, AppState};
+use crate::{
+    controllers::generate_json_handlers,
+    AppState
+};
 
 #[derive(Serialize, Deserialize)]
 pub struct Parameters {

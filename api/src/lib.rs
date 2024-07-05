@@ -5,16 +5,16 @@ use datastore::DataStore;
 use index::Index;
 use tokio::net::TcpListener;
 
-pub mod routes;
-pub mod errors;
 pub mod controllers;
+pub mod errors;
 pub mod helpers;
+pub mod routes;
 
 #[derive(Clone)]
 pub struct AppState {
     pub datastore: Arc<DataStore>,
-    pub database: Arc<Database>,
-    pub index: Arc<Index>
+    pub database:  Arc<Database>,
+    pub index:     Arc<Index>
 }
 
 pub async fn start(index_location: &str) -> Result<(), errors::AppError> {
@@ -31,21 +31,25 @@ pub async fn start(index_location: &str) -> Result<(), errors::AppError> {
     let database = Database::try_from_url("mysql://unipept:unipept@127.0.0.1:3306/unipept")?;
 
     let datastore = DataStore::try_from_files(
-        "2024.03", sampledata.as_str(), ec_numbers.as_str(), go_terms.as_str(), interpro_entries.as_str(), lineages.as_str(), taxons.as_str()
+        "2024.03",
+        sampledata.as_str(),
+        ec_numbers.as_str(),
+        go_terms.as_str(),
+        interpro_entries.as_str(),
+        lineages.as_str(),
+        taxons.as_str()
     )?;
 
-    let index = Index::try_from_files(
-        sa.as_str(), proteins.as_str(), taxons.as_str()
-    )?;
+    let index = Index::try_from_files(sa.as_str(), proteins.as_str(), taxons.as_str())?;
 
-    let app_state = AppState { 
+    let app_state = AppState {
         datastore: Arc::new(datastore),
-        database: Arc::new(database),
-        index: Arc::new(index)
+        database:  Arc::new(database),
+        index:     Arc::new(index)
     };
-        
+
     let router = routes::create_router(app_state);
-    
+
     let listener = TcpListener::bind("0.0.0.0:4000").await?;
 
     eprintln!("Server running on: http://{}", listener.local_addr()?);

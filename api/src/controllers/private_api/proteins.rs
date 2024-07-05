@@ -1,42 +1,58 @@
-use axum::{extract::State, Json};
+use axum::{
+    extract::State,
+    Json
+};
 use database::get_accessions_map;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize
+};
 
-use crate::{controllers::generate_json_handlers, helpers::{lca_helper::calculate_lca, lineage_helper::{get_lineage_array, LineageVersion}}, AppState};
+use crate::{
+    controllers::generate_json_handlers,
+    helpers::{
+        lca_helper::calculate_lca,
+        lineage_helper::{
+            get_lineage_array,
+            LineageVersion
+        }
+    },
+    AppState
+};
 
 #[derive(Deserialize)]
 pub struct Parameters {
-    peptide: String,
+    peptide:   String,
     equate_il: bool
 }
 
 #[derive(Serialize)]
 pub struct ProteinInformation {
-    lca: i32,
+    lca:            i32,
     common_lineage: Vec<i32>,
-    proteins: Vec<Protein>
+    proteins:       Vec<Protein>
 }
 
 #[derive(Serialize)]
 pub struct Protein {
     #[serde(rename = "uniprotAccessionId")]
     uniprot_accession_id: String,
-    name: String,
-    organism: u32,
+    name:                 String,
+    organism:             u32,
     #[serde(rename = "ecNumbers")]
-    ec_numbers: Vec<String>,
+    ec_numbers:           Vec<String>,
     #[serde(rename = "goTerms")]
-    go_terms: Vec<String>,
+    go_terms:             Vec<String>,
     #[serde(rename = "interproEntries")]
-    interpro_entries: Vec<String>
+    interpro_entries:     Vec<String>
 }
 
 impl Default for ProteinInformation {
     fn default() -> Self {
         ProteinInformation {
-            lca: -1,
+            lca:            -1,
             common_lineage: vec![],
-            proteins: vec![]
+            proteins:       vec![]
         }
     }
 }
@@ -47,44 +63,44 @@ generate_json_handlers!(
         Parameters { peptide, equate_il } => Parameters
     ) -> ProteinInformation {
         let connection = database.get().await.unwrap();
-    
+
         let result = index.analyse(&vec![ peptide ], equate_il).result;
-    
+
         if result.is_empty() {
             return ProteinInformation::default();
         }
-    
+
         let accession_numbers: Vec<String> = result
             .iter()
             .flat_map(|item| item.uniprot_accession_numbers.clone())
             .collect();
-    
+
         let accessions_map = connection.interact(move |conn| {
             get_accessions_map(conn, &accession_numbers).unwrap()
         }).await.unwrap();
-    
+
         let lineage_store = datastore.lineage_store();
-    
+
         let taxa = result[0].taxa.iter().map(|&taxon_id| taxon_id as u32).collect::<Vec<u32>>();
         let lca = calculate_lca(taxa, LineageVersion::V2, lineage_store);
-    
+
         let common_lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store)
             .iter()
             .filter(|&taxon_id| taxon_id.is_some())
             .map(|taxon_id| taxon_id.unwrap())
             .collect::<Vec<i32>>();
-    
+
         ProteinInformation {
             lca,
             common_lineage,
             proteins: result[0].uniprot_accession_numbers.iter().map(|accession| {
                 let uniprot_entry = accessions_map.get(accession).unwrap();
-    
+
                 let fa: Vec<&str> = uniprot_entry.fa.split(';').collect();
                 let ec_numbers = fa.iter().filter(|key| key.starts_with("EC:")).map(ToString::to_string).collect::<Vec<String>>();
                 let go_terms = fa.iter().filter(|key| key.starts_with("GO:")).map(ToString::to_string).collect::<Vec<String>>();
                 let interpro_entries = fa.iter().filter(|key| key.starts_with("IPR:")).map(|k| k[4..].to_string()).collect::<Vec<String>>();
-    
+
                 Protein {
                     uniprot_accession_id: accession.clone(),
                     name: uniprot_entry.name.clone(),

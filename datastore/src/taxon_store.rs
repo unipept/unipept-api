@@ -1,4 +1,11 @@
-use std::{collections::HashMap, io::{BufRead, BufReader}, str::FromStr};
+use std::{
+    collections::HashMap,
+    io::{
+        BufRead,
+        BufReader
+    },
+    str::FromStr
+};
 
 use crate::errors::TaxonStoreError;
 
@@ -53,14 +60,13 @@ impl TaxonStore {
             let parts: Vec<&str> = splitted_line.collect();
 
             if parts.len() == 4 {
-                mapper.insert(taxon_id, (
-                    parts[0].to_string(),
-                    parts[1].parse::<LineageRank>()?
-                ));
+                mapper.insert(taxon_id, (parts[0].to_string(), parts[1].parse::<LineageRank>()?));
             }
         }
 
-        Ok(Self { mapper })
+        Ok(Self {
+            mapper
+        })
     }
 
     pub fn get(&self, key: u32) -> Option<&TaxonInformation> {

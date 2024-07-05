@@ -35,7 +35,7 @@ pub fn go_terms_from_map(
     domains: bool
 ) -> GoTerms {
     let go_terms = fa_data
-        .into_iter()
+        .iter()
         .filter(|(key, _)| key.starts_with("GO:"));
 
     if domains {
@@ -50,7 +50,7 @@ pub fn go_terms_from_map(
 }
 
 pub fn go_terms_from_list(
-    fa_data: &Vec<&str>,
+    fa_data: &[&str],
     go_store: &GoStore,
     extra: bool,
     domains: bool

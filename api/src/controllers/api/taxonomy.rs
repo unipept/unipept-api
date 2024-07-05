@@ -77,7 +77,7 @@ generate_json_handlers!(
 
                 Some(TaxaInformation {
                     taxon: Taxon {
-                        taxon_id: taxon_id,
+                        taxon_id,
                         taxon_name: name.to_string(),
                         taxon_rank: rank.clone().into()
                     },

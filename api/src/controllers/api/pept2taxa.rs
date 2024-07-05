@@ -69,7 +69,7 @@ generate_json_handlers!(
         let taxon_store = datastore.taxon_store();
         let lineage_store = datastore.lineage_store();
 
-        result.into_iter().map(|item| {
+        result.into_iter().flat_map(|item| {
             item.taxa.into_iter().collect::<HashSet<usize>>().into_iter().filter_map(move |taxon| {
                 let (name, rank) = taxon_store.get(taxon as u32)?;
                 let lineage = match (extra, names) {
@@ -88,6 +88,6 @@ generate_json_handlers!(
                     lineage
                 })
             })
-        }).flatten().collect()
+        }).collect()
     }
 );

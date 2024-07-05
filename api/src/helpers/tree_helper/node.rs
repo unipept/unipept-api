@@ -15,6 +15,12 @@ pub struct Node {
     pub children: Vec<Node>
 }
 
+impl Default for NodeData {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NodeData {
     pub fn new() -> NodeData {
         NodeData {

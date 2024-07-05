@@ -112,37 +112,37 @@ impl FromStr for LineageRank {
     }
 }
 
-impl Into<String> for LineageRank {
-    fn into(self) -> String {
-        match self {
-            Self::NoRank => "no rank".to_string(),
-            Self::Superkindom => "superkingdom".to_string(),
-            Self::Kingdom => "kingdom".to_string(),
-            Self::Subkingdom => "subkingdom".to_string(),
-            Self::Superphylum => "superphylum".to_string(),
-            Self::Phylum => "phylum".to_string(),
-            Self::Subphylum => "subphylum".to_string(),
-            Self::Superclass => "superclass".to_string(),
-            Self::Class => "class".to_string(),
-            Self::Subclass => "subclass".to_string(),
-            Self::Superorder => "superorder".to_string(),
-            Self::Order => "order".to_string(),
-            Self::Suborder => "suborder".to_string(),
-            Self::Infraorder => "infraorder".to_string(),
-            Self::Superfamily => "superfamily".to_string(),
-            Self::Family => "family".to_string(),
-            Self::Subfamily => "subfamily".to_string(),
-            Self::Tribe => "tribe".to_string(),
-            Self::Subtribe => "subtribe".to_string(),
-            Self::Genus => "genus".to_string(),
-            Self::Subgenus => "subgenus".to_string(),
-            Self::SpeciesGroup => "species group".to_string(),
-            Self::SpeciesSubgroup => "species subgroup".to_string(),
-            Self::Species => "species".to_string(),
-            Self::Subspecies => "subspecies".to_string(),
-            Self::Strain => "strain".to_string(),
-            Self::Varietas => "varietas".to_string(),
-            Self::Forma => "forma".to_string()
+impl From<LineageRank> for String {
+    fn from(val: LineageRank) -> Self {
+        match val {
+            LineageRank::NoRank => "no rank".to_string(),
+            LineageRank::Superkindom => "superkingdom".to_string(),
+            LineageRank::Kingdom => "kingdom".to_string(),
+            LineageRank::Subkingdom => "subkingdom".to_string(),
+            LineageRank::Superphylum => "superphylum".to_string(),
+            LineageRank::Phylum => "phylum".to_string(),
+            LineageRank::Subphylum => "subphylum".to_string(),
+            LineageRank::Superclass => "superclass".to_string(),
+            LineageRank::Class => "class".to_string(),
+            LineageRank::Subclass => "subclass".to_string(),
+            LineageRank::Superorder => "superorder".to_string(),
+            LineageRank::Order => "order".to_string(),
+            LineageRank::Suborder => "suborder".to_string(),
+            LineageRank::Infraorder => "infraorder".to_string(),
+            LineageRank::Superfamily => "superfamily".to_string(),
+            LineageRank::Family => "family".to_string(),
+            LineageRank::Subfamily => "subfamily".to_string(),
+            LineageRank::Tribe => "tribe".to_string(),
+            LineageRank::Subtribe => "subtribe".to_string(),
+            LineageRank::Genus => "genus".to_string(),
+            LineageRank::Subgenus => "subgenus".to_string(),
+            LineageRank::SpeciesGroup => "species group".to_string(),
+            LineageRank::SpeciesSubgroup => "species subgroup".to_string(),
+            LineageRank::Species => "species".to_string(),
+            LineageRank::Subspecies => "subspecies".to_string(),
+            LineageRank::Strain => "strain".to_string(),
+            LineageRank::Varietas => "varietas".to_string(),
+            LineageRank::Forma => "forma".to_string()
         }
     }
 }

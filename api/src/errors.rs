@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum AppError {
     #[error("{0}")]
     IoError(#[from] std::io::Error),

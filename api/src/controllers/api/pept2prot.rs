@@ -71,7 +71,7 @@ generate_json_handlers!(
 
         let taxon_store = datastore.taxon_store();
 
-        result.into_iter().map(|item| {
+        result.into_iter().flat_map(|item| {
             item.uniprot_accession_numbers.into_iter().map(|accession| {
                 let uniprot_entry = accessions_map.get(&accession).unwrap();
 
@@ -104,6 +104,6 @@ generate_json_handlers!(
                     }
                 }
             }).collect::<Vec<ProtInformation>>()
-        }).flatten().collect()
+        }).collect()
     }
 );

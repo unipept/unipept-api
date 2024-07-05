@@ -86,8 +86,7 @@ generate_json_handlers!(
 
         let common_lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store)
             .iter()
-            .filter(|&taxon_id| taxon_id.is_some())
-            .map(|taxon_id| taxon_id.unwrap())
+            .filter_map(|taxon_id| *taxon_id)
             .collect::<Vec<i32>>();
 
         ProteinInformation {

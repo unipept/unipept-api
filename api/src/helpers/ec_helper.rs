@@ -33,7 +33,7 @@ pub fn ec_numbers_from_map(
         .collect()
 }
 
-pub fn ec_numbers_from_list(fa_data: &Vec<&str>, ec_store: &EcStore, extra: bool) -> Vec<EcNumber> {
+pub fn ec_numbers_from_list(fa_data: &[&str], ec_store: &EcStore, extra: bool) -> Vec<EcNumber> {
     fa_data
         .iter()
         .filter(|key| key.starts_with("EC:"))

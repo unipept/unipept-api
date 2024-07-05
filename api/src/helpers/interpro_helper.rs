@@ -71,7 +71,7 @@ pub fn interpro_entries_from_map(
 }
 
 pub fn interpro_entries_from_list(
-    fa_data: &Vec<&str>,
+    fa_data: &[&str],
     interpro_store: &InterproStore,
     extra: bool,
     domains: bool
@@ -150,19 +150,17 @@ fn interpro_entry(
                 domain:        domain.to_string()
             })
         }
+    } else if extra {
+        Some(InterproEntry::Extra {
+            code:          trimmed_key.to_string(),
+            protein_count: count,
+            name:          name.to_string(),
+            domain:        domain.to_string()
+        })
     } else {
-        if extra {
-            Some(InterproEntry::Extra {
-                code:          trimmed_key.to_string(),
-                protein_count: count,
-                name:          name.to_string(),
-                domain:        domain.to_string()
-            })
-        } else {
-            Some(InterproEntry::Default {
-                code:          trimmed_key.to_string(),
-                protein_count: count
-            })
-        }
+        Some(InterproEntry::Default {
+            code:          trimmed_key.to_string(),
+            protein_count: count
+        })
     }
 }

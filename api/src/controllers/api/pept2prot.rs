@@ -1,19 +1,10 @@
-use axum::{
-    extract::State,
-    Json
-};
+use axum::{extract::State, Json};
 use database::get_accessions_map;
-use serde::{
-    Deserialize,
-    Serialize
-};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{
-            default_equate_il,
-            default_extra
-        },
+        api::{default_equate_il, default_extra},
         generate_handlers
     },
     errors::ApiError,
@@ -22,60 +13,48 @@ use crate::{
 
 #[derive(Deserialize)]
 pub struct Parameters {
-    input:     Vec<String>,
+    input: Vec<String>,
     #[serde(default = "default_equate_il")]
     equate_il: bool,
     #[serde(default = "default_extra")]
-    extra:     bool
+    extra: bool
 }
 
 #[derive(Serialize)]
 #[serde(untagged)]
 pub enum ProtInformation {
     Default {
-        peptide:      String,
-        uniprot_id:   String,
+        peptide: String,
+        uniprot_id: String,
         protein_name: String,
-        taxon_id:     u32,
-        protein:      String
+        taxon_id: u32,
+        protein: String
     },
     Extra {
-        peptide:             String,
-        uniprot_id:          String,
-        protein_name:        String,
-        taxon_id:            u32,
-        taxon_name:          String,
-        protein:             String,
-        ec_references:       String,
-        go_references:       String,
+        peptide: String,
+        uniprot_id: String,
+        protein_name: String,
+        taxon_id: u32,
+        taxon_name: String,
+        protein: String,
+        ec_references: String,
+        go_references: String,
         interpro_references: String
     }
 }
 
 async fn handler(
-    State(AppState {
-        index,
-        datastore,
-        database
-    }): State<AppState>,
-    Parameters {
-        input,
-        equate_il,
-        extra
-    }: Parameters
+    State(AppState { index, datastore, database }): State<AppState>,
+    Parameters { input, equate_il, extra }: Parameters
 ) -> Result<Vec<ProtInformation>, ApiError> {
     let connection = database.get_conn().await?;
 
     let result = index.analyse(&input, equate_il).result;
 
-    let accession_numbers: Vec<String> = result
-        .iter()
-        .flat_map(|item| item.uniprot_accession_numbers.clone())
-        .collect();
+    let accession_numbers: Vec<String> =
+        result.iter().flat_map(|item| item.uniprot_accession_numbers.clone()).collect();
 
-    let accessions_map = connection
-        .interact(move |conn| get_accessions_map(conn, &accession_numbers))
-        .await??;
+    let accessions_map = connection.interact(move |conn| get_accessions_map(conn, &accession_numbers)).await??;
 
     let taxon_store = datastore.taxon_store();
 
@@ -106,7 +85,7 @@ async fn handler(
                         let interpro_references = fa
                             .iter()
                             .filter(|key| key.starts_with("IPR:"))
-                            .map(|k| k[4 ..].to_string())
+                            .map(|k| k[4..].to_string())
                             .collect::<Vec<String>>()
                             .join(" ");
 
@@ -123,11 +102,11 @@ async fn handler(
                         })
                     } else {
                         Some(ProtInformation::Default {
-                            peptide:      item.sequence.clone(),
-                            uniprot_id:   accession.clone(),
+                            peptide: item.sequence.clone(),
+                            uniprot_id: accession.clone(),
                             protein_name: uniprot_entry.name.clone(),
-                            taxon_id:     uniprot_entry.taxon_id,
-                            protein:      uniprot_entry.protein.clone()
+                            taxon_id: uniprot_entry.taxon_id,
+                            protein: uniprot_entry.protein.clone()
                         })
                     }
                 })

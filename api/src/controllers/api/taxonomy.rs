@@ -1,28 +1,14 @@
-use axum::{
-    extract::State,
-    Json
-};
-use serde::{
-    Deserialize,
-    Serialize
-};
+use axum::{extract::State, Json};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{
-            default_extra,
-            default_names
-        },
+        api::{default_extra, default_names},
         generate_handlers
     },
     helpers::lineage_helper::{
-        get_lineage,
-        get_lineage_with_names,
-        Lineage,
-        LineageVersion::{
-            self,
-            *
-        }
+        get_lineage, get_lineage_with_names, Lineage,
+        LineageVersion::{self, *}
     },
     AppState
 };
@@ -39,27 +25,21 @@ pub struct Parameters {
 #[derive(Serialize)]
 pub struct TaxaInformation {
     #[serde(flatten)]
-    taxon:   Taxon,
+    taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     lineage: Option<Lineage>
 }
 
 #[derive(Serialize)]
 pub struct Taxon {
-    taxon_id:   u32,
+    taxon_id: u32,
     taxon_name: String,
     taxon_rank: String
 }
 
 async fn handler(
-    State(AppState {
-        datastore, ..
-    }): State<AppState>,
-    Parameters {
-        input,
-        extra,
-        names
-    }: Parameters,
+    State(AppState { datastore, .. }): State<AppState>,
+    Parameters { input, extra, names }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<TaxaInformation>, ()> {
     if input.is_empty() {
@@ -74,9 +54,7 @@ async fn handler(
         .filter_map(|taxon_id| {
             let (name, rank) = taxon_store.get(taxon_id)?;
             let lineage = match (extra, names) {
-                (true, true) => {
-                    get_lineage_with_names(taxon_id, version, lineage_store, taxon_store)
-                }
+                (true, true) => get_lineage_with_names(taxon_id, version, lineage_store, taxon_store),
                 (true, false) => get_lineage(taxon_id, version, lineage_store),
                 (false, _) => None
             };

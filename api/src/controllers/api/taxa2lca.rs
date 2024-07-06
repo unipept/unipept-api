@@ -1,30 +1,16 @@
-use axum::{
-    extract::State,
-    Json
-};
-use serde::{
-    Deserialize,
-    Serialize
-};
+use axum::{extract::State, Json};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{
-            default_extra,
-            default_names
-        },
+        api::{default_extra, default_names},
         generate_handlers
     },
     helpers::{
         lca_helper::calculate_lca,
         lineage_helper::{
-            get_lineage,
-            get_lineage_with_names,
-            Lineage,
-            LineageVersion::{
-                self,
-                *
-            }
+            get_lineage, get_lineage_with_names, Lineage,
+            LineageVersion::{self, *}
         }
     },
     AppState
@@ -42,27 +28,21 @@ pub struct Parameters {
 #[derive(Serialize)]
 pub struct LcaInformation {
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    taxon:   Option<Taxon>,
+    taxon: Option<Taxon>,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     lineage: Option<Lineage>
 }
 
 #[derive(Serialize)]
 pub struct Taxon {
-    taxon_id:   u32,
+    taxon_id: u32,
     taxon_name: String,
     taxon_rank: String
 }
 
 async fn handler(
-    State(AppState {
-        datastore, ..
-    }): State<AppState>,
-    Parameters {
-        input,
-        extra,
-        names
-    }: Parameters,
+    State(AppState { datastore, .. }): State<AppState>,
+    Parameters { input, extra, names }: Parameters,
     version: LineageVersion
 ) -> Result<LcaInformation, ()> {
     let taxon_store = datastore.taxon_store();
@@ -81,7 +61,7 @@ async fn handler(
 
         return Ok(LcaInformation {
             taxon: Some(Taxon {
-                taxon_id:   lca as u32,
+                taxon_id: lca as u32,
                 taxon_name: taxon_name.to_string(),
                 taxon_rank: taxon_rank.clone().into()
             }),
@@ -89,10 +69,7 @@ async fn handler(
         });
     }
 
-    Ok(LcaInformation {
-        taxon:   None,
-        lineage: None
-    })
+    Ok(LcaInformation { taxon: None, lineage: None })
 }
 
 generate_handlers! (

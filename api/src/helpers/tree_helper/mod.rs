@@ -1,14 +1,8 @@
-use datastore::{
-    LineageStore,
-    TaxonStore
-};
+use datastore::{LineageStore, TaxonStore};
 use frequency::FrequencyTable;
 use node::Node;
 
-use super::lineage_helper::{
-    get_lineage_array,
-    LineageVersion
-};
+use super::lineage_helper::{get_lineage_array, LineageVersion};
 
 pub mod frequency;
 pub mod node;
@@ -33,11 +27,7 @@ pub fn build_tree(
             let child = current_node.get_child(lineage_id as usize);
             if child.is_none() {
                 let (name, rank) = taxon_store.get(lineage_id as u32).unwrap();
-                current_node.add_child(Node::new(
-                    lineage_id as usize,
-                    name.clone(),
-                    rank.clone().into()
-                ));
+                current_node.add_child(Node::new(lineage_id as usize, name.clone(), rank.clone().into()));
             }
 
             current_node = current_node.get_child(lineage_id as usize).unwrap();

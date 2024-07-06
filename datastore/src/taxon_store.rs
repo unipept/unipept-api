@@ -1,9 +1,6 @@
 use std::{
     collections::HashMap,
-    io::{
-        BufRead,
-        BufReader
-    },
+    io::{BufRead, BufReader},
     str::FromStr
 };
 
@@ -64,9 +61,7 @@ impl TaxonStore {
             }
         }
 
-        Ok(Self {
-            mapper
-        })
+        Ok(Self { mapper })
     }
 
     pub fn get(&self, key: u32) -> Option<&TaxonInformation> {

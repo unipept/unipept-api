@@ -1,37 +1,28 @@
-use axum::{
-    extract::State,
-    Json
-};
+use axum::{extract::State, Json};
 use sa_mappings::functionality::FunctionalAggregation;
-use serde::{
-    Deserialize,
-    Serialize
-};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::generate_handlers,
     helpers::{
         lca_helper::calculate_lca,
-        lineage_helper::{
-            get_lineage_array,
-            LineageVersion
-        }
+        lineage_helper::{get_lineage_array, LineageVersion}
     },
     AppState
 };
 
 #[derive(Deserialize)]
 pub struct Parameters {
-    peptides:  Vec<String>,
+    peptides: Vec<String>,
     equate_il: bool
 }
 
 #[derive(Serialize)]
 pub struct DataItem {
     sequence: String,
-    lca:      Option<u32>,
-    lineage:  Vec<Option<i32>>,
-    fa:       Option<FunctionalAggregation>
+    lca: Option<u32>,
+    lineage: Vec<Option<i32>>,
+    fa: Option<FunctionalAggregation>
 }
 
 #[derive(Serialize)]
@@ -40,20 +31,11 @@ pub struct Data {
 }
 
 async fn handler(
-    State(AppState {
-        index,
-        datastore,
-        ..
-    }): State<AppState>,
-    Parameters {
-        mut peptides,
-        equate_il
-    }: Parameters
+    State(AppState { index, datastore, .. }): State<AppState>,
+    Parameters { mut peptides, equate_il }: Parameters
 ) -> Result<Data, ()> {
     if peptides.is_empty() {
-        return Ok(Data {
-            peptides: Vec::new()
-        });
+        return Ok(Data { peptides: Vec::new() });
     }
 
     peptides.sort();

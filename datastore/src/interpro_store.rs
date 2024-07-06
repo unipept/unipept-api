@@ -1,9 +1,6 @@
 use std::{
     collections::HashMap,
-    io::{
-        BufRead,
-        BufReader
-    }
+    io::{BufRead, BufReader}
 };
 
 use crate::errors::InterproStoreError;
@@ -28,9 +25,7 @@ impl InterproStore {
             }
         }
 
-        Ok(InterproStore {
-            mapper
-        })
+        Ok(InterproStore { mapper })
     }
 
     pub fn get(&self, key: &str) -> Option<&InterproEntryDescription> {

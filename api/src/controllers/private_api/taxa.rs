@@ -1,18 +1,9 @@
-use axum::{
-    extract::State,
-    Json
-};
-use serde::{
-    Deserialize,
-    Serialize
-};
+use axum::{extract::State, Json};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::generate_handlers,
-    helpers::lineage_helper::{
-        get_lineage_array,
-        LineageVersion
-    },
+    helpers::lineage_helper::{get_lineage_array, LineageVersion},
     AppState
 };
 
@@ -23,19 +14,15 @@ pub struct Parameters {
 
 #[derive(Serialize)]
 pub struct Taxon {
-    id:      usize,
-    name:    String,
-    rank:    String,
+    id: usize,
+    name: String,
+    rank: String,
     lineage: Vec<Option<i32>>
 }
 
 async fn handler(
-    State(AppState {
-        datastore, ..
-    }): State<AppState>,
-    Parameters {
-        taxids
-    }: Parameters
+    State(AppState { datastore, .. }): State<AppState>,
+    Parameters { taxids }: Parameters
 ) -> Result<Vec<Taxon>, ()> {
     if taxids.is_empty() {
         return Ok(Vec::new());

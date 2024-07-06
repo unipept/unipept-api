@@ -1,36 +1,20 @@
 use std::collections::HashMap;
 
 use askama::Template;
-use axum::{
-    extract::State,
-    Json
-};
-use serde::{
-    Deserialize,
-    Serialize
-};
+use axum::{extract::State, Json};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
         api::default_link,
         generate_handlers,
-        request::{
-            GetContent,
-            PostContent
-        },
+        request::{GetContent, PostContent},
         response::HtmlTemplate
     },
     errors::ApiError,
     helpers::{
-        lineage_helper::LineageVersion::{
-            self,
-            *
-        },
-        tree_helper::{
-            build_tree,
-            frequency::FrequencyTable,
-            node::Node
-        }
+        lineage_helper::LineageVersion::{self, *},
+        tree_helper::{build_tree, frequency::FrequencyTable, node::Node}
     },
     AppState
 };
@@ -39,14 +23,14 @@ use crate::{
 pub struct GetParameters {
     input: Vec<u32>,
     #[serde(default = "default_link")]
-    link:  bool
+    link: bool
 }
 
 #[derive(Deserialize)]
 pub struct PostParameters {
     counts: HashMap<u32, usize>,
     #[serde(default = "default_link")]
-    link:   bool
+    link: bool
 }
 
 #[derive(Deserialize)]
@@ -75,9 +59,7 @@ pub struct TreeTemplate {
 }
 
 fn handler(
-    State(AppState {
-        datastore, ..
-    }): State<AppState>,
+    State(AppState { datastore, .. }): State<AppState>,
     params: Parameters,
     version: LineageVersion
 ) -> TreeInformation {
@@ -85,27 +67,17 @@ fn handler(
     let lineage_store = datastore.lineage_store();
 
     let (frequencies, link) = match params {
-        Parameters::Get(GetParameters {
-            input,
-            link
-        }) => (FrequencyTable::from_data(&input), link),
-        Parameters::Post(PostParameters {
-            counts,
-            link
-        }) => (FrequencyTable::from_counts(counts), link)
+        Parameters::Get(GetParameters { input, link }) => (FrequencyTable::from_data(&input), link),
+        Parameters::Post(PostParameters { counts, link }) => (FrequencyTable::from_counts(counts), link)
     };
 
     let root = build_tree(frequencies, version, lineage_store, taxon_store);
 
     if link {
-        return TreeInformation::Link {
-            gist: "test".to_string()
-        };
+        return TreeInformation::Link { gist: "test".to_string() };
     }
 
-    TreeInformation::Tree {
-        root
-    }
+    TreeInformation::Tree { root }
 }
 
 generate_handlers!(

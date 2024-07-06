@@ -1,5 +1,5 @@
 use axum::{extract::State, Json};
-use sa_mappings::functionality::FunctionalAggregation;
+use index::FunctionalAggregation;
 use serde::{Deserialize, Serialize};
 
 use crate::{

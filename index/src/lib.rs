@@ -13,6 +13,7 @@ use sa_index::{
     suffix_to_protein_index::SparseSuffixToProtein,
     SuffixArray
 };
+pub use sa_mappings::functionality::FunctionalAggregation;
 use sa_mappings::{
     functionality::FunctionAggregator,
     proteins::Proteins,

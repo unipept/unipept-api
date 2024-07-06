@@ -2,5 +2,8 @@
 resolver = "2"
 
 members = [
-    "api", "database", "datastore", "index",
+    "api", 
+    "database", 
+    "datastore", 
+    "index"
 ]

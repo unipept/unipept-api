@@ -51,21 +51,20 @@ impl TaxonStore {
         let mut mapper = HashMap::new();
         for line in BufReader::new(file).lines() {
             let line = line?;
-            let mut splitted_line = line.split('\t');
 
-            let taxon_id: u32 = splitted_line.next().unwrap().parse().unwrap();
-            let parts: Vec<&str> = splitted_line.collect();
-
-            if parts.len() == 4 {
-                mapper.insert(taxon_id, (
-                    parts[0].to_string(), 
-                    parts[1].parse::<LineageRank>()?,
-                    match parts[2] {
+            let parts: Vec<&str> = line.trim_end().split('\t').collect();
+            if parts.len() == 5 {
+                mapper.insert(parts[0].parse()?, (
+                    parts[1].to_string(), 
+                    parts[2].parse::<LineageRank>()?,
+                    match parts[4] {
                         "\x01" => true,
                         _ => false
                     }
                 ));
             }
+
+            eprintln!("Invalid line: {:?}", mapper.get(&parts[0].parse::<u32>()?));
         }
 
         Ok(Self { mapper })

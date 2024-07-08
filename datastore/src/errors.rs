@@ -52,6 +52,8 @@ pub enum LineageStoreError {
 pub enum TaxonStoreError {
     #[error("{0}")]
     IoError(#[from] std::io::Error),
+    #[error("Taxon id `{0}` not found in taxon store")]
+    InvalidTaxonError(#[from] std::num::ParseIntError),
     #[error("Lineage rank `{0}` not found in lineage store")]
     InvalidRankError(String)
 }

@@ -6,7 +6,7 @@ use std::{
 
 use crate::errors::TaxonStoreError;
 
-pub type TaxonInformation = (String, LineageRank);
+pub type TaxonInformation = (String, LineageRank, bool);
 
 #[derive(Debug, Clone)]
 pub enum LineageRank {
@@ -57,7 +57,14 @@ impl TaxonStore {
             let parts: Vec<&str> = splitted_line.collect();
 
             if parts.len() == 4 {
-                mapper.insert(taxon_id, (parts[0].to_string(), parts[1].parse::<LineageRank>()?));
+                mapper.insert(taxon_id, (
+                    parts[0].to_string(), 
+                    parts[1].parse::<LineageRank>()?,
+                    match parts[2] {
+                        "\x01" => true,
+                        _ => false
+                    }
+                ));
             }
         }
 
@@ -69,7 +76,11 @@ impl TaxonStore {
     }
 
     pub fn get_name(&self, key: u32) -> Option<&String> {
-        self.mapper.get(&key).map(|(name, _)| name)
+        self.mapper.get(&key).map(|(name, _, _)| name)
+    }
+
+    pub fn is_valid(&self, key: u32) -> bool {
+        self.mapper.contains_key(&key) && self.mapper[&key].2
     }
 }
 

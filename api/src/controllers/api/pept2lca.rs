@@ -57,9 +57,9 @@ async fn handler(
         .into_iter()
         .filter_map(|item| {
             let lca =
-                calculate_lca(item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(), version, lineage_store);
+                calculate_lca(item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(), version, taxon_store, lineage_store);
 
-            let (name, rank) = taxon_store.get(lca as u32)?;
+            let (name, rank, _) = taxon_store.get(lca as u32)?;
             let lineage = match (extra, names) {
                 (true, true) => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
                 (true, false) => get_lineage(lca as u32, version, lineage_store),

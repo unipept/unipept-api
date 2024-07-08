@@ -56,7 +56,7 @@ async fn handler(
         .into_iter()
         .flat_map(|item| {
             item.taxa.into_iter().collect::<HashSet<usize>>().into_iter().filter_map(move |taxon| {
-                let (name, rank) = taxon_store.get(taxon as u32)?;
+                let (name, rank, _) = taxon_store.get(taxon as u32)?;
                 let lineage = match (extra, names) {
                     (true, true) => get_lineage_with_names(taxon as u32, version, lineage_store, taxon_store),
                     (true, false) => get_lineage(taxon as u32, version, lineage_store),

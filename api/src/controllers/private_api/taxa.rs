@@ -7,14 +7,14 @@ use crate::{
     AppState
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 pub struct Parameters {
-    taxids: Vec<usize>
+    taxids: Vec<i32>
 }
 
 #[derive(Serialize)]
 pub struct Taxon {
-    id: usize,
+    id: u32,
     name: String,
     rank: String,
     lineage: Vec<Option<i32>>
@@ -24,21 +24,18 @@ async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
     Parameters { taxids }: Parameters
 ) -> Result<Vec<Taxon>, ()> {
-    if taxids.is_empty() {
-        return Ok(Vec::new());
-    }
-
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
     Ok(taxids
         .into_iter()
+        .filter(|&taxon_id| taxon_id > 0)
         .filter_map(|taxon_id| {
             let (name, rank, _) = taxon_store.get(taxon_id as u32)?;
             let lineage = get_lineage_array(taxon_id as u32, LineageVersion::V2, lineage_store);
 
             Some(Taxon {
-                id: taxon_id,
+                id: taxon_id as u32,
                 name: name.clone(),
                 rank: rank.clone().into(),
                 lineage

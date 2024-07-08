@@ -1,9 +1,6 @@
 use std::{
     collections::HashMap,
-    io::{
-        BufRead,
-        BufReader
-    }
+    io::{BufRead, BufReader}
 };
 
 use crate::errors::GoStoreError;
@@ -28,9 +25,7 @@ impl GoStore {
             }
         }
 
-        Ok(GoStore {
-            mapper
-        })
+        Ok(GoStore { mapper })
     }
 
     pub fn get(&self, key: &str) -> Option<&GoTermDescription> {

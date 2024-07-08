@@ -1,7 +1,4 @@
-use datastore::{
-    LineageStore,
-    TaxonStore
-};
+use datastore::{LineageStore, TaxonStore};
 pub use paste::paste;
 use serde::Serialize;
 

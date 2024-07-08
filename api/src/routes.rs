@@ -2,51 +2,23 @@ use std::time::Duration;
 
 use axum::{
     http::{
-        header::{
-            CONTENT_TYPE,
-            ETAG,
-            IF_MODIFIED_SINCE,
-            IF_NONE_MATCH
-        },
+        header::{CONTENT_TYPE, ETAG, IF_MODIFIED_SINCE, IF_NONE_MATCH},
         Method
     },
     routing::get,
     Router
 };
-use tower_http::cors::{
-    Any,
-    CorsLayer
-};
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::{
     controllers::{
         api::{
-            pept2ec,
-            pept2funct,
-            pept2go,
-            pept2interpro,
-            pept2lca,
-            pept2prot,
-            pept2taxa,
-            peptinfo,
-            protinfo,
-            taxa2lca,
-            taxa2tree,
-            taxonomy
+            pept2ec, pept2funct, pept2go, pept2interpro, pept2lca, pept2prot, pept2taxa, peptinfo, protinfo, taxa2lca,
+            taxa2tree, taxonomy
         },
         datasets::sampledata,
-        mpa::{
-            pept2data,
-            pept2filtered
-        },
-        private_api::{
-            ecnumbers,
-            goterms,
-            interpros,
-            metadata,
-            proteins,
-            taxa
-        }
+        mpa::{pept2data, pept2filtered},
+        private_api::{ecnumbers, goterms, interpros, metadata, proteins, taxa}
     },
     AppState
 };
@@ -70,9 +42,7 @@ pub fn create_router(state: AppState) -> Router {
 }
 
 fn create_api_routes() -> Router<AppState> {
-    Router::new()
-        .nest("/v1", create_api_v1_routes())
-        .nest("/v2", create_api_v2_routes())
+    Router::new().nest("/v1", create_api_v1_routes()).nest("/v2", create_api_v2_routes())
 }
 
 fn create_api_v1_routes() -> Router<AppState> {
@@ -98,14 +68,11 @@ fn create_api_v1_routes() -> Router<AppState> {
         "/taxa2lca",
         get(taxa2lca::get_json_handler_v1).post(taxa2lca::post_json_handler_v1),
         "/taxa2tree",
-        get(taxa2tree::get_handler_v1).post(taxa2tree::post_handler_v1),
+        get(taxa2tree::get_json_handler_v1).post(taxa2tree::post_json_handler_v1),
         "/taxonomy",
         get(taxonomy::get_json_handler_v1).post(taxonomy::post_json_handler_v1)
     )
-    .route(
-        "/taxa2tree.html",
-        get(taxa2tree::get_html_handler_v1).post(taxa2tree::post_html_handler_v1)
-    )
+    .route("/taxa2tree.html", get(taxa2tree::get_html_handler_v1).post(taxa2tree::post_html_handler_v1))
 }
 
 fn create_api_v2_routes() -> Router<AppState> {
@@ -131,21 +98,15 @@ fn create_api_v2_routes() -> Router<AppState> {
         "/taxa2lca",
         get(taxa2lca::get_json_handler_v2).post(taxa2lca::post_json_handler_v2),
         "/taxa2tree",
-        get(taxa2tree::get_handler_v2).post(taxa2tree::post_handler_v2),
+        get(taxa2tree::get_json_handler_v2).post(taxa2tree::post_json_handler_v2),
         "/taxonomy",
         get(taxonomy::get_json_handler_v2).post(taxonomy::post_json_handler_v2)
     )
-    .route(
-        "/taxa2tree.html",
-        get(taxa2tree::get_html_handler_v2).post(taxa2tree::post_html_handler_v2)
-    )
+    .route("/taxa2tree.html", get(taxa2tree::get_html_handler_v2).post(taxa2tree::post_html_handler_v2))
 }
 
 fn create_datasets_routes() -> Router<AppState> {
-    define_routes!(
-        "/sampledata",
-        get(sampledata::get_json_handler).post(sampledata::post_json_handler)
-    )
+    define_routes!("/sampledata", get(sampledata::get_json_handler).post(sampledata::post_json_handler))
 }
 
 fn create_mpa_routes() -> Router<AppState> {

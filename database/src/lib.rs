@@ -1,17 +1,8 @@
-use std::{
-    collections::HashMap,
-    ops::Deref
-};
+use std::{collections::HashMap, ops::Deref};
 
-use deadpool_diesel::mysql::{
-    Manager,
-    Pool
-};
-use diesel::{
-    prelude::*,
-    MysqlConnection,
-    QueryDsl
-};
+use deadpool_diesel::mysql::{Manager, Object, Pool};
+pub use deadpool_diesel::InteractError;
+use diesel::{prelude::*, MysqlConnection, QueryDsl};
 pub use errors::DatabaseError;
 use models::UniprotEntry;
 
@@ -26,12 +17,12 @@ pub struct Database {
 impl Database {
     pub fn try_from_url(url: &str) -> Result<Self, DatabaseError> {
         let manager = Manager::new(url, deadpool_diesel::Runtime::Tokio1);
-        let pool = Pool::builder(manager)
-            .build()
-            .map_err(|err| DatabaseError::BuildPoolError(err.to_string()))?;
-        Ok(Self {
-            pool
-        })
+        let pool = Pool::builder(manager).build().map_err(|err| DatabaseError::BuildPoolError(err.to_string()))?;
+        Ok(Self { pool })
+    }
+
+    pub async fn get_conn(&self) -> Result<Object, DatabaseError> {
+        Ok(self.pool.get().await?)
     }
 }
 
@@ -49,9 +40,7 @@ pub fn get_accessions(
 ) -> Result<Vec<UniprotEntry>, DatabaseError> {
     use schema::uniprot_entries::dsl::*;
 
-    Ok(uniprot_entries
-        .filter(uniprot_accession_number.eq_any(accessions))
-        .load(conn)?)
+    Ok(uniprot_entries.filter(uniprot_accession_number.eq_any(accessions)).load(conn)?)
 }
 
 pub fn get_accessions_map(

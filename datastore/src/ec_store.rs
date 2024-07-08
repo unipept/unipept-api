@@ -1,9 +1,6 @@
 use std::{
     collections::HashMap,
-    io::{
-        BufRead,
-        BufReader
-    }
+    io::{BufRead, BufReader}
 };
 
 use crate::errors::EcStoreError;
@@ -26,9 +23,7 @@ impl EcStore {
             }
         }
 
-        Ok(EcStore {
-            mapper
-        })
+        Ok(EcStore { mapper })
     }
 
     pub fn get(&self, key: &str) -> Option<&String> {

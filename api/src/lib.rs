@@ -13,8 +13,8 @@ pub mod routes;
 #[derive(Clone)]
 pub struct AppState {
     pub datastore: Arc<DataStore>,
-    pub database:  Arc<Database>,
-    pub index:     Arc<Index>
+    pub database: Arc<Database>,
+    pub index: Arc<Index>
 }
 
 pub async fn start(index_location: &str) -> Result<(), errors::AppError> {
@@ -44,8 +44,8 @@ pub async fn start(index_location: &str) -> Result<(), errors::AppError> {
 
     let app_state = AppState {
         datastore: Arc::new(datastore),
-        database:  Arc::new(database),
-        index:     Arc::new(index)
+        database: Arc::new(database),
+        index: Arc::new(index)
     };
 
     let router = routes::create_router(app_state);

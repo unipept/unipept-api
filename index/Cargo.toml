@@ -3,15 +3,8 @@ name = "index"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 sa-index = { path = "../sa-index" }
-sa-builder = { path = "../sa-builder" }
 sa-mappings = { path = "../sa-mappings" }
 sa-compression = { path = "../sa-compression" }
-serde = "1.0.203"
-serde_json = "1.0.117"
-rayon = "1.8.1"
-datastore = { path = "../datastore" }
 thiserror = "1.0"

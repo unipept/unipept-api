@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    hash::Hash,
-    ops::Deref
-};
+use std::{collections::HashMap, hash::Hash, ops::Deref};
 
 #[derive(Debug)]
 pub struct FrequencyTable<T: Hash + Eq + Clone>(HashMap<T, usize>);

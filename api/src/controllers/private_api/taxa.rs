@@ -34,7 +34,7 @@ async fn handler(
     Ok(taxids
         .into_iter()
         .filter_map(|taxon_id| {
-            let (name, rank) = taxon_store.get(taxon_id as u32)?;
+            let (name, rank, _) = taxon_store.get(taxon_id as u32)?;
             let lineage = get_lineage_array(taxon_id as u32, LineageVersion::V2, lineage_store);
 
             Some(Taxon {

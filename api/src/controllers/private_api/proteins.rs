@@ -62,10 +62,11 @@ async fn handler(
 
     let accessions_map = connection.interact(move |conn| get_accessions_map(conn, &accession_numbers)).await??;
 
+    let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
     let taxa = result[0].taxa.iter().map(|&taxon_id| taxon_id as u32).collect::<Vec<u32>>();
-    let lca = calculate_lca(taxa, LineageVersion::V2, lineage_store);
+    let lca = calculate_lca(taxa, LineageVersion::V2, taxon_store, lineage_store);
 
     let common_lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store)
         .iter()

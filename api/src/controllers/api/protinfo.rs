@@ -73,7 +73,7 @@ async fn handler(
             let gos = go_terms_from_list(&fa, go_store, extra, domains);
             let iprs = interpro_entries_from_list(&fa, interpro_store, extra, domains);
 
-            let (name, rank) = taxon_store.get(entry.taxon_id)?;
+            let (name, rank, _) = taxon_store.get(entry.taxon_id)?;
             let lineage = match (extra, names) {
                 (true, true) => get_lineage_with_names(entry.taxon_id, version, lineage_store, taxon_store),
                 (true, false) => get_lineage(entry.taxon_id, version, lineage_store),

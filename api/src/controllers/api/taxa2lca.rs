@@ -49,9 +49,9 @@ async fn handler(
     let lineage_store = datastore.lineage_store();
 
     // Calculate the LCA of all taxa
-    let lca: i32 = calculate_lca(input, version, lineage_store);
+    let lca: i32 = calculate_lca(input, version, taxon_store, lineage_store);
 
-    if let Some((taxon_name, taxon_rank)) = taxon_store.get(lca as u32) {
+    if let Some((taxon_name, taxon_rank, _)) = taxon_store.get(lca as u32) {
         // Calculate the lineage of the LCA
         let lineage = match (extra, names) {
             (true, true) => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),

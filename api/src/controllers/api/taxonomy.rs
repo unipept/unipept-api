@@ -52,7 +52,7 @@ async fn handler(
     Ok(input
         .into_iter()
         .filter_map(|taxon_id| {
-            let (name, rank) = taxon_store.get(taxon_id)?;
+            let (name, rank, _) = taxon_store.get(taxon_id)?;
             let lineage = match (extra, names) {
                 (true, true) => get_lineage_with_names(taxon_id, version, lineage_store, taxon_store),
                 (true, false) => get_lineage(taxon_id, version, lineage_store),

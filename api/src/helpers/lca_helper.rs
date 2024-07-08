@@ -1,13 +1,15 @@
-use datastore::LineageStore;
+use datastore::{LineageStore, TaxonStore};
 
 use super::lineage_helper::{
     get_amount_of_ranks, get_genus_index, get_lineage_array, get_species_index, LineageVersion
 };
 
-pub fn calculate_lca(taxa: Vec<u32>, version: LineageVersion, lineage_store: &LineageStore) -> i32 {
+pub fn calculate_lca(taxa: Vec<u32>, version: LineageVersion, taxon_store: &TaxonStore, lineage_store: &LineageStore) -> i32 {
     let mut lca = 1;
 
-    let lineages = prepare_lineages(taxa, version, lineage_store);
+    let cleaned_taxa: Vec<u32> = taxa.into_iter().filter(|&taxon_id| taxon_store.is_valid(taxon_id)).collect();
+
+    let lineages = prepare_lineages(cleaned_taxa, version, lineage_store);
 
     let amount_of_ranks = get_amount_of_ranks(version);
     let genus_index = get_genus_index(version);

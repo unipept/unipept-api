@@ -26,7 +26,7 @@ pub fn build_tree(
 
             let child = current_node.get_child(lineage_id as usize);
             if child.is_none() {
-                let (name, rank) = taxon_store.get(lineage_id as u32).unwrap();
+                let (name, rank, _) = taxon_store.get(lineage_id as u32).unwrap();
                 current_node.add_child(Node::new(lineage_id as usize, name.clone(), rank.clone().into()));
             }
 

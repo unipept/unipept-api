@@ -27,7 +27,7 @@ macro_rules! create_lineages {
             }
 
             fn get_name(taxon_id: Option<i32>, taxon_store: &TaxonStore) -> String {
-                get_id(taxon_id).and_then(|id| taxon_store.get(id as u32).map(|(name, _)| name.to_string())).unwrap_or_default()
+                get_id(taxon_id).and_then(|id| taxon_store.get(id as u32).map(|(name, _, _)| name.to_string())).unwrap_or_default()
             }
 
             pub fn get_lineage(taxon_id: u32, lineage_store: &LineageStore) -> Option<Lineage> {

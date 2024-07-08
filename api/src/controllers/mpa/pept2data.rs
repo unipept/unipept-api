@@ -42,6 +42,7 @@ async fn handler(
     peptides.dedup();
     let result = index.analyse(&peptides, equate_il).result;
 
+    let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
     Ok(Data {
@@ -51,6 +52,7 @@ async fn handler(
                 let lca = calculate_lca(
                     item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(),
                     LineageVersion::V2,
+                    taxon_store,
                     lineage_store
                 );
                 let lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store);

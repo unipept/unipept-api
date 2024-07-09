@@ -63,8 +63,6 @@ impl TaxonStore {
                     }
                 ));
             }
-
-            eprintln!("Invalid line: {:?}", mapper.get(&parts[0].parse::<u32>()?));
         }
 
         Ok(Self { mapper })

@@ -5,6 +5,7 @@ use crate::{controllers::generate_handlers, AppState};
 
 #[derive(Serialize, Deserialize)]
 pub struct Parameters {
+    #[serde(default)]
     ecnumbers: Vec<String>
 }
 

@@ -11,7 +11,9 @@ use crate::{
 
 #[derive(Deserialize)]
 pub struct Parameters {
+    #[serde(default)]
     peptides: Vec<String>,
+    #[serde(default)]
     taxa: Vec<usize>,
     #[serde(default = "default_equate_il")]
     equate_il: bool

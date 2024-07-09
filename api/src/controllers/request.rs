@@ -18,7 +18,7 @@ where
     type Rejection = (StatusCode, &'static str);
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let query = parts.uri.query().ok_or((StatusCode::BAD_REQUEST, "missing query string"))?;
+        let query = parts.uri.query().unwrap_or_default();
         Ok(Self(
             serde_qs::from_str(&urlencoding::decode(query).unwrap())
                 .map_err(|_| (StatusCode::BAD_REQUEST, "invalid query string"))?
@@ -41,6 +41,8 @@ where
 
         let form_bytes = form.to_vec();
         let decoded_bytes = urlencoding::decode_binary(&form_bytes);
+
+        eprintln!("{:?}", decoded_bytes);
 
         Ok(Self(serde_qs::from_bytes(&decoded_bytes).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
     }
@@ -66,6 +68,8 @@ where
             querystring.push_str(&format!("{}={}&", name, value));
         }
 
+        eprintln!("{:?}", querystring);
+
         Ok(Self(serde_qs::from_str(&querystring).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
     }
 }
@@ -84,8 +88,11 @@ where
     type Rejection = Response;
 
     async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
+        eprintln!("{:?}", req.headers());
         let content_type_header = req.headers().get(CONTENT_TYPE);
         let content_type = content_type_header.and_then(|value| value.to_str().ok());
+
+        eprintln!("{:?}", content_type_header);
 
         if let Some(content_type) = content_type {
             if content_type.starts_with("application/json") {

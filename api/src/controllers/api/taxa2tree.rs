@@ -21,6 +21,7 @@ use crate::{
 
 #[derive(Deserialize)]
 pub struct GetParameters {
+    #[serde(default)]
     input: Vec<u32>,
     #[serde(default = "default_link")]
     link: bool
@@ -28,6 +29,7 @@ pub struct GetParameters {
 
 #[derive(Deserialize)]
 pub struct PostParameters {
+    #[serde(default)]
     counts: HashMap<u32, usize>,
     #[serde(default = "default_link")]
     link: bool

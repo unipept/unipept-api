@@ -18,6 +18,7 @@ use crate::{
 
 #[derive(Deserialize)]
 pub struct Parameters {
+    #[serde(default)]
     input: Vec<String>,
     #[serde(default = "default_equate_il")]
     equate_il: bool,

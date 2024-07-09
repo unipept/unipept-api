@@ -15,6 +15,7 @@ use crate::{
 
 #[derive(Deserialize)]
 pub struct Parameters {
+    #[serde(default)]
     input: Vec<u32>,
     #[serde(default = "default_extra")]
     extra: bool,

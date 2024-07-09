@@ -9,6 +9,7 @@ use crate::{
 
 #[derive(Deserialize)]
 pub struct Parameters {
+    #[serde(default)]
     taxids: Vec<i32>
 }
 

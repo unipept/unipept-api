@@ -3,7 +3,7 @@ use index::FunctionalAggregation;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    controllers::generate_handlers,
+    controllers::{generate_handlers, mpa::default_equate_il},
     helpers::{
         lca_helper::calculate_lca,
         lineage_helper::{get_lineage_array, LineageVersion}
@@ -13,7 +13,9 @@ use crate::{
 
 #[derive(Deserialize)]
 pub struct Parameters {
+    #[serde(default)]
     peptides: Vec<String>,
+    #[serde(default = "default_equate_il")]
     equate_il: bool
 }
 

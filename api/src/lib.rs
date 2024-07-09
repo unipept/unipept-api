@@ -29,7 +29,7 @@ pub async fn start(index_location: &str) -> Result<(), errors::AppError> {
     let sa = format!("{}/sa.bin", index_location);
     let proteins = format!("{}/proteins.tsv", index_location);
 
-    let database = Database::try_from_url("mysql://unipept:unipept@127.0.0.1:3306/unipept")?;
+    let database = Database::try_from_url("mysql://root:unipept@127.0.0.1:3306/unipept")?;
 
     let datastore = DataStore::try_from_files(
         "2024.03",

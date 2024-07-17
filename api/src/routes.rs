@@ -1,8 +1,10 @@
 use axum::{
     routing::get,
-    Router
+    Router,
+    extract::{DefaultBodyLimit}
 };
 use tower::ServiceBuilder;
+use tower_http::limit::RequestBodyLimitLayer;
 
 use crate::{
     controllers::{

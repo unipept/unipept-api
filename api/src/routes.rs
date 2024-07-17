@@ -30,6 +30,9 @@ pub fn create_router(state: AppState) -> Router {
                 .layer(create_tracing_layer())
                 .layer(create_cors_layer())
         )
+        // Set max request size to 50MiB (default is 2MiB)
+        .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
+        .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024))
         .with_state(state)
 }
 

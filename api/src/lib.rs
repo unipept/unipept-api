@@ -41,7 +41,7 @@ pub async fn start(index_location: &str) -> Result<(), errors::AppError> {
         taxons.as_str()
     )?;
 
-    let index = Index::try_from_files(sa.as_str(), proteins.as_str(), taxons.as_str())?;
+    let index = Index::try_from_files(sa.as_str(), proteins.as_str())?;
 
     let app_state = AppState {
         datastore: Arc::new(datastore),

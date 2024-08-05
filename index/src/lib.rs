@@ -8,46 +8,34 @@ use errors::LoadIndexError;
 use sa_compression::load_compressed_suffix_array;
 use sa_index::{
     binary::load_suffix_array,
-    peptide_search::{analyse_all_peptides, OutputData, SearchResultWithAnalysis},
-    sa_searcher::Searcher,
-    suffix_to_protein_index::SparseSuffixToProtein,
+    peptide_search::{search_all_peptides, SearchResult},
+    sa_searcher::SparseSearcher,
     SuffixArray
 };
-pub use sa_mappings::functionality::FunctionalAggregation;
-use sa_mappings::{
-    functionality::FunctionAggregator,
-    proteins::Proteins,
-    taxonomy::{AggregationMethod, TaxonAggregator}
-};
+use sa_mappings::proteins::Proteins;
+pub use sa_index::peptide_search::ProteinInfo;
 
 mod errors;
 
 pub struct Index {
-    searcher: Searcher
+    searcher: SparseSearcher
 }
 
 impl Index {
-    pub fn try_from_files(index_file: &str, proteins_file: &str, taxonomy_file: &str) -> Result<Self, IndexError> {
+    pub fn try_from_files(index_file: &str, proteins_file: &str) -> Result<Self, IndexError> {
         let suffix_array =
             load_index_file(index_file).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?;
 
-        let taxon_id_calculator = TaxonAggregator::try_from_taxonomy_file(taxonomy_file, AggregationMethod::LcaStar)
-            .map_err(|err| LoadIndexError::LoadTaxonomyError(err.to_string()))?;
-
-        let function_aggregator = FunctionAggregator {};
-
-        let proteins = Proteins::try_from_database_file(proteins_file, &taxon_id_calculator)
+        let proteins = Proteins::try_from_database_file(proteins_file)
             .map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
-        let suffix_index_to_protein = Box::new(SparseSuffixToProtein::new(&proteins.input_string));
 
-        let searcher =
-            Searcher::new(suffix_array, suffix_index_to_protein, proteins, taxon_id_calculator, function_aggregator);
+        let searcher = SparseSearcher::new(suffix_array, proteins);
 
         Ok(Self { searcher })
     }
 
-    pub fn analyse(&self, peptides: &Vec<String>, equate_il: bool) -> OutputData<SearchResultWithAnalysis> {
-        analyse_all_peptides(&self.searcher, peptides, 10_000, equate_il, false)
+    pub fn analyse(&self, peptides: &Vec<String>, equate_il: bool) -> Vec<SearchResult> {
+        search_all_peptides(&self.searcher, peptides, 10_000, equate_il)
     }
 }
 

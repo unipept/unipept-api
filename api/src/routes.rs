@@ -1,8 +1,8 @@
 use axum::{
-    routing::get,
-    Router
+    extract::DefaultBodyLimit, routing::get, Router
 };
 use tower::ServiceBuilder;
+use tower_http::limit::RequestBodyLimitLayer;
 
 use crate::{
     controllers::{
@@ -27,6 +27,9 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/private_api", create_private_api_routes())
         .layer(
             ServiceBuilder::new()
+                // Set max request size to 50MiB (default is 2MiB)
+                .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
+                .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024))
                 .layer(create_tracing_layer())
                 .layer(create_cors_layer())
         )

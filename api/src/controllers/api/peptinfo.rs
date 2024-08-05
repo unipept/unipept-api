@@ -7,11 +7,7 @@ use crate::{
         generate_handlers
     },
     helpers::{
-        ec_helper::{ec_numbers_from_map, EcNumber},
-        go_helper::{go_terms_from_map, GoTerms},
-        interpro_helper::{interpro_entries_from_map, InterproEntries},
-        lca_helper::calculate_lca,
-        lineage_helper::{
+        ec_helper::{ec_numbers_from_map, EcNumber}, fa_helper::calculate_fa, go_helper::{go_terms_from_map, GoTerms}, interpro_helper::{interpro_entries_from_map, InterproEntries}, lca_helper::calculate_lca, lineage_helper::{
             get_lineage, get_lineage_with_names, Lineage,
             LineageVersion::{self, *}
         }
@@ -58,7 +54,7 @@ async fn handler(
     Parameters { input, equate_il, extra, domains, names }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<PeptInformation>, ()> {
-    let result = index.analyse(&input, equate_il).result;
+    let result = index.analyse(&input, equate_il);
 
     let ec_store = datastore.ec_store();
     let go_store = datastore.go_store();
@@ -69,7 +65,7 @@ async fn handler(
     Ok(result
         .into_iter()
         .filter_map(|item| {
-            let fa = item.fa?;
+            let fa = calculate_fa(&item.proteins);
 
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
@@ -77,7 +73,7 @@ async fn handler(
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
 
             let lca =
-                calculate_lca(item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(), version, taxon_store, lineage_store);
+                calculate_lca(item.proteins.iter().map(|protein| protein.taxon).collect(), version, taxon_store, lineage_store);
             let (name, rank, _) = taxon_store.get(lca as u32)?;
             let lineage = match (extra, names) {
                 (true, true) => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),

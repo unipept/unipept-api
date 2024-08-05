@@ -49,7 +49,7 @@ async fn handler(
     Parameters { input, equate_il, extra, names }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<LcaInformation>, ()> {
-    let result = index.analyse(&input, equate_il).result;
+    let result = index.analyse(&input, equate_il);
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
@@ -58,7 +58,7 @@ async fn handler(
         .into_iter()
         .filter_map(|item| {
             let lca =
-                calculate_lca(item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(), version, taxon_store, lineage_store);
+                calculate_lca(item.proteins.iter().map(|protein| protein.taxon).collect(), version, taxon_store, lineage_store);
 
             let (name, rank, _) = taxon_store.get(lca as u32)?;
             let lineage = match (extra, names) {

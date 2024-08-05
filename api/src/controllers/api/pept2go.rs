@@ -6,7 +6,7 @@ use crate::{
         api::{default_domains, default_equate_il, default_extra},
         generate_handlers
     },
-    helpers::go_helper::{go_terms_from_map, GoTerms},
+    helpers::{fa_helper::calculate_fa, go_helper::{go_terms_from_map, GoTerms}},
     AppState
 };
 
@@ -33,14 +33,14 @@ async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters { input, equate_il, extra, domains }: Parameters
 ) -> Result<Vec<GoInformation>, ()> {
-    let result = index.analyse(&input, equate_il).result;
+    let result = index.analyse(&input, equate_il);
 
     let go_store = datastore.go_store();
 
     Ok(result
         .into_iter()
         .filter_map(|item| {
-            let fa = item.fa?;
+            let fa = calculate_fa(&item.proteins);
 
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let gos = go_terms_from_map(&fa.data, go_store, extra, domains);

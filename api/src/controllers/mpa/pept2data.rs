@@ -1,12 +1,10 @@
 use axum::{extract::State, Json};
-use index::FunctionalAggregation;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{generate_handlers, mpa::default_equate_il},
     helpers::{
-        lca_helper::calculate_lca,
-        lineage_helper::{get_lineage_array, LineageVersion}
+        fa_helper::{calculate_fa, FunctionalAggregation}, lca_helper::calculate_lca, lineage_helper::{get_lineage_array, LineageVersion}
     },
     AppState
 };
@@ -24,7 +22,7 @@ pub struct DataItem {
     sequence: String,
     lca: Option<u32>,
     lineage: Vec<Option<i32>>,
-    fa: Option<FunctionalAggregation>
+    fa: FunctionalAggregation
 }
 
 #[derive(Serialize)]
@@ -42,7 +40,7 @@ async fn handler(
 
     peptides.sort();
     peptides.dedup();
-    let result = index.analyse(&peptides, equate_il).result;
+    let result = index.analyse(&peptides, equate_il);
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
@@ -52,7 +50,7 @@ async fn handler(
             .into_iter()
             .map(|item| {
                 let lca = calculate_lca(
-                    item.taxa.iter().map(|&taxon_id| taxon_id as u32).collect(),
+                    item.proteins.iter().map(|protein| protein.taxon).collect(),
                     LineageVersion::V2,
                     taxon_store,
                     lineage_store
@@ -63,7 +61,7 @@ async fn handler(
                     sequence: item.sequence,
                     lca: Some(lca as u32),
                     lineage,
-                    fa: item.fa
+                    fa: calculate_fa(&item.proteins)
                 }
             })
             .collect()

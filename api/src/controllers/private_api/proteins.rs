@@ -51,21 +51,21 @@ async fn handler(
 ) -> Result<ProteinInformation, ApiError> {
     let connection = database.get_conn().await?;
 
-    let result = index.analyse(&vec![peptide], equate_il).result;
+    let result = index.analyse(&vec![peptide], equate_il);
 
     if result.is_empty() {
         return Ok(ProteinInformation::default());
     }
 
     let accession_numbers: Vec<String> =
-        result.iter().flat_map(|item| item.uniprot_accession_numbers.clone()).collect();
+        result[0].proteins.iter().map(|protein| protein.uniprot_accession.clone()).collect();
 
     let accessions_map = connection.interact(move |conn| get_accessions_map(conn, &accession_numbers)).await??;
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
-    let taxa = result[0].taxa.iter().map(|&taxon_id| taxon_id as u32).collect::<Vec<u32>>();
+    let taxa = result[0].proteins.iter().map(|protein| protein.taxon).collect();
     let lca = calculate_lca(taxa, LineageVersion::V2, taxon_store, lineage_store);
 
     let common_lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store)
@@ -77,10 +77,10 @@ async fn handler(
         lca,
         common_lineage,
         proteins: result[0]
-            .uniprot_accession_numbers
+            .proteins
             .iter()
-            .filter_map(|accession| {
-                let uniprot_entry = accessions_map.get(accession)?;
+            .filter_map(|protein| {
+                let uniprot_entry = accessions_map.get(&protein.uniprot_accession)?;
 
                 let fa: Vec<&str> = uniprot_entry.fa.split(';').collect();
                 let ec_numbers =
@@ -94,7 +94,7 @@ async fn handler(
                     .collect::<Vec<String>>();
 
                 Some(Protein {
-                    uniprot_accession_id: accession.clone(),
+                    uniprot_accession_id: protein.uniprot_accession.clone(),
                     name: uniprot_entry.name.clone(),
                     organism: uniprot_entry.taxon_id,
                     ec_numbers,

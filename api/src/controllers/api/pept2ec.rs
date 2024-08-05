@@ -6,7 +6,7 @@ use crate::{
         api::{default_equate_il, default_extra},
         generate_handlers
     },
-    helpers::ec_helper::{ec_numbers_from_map, EcNumber},
+    helpers::{ec_helper::{ec_numbers_from_map, EcNumber}, fa_helper::calculate_fa},
     AppState
 };
 
@@ -31,14 +31,14 @@ async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters { input, equate_il, extra }: Parameters
 ) -> Result<Vec<EcInformation>, ()> {
-    let result = index.analyse(&input, equate_il).result;
+    let result = index.analyse(&input, equate_il);
 
     let ec_store = datastore.ec_store();
 
     Ok(result
         .into_iter()
         .filter_map(|item| {
-            let fa = item.fa?;
+            let fa = calculate_fa(&item.proteins);
 
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);

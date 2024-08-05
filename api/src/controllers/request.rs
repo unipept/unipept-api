@@ -88,11 +88,8 @@ where
     type Rejection = Response;
 
     async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
-        eprintln!("{:?}", req.headers());
         let content_type_header = req.headers().get(CONTENT_TYPE);
         let content_type = content_type_header.and_then(|value| value.to_str().ok());
-
-        eprintln!("{:?}", content_type_header);
 
         if let Some(content_type) = content_type {
             if content_type.starts_with("application/json") {

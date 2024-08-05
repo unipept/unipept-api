@@ -47,13 +47,14 @@ async fn handler(
         peptides: result
             .into_iter()
             .filter_map(|item| {
-                let item_taxa = item.proteins.iter().map(|protein| protein.taxon).collect::<HashSet<u32>>();
-                let mut intersection = item_taxa.intersection(&taxa_set);
+                let item_taxa: HashSet<u32> = item.proteins.iter().map(|protein| protein.taxon).collect();
+                let intersection: Vec<u32> = item_taxa.intersection(&taxa_set).cloned().collect();
 
-                // Skip if no intersection
-                intersection.next()?;
+                if intersection.is_empty() {
+                    return None;
+                }
 
-                Some(FilteredDataItem { sequence: item.sequence, taxa: intersection.cloned().collect(), fa: calculate_fa(&item.proteins) })
+                Some(FilteredDataItem { sequence: item.sequence, taxa: intersection, fa: calculate_fa(&item.proteins) })
             })
             .collect()
     })

@@ -4,7 +4,12 @@ use super::lineage_helper::{
     get_amount_of_ranks, get_genus_index, get_lineage_array, get_species_index, LineageVersion
 };
 
-pub fn calculate_lca(taxa: Vec<u32>, version: LineageVersion, taxon_store: &TaxonStore, lineage_store: &LineageStore) -> i32 {
+pub fn calculate_lca(
+    taxa: Vec<u32>,
+    version: LineageVersion,
+    taxon_store: &TaxonStore,
+    lineage_store: &LineageStore
+) -> i32 {
     let mut lca = 1;
 
     let cleaned_taxa: Vec<u32> = taxa.into_iter().filter(|&taxon_id| taxon_store.is_valid(taxon_id)).collect();

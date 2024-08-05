@@ -52,8 +52,10 @@ async fn handler(
 
     let result = index.analyse(&input, equate_il);
 
-    let accession_numbers: Vec<String> =
-        result.iter().flat_map(|item| item.proteins.iter().map(|protein| protein.uniprot_accession.clone())).collect();
+    let accession_numbers: Vec<String> = result
+        .iter()
+        .flat_map(|item| item.proteins.iter().map(|protein| protein.uniprot_accession.clone()))
+        .collect();
 
     let accessions_map = connection.interact(move |conn| get_accessions_map(conn, &accession_numbers)).await??;
 

@@ -6,7 +6,10 @@ use crate::{
         api::{default_domains, default_equate_il, default_extra},
         generate_handlers
     },
-    helpers::{fa_helper::calculate_fa, go_helper::{go_terms_from_map, GoTerms}},
+    helpers::{
+        fa_helper::calculate_fa,
+        go_helper::{go_terms_from_map, GoTerms}
+    },
     AppState
 };
 

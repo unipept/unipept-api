@@ -56,24 +56,26 @@ async fn handler(
     Ok(result
         .into_iter()
         .flat_map(|item| {
-            item.proteins.iter().map(|protein| protein.taxon).collect::<HashSet<u32>>().into_iter().filter_map(move |taxon| {
-                let (name, rank, _) = taxon_store.get(taxon)?;
-                let lineage = match (extra, names) {
-                    (true, true) => get_lineage_with_names(taxon, version, lineage_store, taxon_store),
-                    (true, false) => get_lineage(taxon, version, lineage_store),
-                    (false, _) => None
-                };
+            item.proteins.iter().map(|protein| protein.taxon).collect::<HashSet<u32>>().into_iter().filter_map(
+                move |taxon| {
+                    let (name, rank, _) = taxon_store.get(taxon)?;
+                    let lineage = match (extra, names) {
+                        (true, true) => get_lineage_with_names(taxon, version, lineage_store, taxon_store),
+                        (true, false) => get_lineage(taxon, version, lineage_store),
+                        (false, _) => None
+                    };
 
-                Some(TaxaInformation {
-                    peptide: item.sequence.clone(),
-                    taxon: Taxon {
-                        taxon_id: taxon,
-                        taxon_name: name.to_string(),
-                        taxon_rank: rank.clone().into()
-                    },
-                    lineage
-                })
-            })
+                    Some(TaxaInformation {
+                        peptide: item.sequence.clone(),
+                        taxon: Taxon {
+                            taxon_id: taxon,
+                            taxon_name: name.to_string(),
+                            taxon_rank: rank.clone().into()
+                        },
+                        lineage
+                    })
+                }
+            )
         })
         .collect())
 }

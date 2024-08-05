@@ -4,7 +4,9 @@ use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    controllers::{generate_handlers, mpa::default_equate_il}, helpers::fa_helper::{calculate_fa, FunctionalAggregation}, AppState
+    controllers::{generate_handlers, mpa::default_equate_il},
+    helpers::fa_helper::{calculate_fa, FunctionalAggregation},
+    AppState
 };
 
 #[derive(Deserialize)]
@@ -54,7 +56,11 @@ async fn handler(
                     return None;
                 }
 
-                Some(FilteredDataItem { sequence: item.sequence, taxa: intersection, fa: calculate_fa(&item.proteins) })
+                Some(FilteredDataItem {
+                    sequence: item.sequence,
+                    taxa: intersection,
+                    fa: calculate_fa(&item.proteins)
+                })
             })
             .collect()
     })

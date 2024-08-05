@@ -7,7 +7,12 @@ use crate::{
         generate_handlers
     },
     helpers::{
-        ec_helper::{ec_numbers_from_map, EcNumber}, fa_helper::calculate_fa, go_helper::{go_terms_from_map, GoTerms}, interpro_helper::{interpro_entries_from_map, InterproEntries}, lca_helper::calculate_lca, lineage_helper::{
+        ec_helper::{ec_numbers_from_map, EcNumber},
+        fa_helper::calculate_fa,
+        go_helper::{go_terms_from_map, GoTerms},
+        interpro_helper::{interpro_entries_from_map, InterproEntries},
+        lca_helper::calculate_lca,
+        lineage_helper::{
             get_lineage, get_lineage_with_names, Lineage,
             LineageVersion::{self, *}
         }
@@ -72,8 +77,12 @@ async fn handler(
             let gos = go_terms_from_map(&fa.data, go_store, extra, domains);
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
 
-            let lca =
-                calculate_lca(item.proteins.iter().map(|protein| protein.taxon).collect(), version, taxon_store, lineage_store);
+            let lca = calculate_lca(
+                item.proteins.iter().map(|protein| protein.taxon).collect(),
+                version,
+                taxon_store,
+                lineage_store
+            );
             let (name, rank, _) = taxon_store.get(lca as u32)?;
             let lineage = match (extra, names) {
                 (true, true) => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),

@@ -8,8 +8,8 @@ use tokio::net::TcpListener;
 pub mod controllers;
 pub mod errors;
 pub mod helpers;
-pub mod routes;
 pub mod middleware;
+pub mod routes;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -18,30 +18,35 @@ pub struct AppState {
     pub index: Arc<Index>
 }
 
-pub async fn start(index_location: &str) -> Result<(), errors::AppError> {
-    let sampledata = format!("{}/datastore/sampledata.json", index_location);
-    let ec_numbers = format!("{}/datastore/ec_numbers.tsv", index_location);
-    let go_terms = format!("{}/datastore/go_terms.tsv", index_location);
-    let interpro_entries = format!("{}/datastore/interpro_entries.tsv", index_location);
-    let lineages = format!("{}/datastore/lineages.tsv", index_location);
-    let taxons = format!("{}/datastore/taxons.tsv", index_location);
+pub async fn start(
+    index_location: &str,
+    datastore_location: &str,
+    database_address: &str
+) -> Result<(), errors::AppError> {
+    let version = format!("{}/.version", datastore_location);
+    let sampledata = format!("{}/sampledata.json", datastore_location);
+    let ec_numbers = format!("{}/ec_numbers.tsv", datastore_location);
+    let go_terms = format!("{}/go_terms.tsv", datastore_location);
+    let interpro_entries = format!("{}/interpro_entries.tsv", datastore_location);
+    let lineages = format!("{}/lineages.tsv", datastore_location);
+    let taxons = format!("{}/taxons.tsv", datastore_location);
 
     let sa = format!("{}/sa.bin", index_location);
     let proteins = format!("{}/proteins.tsv", index_location);
 
-    let database = Database::try_from_url("mysql://unipept:unipept@127.0.0.1:3306/unipept")?;
+    let database = Database::try_from_url(database_address)?;
 
     let datastore = DataStore::try_from_files(
-        "2024.03",
-        sampledata.as_str(),
-        ec_numbers.as_str(),
-        go_terms.as_str(),
-        interpro_entries.as_str(),
-        lineages.as_str(),
-        taxons.as_str()
+        &version,
+        &sampledata,
+        &ec_numbers,
+        &go_terms,
+        &interpro_entries,
+        &lineages,
+        &taxons
     )?;
 
-    let index = Index::try_from_files(sa.as_str(), proteins.as_str())?;
+    let index = Index::try_from_files(&sa, &proteins)?;
 
     let app_state = AppState {
         datastore: Arc::new(datastore),

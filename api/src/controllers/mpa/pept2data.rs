@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     controllers::{generate_handlers, mpa::default_equate_il},
     helpers::{
-        fa_helper::{calculate_fa, FunctionalAggregation}, lca_helper::calculate_lca, lineage_helper::{get_lineage_array, LineageVersion}
+        fa_helper::{calculate_fa, FunctionalAggregation},
+        lca_helper::calculate_lca,
+        lineage_helper::{get_lineage_array, LineageVersion}
     },
     AppState
 };

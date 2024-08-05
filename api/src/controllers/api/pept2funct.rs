@@ -7,7 +7,10 @@ use crate::{
         generate_handlers
     },
     helpers::{
-        ec_helper::{ec_numbers_from_map, EcNumber}, fa_helper::calculate_fa, go_helper::{go_terms_from_map, GoTerms}, interpro_helper::{interpro_entries_from_map, InterproEntries}
+        ec_helper::{ec_numbers_from_map, EcNumber},
+        fa_helper::calculate_fa,
+        go_helper::{go_terms_from_map, GoTerms},
+        interpro_helper::{interpro_entries_from_map, InterproEntries}
     },
     AppState
 };

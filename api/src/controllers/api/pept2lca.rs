@@ -57,8 +57,12 @@ async fn handler(
     Ok(result
         .into_iter()
         .filter_map(|item| {
-            let lca =
-                calculate_lca(item.proteins.iter().map(|protein| protein.taxon).collect(), version, taxon_store, lineage_store);
+            let lca = calculate_lca(
+                item.proteins.iter().map(|protein| protein.taxon).collect(),
+                version,
+                taxon_store,
+                lineage_store
+            );
 
             let (name, rank, _) = taxon_store.get(lca as u32)?;
             let lineage = match (extra, names) {

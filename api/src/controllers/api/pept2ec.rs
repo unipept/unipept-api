@@ -6,7 +6,10 @@ use crate::{
         api::{default_equate_il, default_extra},
         generate_handlers
     },
-    helpers::{ec_helper::{ec_numbers_from_map, EcNumber}, fa_helper::calculate_fa},
+    helpers::{
+        ec_helper::{ec_numbers_from_map, EcNumber},
+        fa_helper::calculate_fa
+    },
     AppState
 };
 

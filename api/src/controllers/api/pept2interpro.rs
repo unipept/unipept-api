@@ -6,7 +6,10 @@ use crate::{
         api::{default_domains, default_equate_il, default_extra},
         generate_handlers
     },
-    helpers::{fa_helper::calculate_fa, interpro_helper::{interpro_entries_from_map, InterproEntries}},
+    helpers::{
+        fa_helper::calculate_fa,
+        interpro_helper::{interpro_entries_from_map, InterproEntries}
+    },
     AppState
 };
 

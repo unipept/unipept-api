@@ -54,14 +54,13 @@ impl TaxonStore {
 
             let parts: Vec<&str> = line.trim_end().split('\t').collect();
             if parts.len() == 5 {
-                mapper.insert(parts[0].parse()?, (
-                    parts[1].to_string(), 
-                    parts[2].parse::<LineageRank>()?,
-                    match parts[4] {
+                mapper.insert(
+                    parts[0].parse()?,
+                    (parts[1].to_string(), parts[2].parse::<LineageRank>()?, match parts[4] {
                         "\x01" => true,
                         _ => false
-                    }
-                ));
+                    })
+                );
             }
         }
 

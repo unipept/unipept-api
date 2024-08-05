@@ -9,7 +9,7 @@ pub struct FunctionalAggregation {
     /// A HashMap representing how many GO, EC and IPR terms were found
     pub counts: HashMap<String, usize>,
     /// A HashMap representing how often a certain functional annotation was found
-    pub data:   HashMap<String, u32>
+    pub data: HashMap<String, u32>
 }
 
 pub fn calculate_fa(proteins: &[ProteinInfo]) -> FunctionalAggregation {
@@ -42,9 +42,7 @@ pub fn calculate_fa(proteins: &[ProteinInfo]) -> FunctionalAggregation {
                 _ => {}
             };
 
-            data.entry(annotation.to_string())
-                .and_modify(|c| *c += 1)
-                .or_insert(1);
+            data.entry(annotation.to_string()).and_modify(|c| *c += 1).or_insert(1);
         }
     }
 
@@ -56,8 +54,5 @@ pub fn calculate_fa(proteins: &[ProteinInfo]) -> FunctionalAggregation {
 
     data.remove("");
 
-    FunctionalAggregation {
-        counts,
-        data
-    }
+    FunctionalAggregation { counts, data }
 }

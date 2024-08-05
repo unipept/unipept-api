@@ -1,6 +1,4 @@
-use axum::{
-    extract::DefaultBodyLimit, routing::get, Router
-};
+use axum::{extract::DefaultBodyLimit, routing::get, Router};
 use tower::ServiceBuilder;
 use tower_http::limit::RequestBodyLimitLayer;
 
@@ -13,12 +11,17 @@ use crate::{
         datasets::sampledata,
         mpa::{pept2data, pept2filtered},
         private_api::{ecnumbers, goterms, interpros, metadata, proteins, taxa}
-    }, middleware::{cors::create_cors_layer, tracing::{create_tracing_layer, init_tracing_subscriber}}, AppState
+    },
+    middleware::{
+        cors::create_cors_layer,
+        tracing::{create_tracing_layer, init_tracing_subscriber}
+    },
+    AppState
 };
 
 pub fn create_router(state: AppState) -> Router {
     init_tracing_subscriber();
-    
+
     Router::new()
         .route("/", get(|| async { "Unipept API server" }))
         .nest("/api", create_api_routes())

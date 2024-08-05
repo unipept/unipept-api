@@ -21,7 +21,8 @@ pub struct AppState {
 pub async fn start(
     index_location: &str,
     datastore_location: &str,
-    database_address: &str
+    database_address: &str,
+    port: u32
 ) -> Result<(), errors::AppError> {
     let version = format!("{}/.version", datastore_location);
     let sampledata = format!("{}/sampledata.json", datastore_location);
@@ -56,7 +57,7 @@ pub async fn start(
 
     let router = routes::create_router(app_state);
 
-    let listener = TcpListener::bind("0.0.0.0:4000").await?;
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
 
     eprintln!("Server running on: http://{}", listener.local_addr()?);
 

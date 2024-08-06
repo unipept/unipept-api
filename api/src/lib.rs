@@ -19,7 +19,8 @@ pub struct AppState {
 }
 
 pub async fn start(index_location: &str, database_address: &str, port: u32) -> Result<(), errors::AppError> {
-    let version = format!("{}/datastore/.version", index_location);
+    let version = format!("{}/.version", index_location);
+
     let sampledata = format!("{}/datastore/sampledata.json", index_location);
     let ec_numbers = format!("{}/datastore/ec_numbers.tsv", index_location);
     let go_terms = format!("{}/datastore/go_terms.tsv", index_location);

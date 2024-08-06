@@ -8,7 +8,7 @@ pub struct Arguments {
     #[arg(short, long)]
     database_address: String,
     #[arg(short, long)]
-    port: u32,
+    port: u32
 }
 
 #[tokio::main]

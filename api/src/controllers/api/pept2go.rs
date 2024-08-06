@@ -42,13 +42,13 @@ async fn handler(
 
     Ok(result
         .into_iter()
-        .filter_map(|item| {
+        .map(|item| {
             let fa = calculate_fa(&item.proteins);
 
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let gos = go_terms_from_map(&fa.data, go_store, extra, domains);
 
-            Some(GoInformation { peptide: item.sequence, total_protein_count, go: gos })
+            GoInformation { peptide: item.sequence, total_protein_count, go: gos }
         })
         .collect())
 }

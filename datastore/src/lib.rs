@@ -26,7 +26,7 @@ pub struct DataStore {
 
 impl DataStore {
     pub fn try_from_files(
-        version: &str,
+        version_file: &str,
         sample_file: &str,
         ec_file: &str,
         go_file: &str,
@@ -35,7 +35,7 @@ impl DataStore {
         taxon_file: &str
     ) -> Result<Self, DataStoreError> {
         Ok(Self {
-            version: version.to_string(),
+            version: std::fs::read_to_string(version_file)?,
             sample_store: SampleStore::try_from_file(sample_file)?,
             ec_store: EcStore::try_from_file(ec_file)?,
             go_store: GoStore::try_from_file(go_file)?,

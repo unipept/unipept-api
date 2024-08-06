@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum DataStoreError {
+    #[error("{0}")]
+    IoError(#[from] std::io::Error),
     #[error("Sample store error: {0}")]
     SampleStoreError(#[from] SampleStoreError),
     #[error("Ec store error: {0}")]

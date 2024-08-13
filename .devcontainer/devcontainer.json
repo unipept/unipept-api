@@ -1,0 +1,26 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/anaconda
+{
+  "name": "Unipept Devcontainers",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+
+  // Features to add to the dev container. More info: https://containers.dev/features.
+  "features": {
+    "https://github.com/unipept/unipept-devcontainers/releases/download/v1.0.0/devcontainer-feature-unipept-index.tgz": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/rust:1": {}
+  },
+
+  // Use 'forwardPorts' to make a list of ports inside the container available locally.
+  // "forwardPorts": [],
+
+  // Use 'postCreateCommand' to run commands after the container is created.
+  "postCreateCommand": "apt update && apt install --yes libmysqlclient-dev",
+
+  // Configure tool-specific properties.
+  // "customizations": {},
+
+  // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+  // "remoteUser": "root"
+}

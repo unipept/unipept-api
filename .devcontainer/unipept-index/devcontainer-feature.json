@@ -1,0 +1,14 @@
+{
+  "id": "unipept-index",
+  "version": "1.0.0",
+  "name": "Unipept Index Downloader",
+  "description": "Downloads and extracts a specific version of the unipept index.",
+  "options": {
+    "version": {
+      "type": "string",
+      "description": "Version to download. Use 'latest' for the most recent release or specify a date in YYYY-MM-DD format.",
+      "default": "latest"
+    }
+  },
+  "install": "install.sh"
+}

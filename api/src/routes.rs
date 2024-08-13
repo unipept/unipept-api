@@ -15,7 +15,6 @@ use crate::{
     middleware::{
         cors::create_cors_layer,
         tracing::{create_tracing_layer, init_tracing_subscriber},
-        normalize_urls::create_normalize_uri_layer
     },
     AppState
 };
@@ -36,9 +35,7 @@ pub fn create_router(state: AppState) -> Router {
                 .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024))
                 .layer(create_tracing_layer())
                 .layer(create_cors_layer())
-                .layer(create)
         )
-        .layer(create_normalize_uri_layer());
         .with_state(state)
 }
 

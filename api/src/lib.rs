@@ -1,9 +1,18 @@
 use std::sync::Arc;
-
+use axum::http::{StatusCode, Uri};
+use axum::response::IntoResponse;
 use database::Database;
 use datastore::DataStore;
 use index::Index;
 use tokio::net::TcpListener;
+use tower::Layer;
+use axum::{
+    Router,
+    ServiceExt, // for `into_make_service`
+    response::Response,
+    middleware::Next,
+    extract::Request,
+};
 
 pub mod controllers;
 pub mod errors;
@@ -17,7 +26,6 @@ pub struct AppState {
     pub database: Arc<Database>,
     pub index: Arc<Index>
 }
-
 pub async fn start(index_location: &str, database_address: &str, port: u32) -> Result<(), errors::AppError> {
     let version = format!("{}/.version", index_location);
 
@@ -52,12 +60,13 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
     };
 
     let router = routes::create_router(app_state);
+    let app = middleware::normalize_path::NormalizePathLayer::normalize_uris().layer(router);
 
-    let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
 
     eprintln!("Server running on: http://{}", listener.local_addr()?);
 
-    axum::serve(listener, router).await?;
+    axum::serve(listener, ServiceExt::<Request>::into_make_service(app)).await?;
 
     Ok(())
 }

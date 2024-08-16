@@ -34,8 +34,9 @@ impl DataStore {
         lineage_file: &str,
         taxon_file: &str
     ) -> Result<Self, DataStoreError> {
+        let version = std::fs::read_to_string(version_file)?;
         Ok(Self {
-            version: std::fs::read_to_string(version_file)?,
+            version: version.trim_end().to_string(),
             sample_store: SampleStore::try_from_file(sample_file)?,
             ec_store: EcStore::try_from_file(ec_file)?,
             go_store: GoStore::try_from_file(go_file)?,

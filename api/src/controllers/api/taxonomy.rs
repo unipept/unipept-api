@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_extra, default_names},
+        api::{default_extra, default_names, default_descendants, default_descendants_rank},
         generate_handlers
     },
     helpers::lineage_helper::{
@@ -20,7 +20,11 @@ pub struct Parameters {
     #[serde(default = "default_extra")]
     extra: bool,
     #[serde(default = "default_names")]
-    names: bool
+    names: bool,
+    #[serde(default = "default_descendants")]
+    descendants: bool,
+    #[serde(default = "default_descendants_rank")]
+    descendants_rank: String
 }
 
 #[derive(Serialize)]
@@ -40,7 +44,7 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
-    Parameters { input, extra, names }: Parameters,
+    Parameters { input, extra, names, descendants, descendants_rank }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<TaxaInformation>, ()> {
     if input.is_empty() {
@@ -60,6 +64,15 @@ async fn handler(
                 (false, _) => None
             };
 
+            // If the user would like to get all the descendants of the given taxon, we'll try to
+            // retrieve these here. These descendants are just a list of taxon IDs.
+            let mut child_ids: Option<Vec<u32>> = None;
+            if (descendants) {
+                let mut child_vec: Vec<u32> = Vec::new();
+                let k = 7;
+            }
+
+
             Some(TaxaInformation {
                 taxon: Taxon {
                     taxon_id,
@@ -72,7 +85,7 @@ async fn handler(
         .collect())
 }
 
-generate_handlers! (
+generate_handlers!(
     [ V1, V2 ]
     async fn json_handler(
         state => State<AppState>,

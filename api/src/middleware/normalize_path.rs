@@ -90,6 +90,8 @@ where
 }
 
 fn normalize_uris(uri: &mut Uri) {
+    println!("{}", uri);
+
     // Normalize the path by removing consecutive slashes
     let normalized_path = uri
         .path()
@@ -104,6 +106,12 @@ fn normalize_uris(uri: &mut Uri) {
             .path_and_query("/")
             .build()
             .unwrap()
+    } else if let Some(path) = uri.query() {
+        Uri::builder()
+            .path_and_query(format!("/{}?{}", normalized_path, path))
+            .build()
+            .unwrap()
+
     } else {
         Uri::builder()
             .path_and_query(format!("/{}", normalized_path))

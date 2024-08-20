@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 use datastore::LineageStore;
@@ -74,15 +75,15 @@ async fn handler(
                     let lineages_at_rank = lineage_store.get_lineages_at_rank(rank.to_string().to_lowercase().as_str(), taxon_id);
                     match lineages_at_rank {
                         Some(lins) => {
-                            let mut children_at_rank: Vec<u32> = Vec::new();
+                            let mut children_at_rank: HashSet<u32> = HashSet::new();
                             for lin in lins {
                                 let taxon_id_at_rank = lin.get_taxon_id_at_rank(descendants_rank.to_lowercase().as_str());
                                 match taxon_id_at_rank {
-                                    Some(tax) => children_at_rank.push(tax.abs() as u32),
+                                    Some(tax) => { children_at_rank.insert(tax.abs() as u32); },
                                     None => {}
                                 }
                             }
-                            Some(children_at_rank)
+                            Some(Vec::from_iter(children_at_rank))
                         },
                         None => None
                     }

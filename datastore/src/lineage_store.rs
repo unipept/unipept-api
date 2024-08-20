@@ -40,15 +40,23 @@ pub struct Lineage {
     pub forma: Option<i32>
 }
 
-pub struct LineageStore {
-    pub mapper: HashMap<u32, Lineage>
+pub struct LineageStore<'a> {
+    pub mapper: HashMap<u32, Lineage>,
+    pub index_references: Vec<HashMap<u32, &'a Lineage>>
 }
 
-impl LineageStore {
+impl<'a> LineageStore<'a> {
     pub fn try_from_file(file: &str) -> Result<Self, LineageStoreError> {
         let file = std::fs::File::open(file)?;
 
         let mut mapper = HashMap::new();
+
+        let mut index_references: Vec<HashMap<u32, &'a Lineage>> = Vec::new();
+
+        for i in 0..28 {
+            index_references.push(HashMap::new());
+        }
+
         for line in BufReader::new(file).lines() {
             let line = line?;
             let mut splitted_line = line.split('\t');
@@ -58,7 +66,7 @@ impl LineageStore {
                 splitted_line.map(|x| if x == "\\N" { None } else { Some(x.parse::<i32>().unwrap()) }).collect();
 
             if parts.len() == 27 {
-                mapper.insert(taxon_id, Lineage {
+                let lin = Lineage {
                     superkingdom: parts[0],
                     kingdom: parts[1],
                     subkingdom: parts[2],
@@ -88,14 +96,28 @@ impl LineageStore {
                     strain: parts[24],
                     varietas: parts[25],
                     forma: parts[26]
-                });
+                };
+
+                mapper.insert(taxon_id, lin);
             }
         }
 
-        Ok(Self { mapper })
+        for (taxon_id, lin) in &mapper {
+            index_references.get_mut(0).unwrap().insert(lin.superkingdom.unwrap().abs() as u32, lin);
+        }
+
+        println!("Amount of lineages in database: {}", mapper.len());
+
+        Ok(Self { mapper, index_references })
     }
 
     pub fn get(&self, key: u32) -> Option<&Lineage> {
-        self.mapper.get(&key)
+        let result = self.mapper.get(&key);
+        // We need to automatically dereference the value lin here to avoid having to return a
+        // double reference.
+        match result {
+            Some(lin) => Some(lin),
+            None => None
+        }
     }
 }

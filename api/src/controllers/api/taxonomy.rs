@@ -64,10 +64,23 @@ async fn handler(
                 (false, _) => None
             };
 
+            match (lineage) {
+                Some(ref l) => {
+                    println!("{:?}", l);
+                },
+                None => {
+                    println!("No lineage found...");
+                }
+            }
+
+
             // If the user would like to get all the descendants of the given taxon, we'll try to
             // retrieve these here. These descendants are just a list of taxon IDs.
             let mut child_ids: Option<Vec<u32>> = None;
             if (descendants) {
+                // First, we check at which rank ID the provided input taxon is situated
+
+
                 let mut child_vec: Vec<u32> = Vec::new();
                 let k = 7;
             }

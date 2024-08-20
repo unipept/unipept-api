@@ -7,14 +7,14 @@ use serde::Serialize;
 macro_rules! create_lineages {
     ($($field:ident),*) => {
         paste! {
-            #[derive(Serialize, Default)]
+            #[derive(Serialize, Default, Debug)]
             pub struct Lineage {
                 $(
                     [<$field _id>]: Option<i32>,
                 )*
             }
 
-            #[derive(Serialize, Default)]
+            #[derive(Serialize, Default, Debug)]
             pub struct LineageWithNames {
                 $(
                     [<$field _id>]: Option<i32>,
@@ -72,7 +72,7 @@ pub enum LineageVersion {
     V2
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[serde(untagged)]
 pub enum Lineage {
     DefaultV1(v1::Lineage),

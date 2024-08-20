@@ -8,7 +8,7 @@ use crate::errors::TaxonStoreError;
 
 pub type TaxonInformation = (String, LineageRank, bool);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LineageRank {
     NoRank,
     Superkindom,

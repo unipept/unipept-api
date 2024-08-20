@@ -42,14 +42,16 @@ pub struct Lineage {
 }
 
 pub struct LineageStore {
+    // Keep track of all lineages (id -> lineage)
     pub mapper: HashMap<u32, Arc<Lineage>>,
-    pub index_references: Vec<HashMap<u32, Arc<Lineage>>>
+    // Make it possible to retrieve a Lineage based upon the values in one of its columns.
+    pub index_references: Vec<HashMap<u32, Vec<Arc<Lineage>>>>
 }
 
 impl LineageStore {
     const AMOUNT_OF_RANKS: usize = 26;
 
-    fn rank_to_idx(s: &str) -> Option<u32> {
+    pub fn rank_to_idx(s: &str) -> Option<usize> {
         match s {
             "superkingdom" => Some(0),
             "kingdom" => Some(1),
@@ -87,7 +89,7 @@ impl LineageStore {
 
         let mut mapper = HashMap::new();
 
-        let mut index_references: Vec<HashMap<u32, Arc<Lineage>>> = Vec::new();
+        let mut index_references: Vec<HashMap<u32, Vec<Arc<Lineage>>>> = Vec::new();
 
         for _ in 0..LineageStore::AMOUNT_OF_RANKS {
             index_references.push(HashMap::new());
@@ -140,7 +142,12 @@ impl LineageStore {
                     match parts[i] {
                         Some(id) => {
                             let mut rank_map = index_references.get_mut(i).unwrap();
-                            rank_map.insert(id.abs() as u32, Arc::clone(&lin));
+                            let id: u32 = id.abs() as u32;
+                            if !rank_map.contains_key(&id) {
+                                rank_map.insert(id, Vec::new());
+                            }
+                            let mut vec = rank_map.get_mut(&id).unwrap();
+                            vec.push(Arc::clone(&lin));
                         },
                         _ => {}
                     }
@@ -148,8 +155,6 @@ impl LineageStore {
 
             }
         }
-
-        println!("Amount of lineages in database: {}", mapper.len());
 
         Ok(Self { mapper, index_references })
     }
@@ -161,6 +166,19 @@ impl LineageStore {
         match result {
             Some(lin) => Some(lin),
             None => None
+        }
+    }
+
+    pub fn get_lineages_at_rank(&self, rank: &str, taxon_id: u32) -> Option<&Vec<Arc<Lineage>>> {
+        let rank_idx = LineageStore::rank_to_idx(rank);
+        match rank_idx {
+            Some(idx) => {
+                let map= self.index_references.get(idx)?;
+                map.get(&taxon_id)
+            },
+            None => {
+                None
+            }
         }
     }
 }

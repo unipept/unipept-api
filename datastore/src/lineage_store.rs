@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
-    io::{BufRead, BufReader}
+    io::{BufRead, BufReader},
+    sync::Arc
 };
 
 use serde::Serialize;
@@ -40,20 +41,55 @@ pub struct Lineage {
     pub forma: Option<i32>
 }
 
-pub struct LineageStore<'a> {
-    pub mapper: HashMap<u32, Lineage>,
-    pub index_references: Vec<HashMap<u32, &'a Lineage>>
+pub struct LineageStore {
+    pub mapper: HashMap<u32, Arc<Lineage>>,
+    pub index_references: Vec<HashMap<u32, Arc<Lineage>>>
 }
 
-impl<'a> LineageStore<'a> {
+impl LineageStore {
+    const AMOUNT_OF_RANKS: usize = 26;
+
+    fn rank_to_idx(s: &str) -> Option<u32> {
+        match s {
+            "superkingdom" => Some(0),
+            "kingdom" => Some(1),
+            "subkingdom" => Some(2),
+            "superphylum" => Some(3),
+            "phylum" => Some(4),
+            "subphylum" => Some(5),
+            "superclass" => Some(6),
+            "class" => Some(7),
+            "subclass" => Some(8),
+            "superorder" => Some(9),
+            "order" => Some(10),
+            "suborder" => Some(11),
+            "infraorder" => Some(12),
+            "superfamily" => Some(13),
+            "family" => Some(14),
+            "subfamily" => Some(15),
+            "tribe" => Some(16),
+            "subtribe" => Some(17),
+            "genus" => Some(18),
+            "subgenus" => Some(19),
+            "species_group" => Some(20),
+            "species_subgroup" => Some(21),
+            "species" => Some(22),
+            "subspecies" => Some(23),
+            "strain" => Some(24),
+            "varietas" => Some(25),
+            "forma" => Some(26),
+            _ => None,
+        }
+    }
+
     pub fn try_from_file(file: &str) -> Result<Self, LineageStoreError> {
         let file = std::fs::File::open(file)?;
 
         let mut mapper = HashMap::new();
 
-        let mut index_references: Vec<HashMap<u32, &'a Lineage>> = Vec::new();
+        let mut index_references: Vec<HashMap<u32, Arc<Lineage>>> = Vec::new();
 
-        for i in 0..28 {
+        for _ in 0..LineageStore::AMOUNT_OF_RANKS {
             index_references.push(HashMap::new());
         }
 
@@ -66,7 +102,7 @@ impl<'a> LineageStore<'a> {
                 splitted_line.map(|x| if x == "\\N" { None } else { Some(x.parse::<i32>().unwrap()) }).collect();
 
             if parts.len() == 27 {
-                let lin = Lineage {
+                let lin = Arc::new(Lineage {
                     superkingdom: parts[0],
                     kingdom: parts[1],
                     subkingdom: parts[2],
@@ -96,14 +132,21 @@ impl<'a> LineageStore<'a> {
                     strain: parts[24],
                     varietas: parts[25],
                     forma: parts[26]
-                };
+                });
 
-                mapper.insert(taxon_id, lin);
+                mapper.insert(taxon_id, Arc::clone(&lin));
+
+                for i in 0..LineageStore::AMOUNT_OF_RANKS {
+                    match parts[i] {
+                        Some(id) => {
+                            let mut rank_map = index_references.get_mut(i).unwrap();
+                            rank_map.insert(id.abs() as u32, Arc::clone(&lin));
+                        },
+                        _ => {}
+                    }
+                }
+
             }
-        }
-
-        for (taxon_id, lin) in &mapper {
-            index_references.get_mut(0).unwrap().insert(lin.superkingdom.unwrap().abs() as u32, lin);
         }
 
         println!("Amount of lineages in database: {}", mapper.len());

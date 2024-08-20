@@ -14,17 +14,17 @@ pub use lineage_store::{Lineage, LineageStore};
 pub use sample_store::SampleStore;
 pub use taxon_store::{LineageRank, TaxonStore};
 
-pub struct DataStore<'a> {
+pub struct DataStore {
     version: String,
     sample_store: SampleStore,
     ec_store: EcStore,
     go_store: GoStore,
     interpro_store: InterproStore,
-    lineage_store: LineageStore<'a>,
+    lineage_store: LineageStore,
     taxon_store: TaxonStore
 }
 
-impl<'a> DataStore<'a> {
+impl DataStore {
     pub fn try_from_files(
         version_file: &str,
         sample_file: &str,

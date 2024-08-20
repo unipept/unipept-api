@@ -1,7 +1,8 @@
 use std::{
     collections::HashMap,
     io::{BufRead, BufReader},
-    str::FromStr
+    str::FromStr,
+    fmt
 };
 
 use crate::errors::TaxonStoreError;
@@ -39,6 +40,17 @@ pub enum LineageRank {
     Varietas,
     Forma
 }
+
+impl fmt::Display for LineageRank {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if *self == LineageRank::NoRank {
+            write!(f, "{:?}", "root")
+        } else {
+            write!(f, "{:?}", self)
+        }
+    }
+}
+
 
 pub struct TaxonStore {
     pub mapper: HashMap<u32, TaxonInformation>

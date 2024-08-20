@@ -41,6 +41,43 @@ pub struct Lineage {
     pub forma: Option<i32>
 }
 
+impl Lineage {
+    pub fn get_taxon_id_at_rank(&self, rank_name: &str) -> Option<i32> {
+        match rank_name {
+            "superkingdom" => self.superkingdom,
+            "kingdom" => self.kingdom,
+            "subkingdom" => self.subkingdom,
+            "superphylum" => self.superphylum,
+            "phylum" => self.phylum,
+            "subphylum" => self.subphylum,
+            "superclass" => self.superclass,
+            "class" => self.class,
+            "subclass" => self.subclass,
+            "infraclass" => self.infraclass,
+            "superorder" => self.superorder,
+            "order" => self.order,
+            "suborder" => self.suborder,
+            "infraorder" => self.infraorder,
+            "parvorder" => self.parvorder,
+            "superfamily" => self.superfamily,
+            "family" => self.family,
+            "subfamily" => self.subfamily,
+            "tribe" => self.tribe,
+            "subtribe" => self.subtribe,
+            "genus" => self.genus,
+            "subgenus" => self.subgenus,
+            "species_group" => self.species_group,
+            "species_subgroup" => self.species_subgroup,
+            "species" => self.species,
+            "subspecies" => self.subspecies,
+            "strain" => self.strain,
+            "varietas" => self.varietas,
+            "forma" => self.forma,
+            _ => None,
+        }
+    }
+}
+
 pub struct LineageStore {
     // Keep track of all lineages (id -> lineage)
     pub mapper: HashMap<u32, Arc<Lineage>>,
@@ -170,6 +207,7 @@ impl LineageStore {
     }
 
     pub fn get_lineages_at_rank(&self, rank: &str, taxon_id: u32) -> Option<&Vec<Arc<Lineage>>> {
+        println!("Rank is: {:?}", rank);
         let rank_idx = LineageStore::rank_to_idx(rank);
         match rank_idx {
             Some(idx) => {

@@ -1,6 +1,6 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
-
+use datastore::LineageStore;
 use crate::{
     controllers::{
         api::{default_extra, default_names, default_descendants, default_descendants_rank},
@@ -32,7 +32,9 @@ pub struct TaxaInformation {
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    lineage: Option<Lineage>
+    lineage: Option<Lineage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    children: Option<Vec<u32>>
 }
 
 #[derive(Serialize)]
@@ -64,27 +66,31 @@ async fn handler(
                 (false, _) => None
             };
 
-            match (lineage) {
-                Some(ref l) => {
-                    println!("{:?}", l);
-                },
-                None => {
-                    println!("No lineage found...");
-                }
-            }
-
 
             // If the user would like to get all the descendants of the given taxon, we'll try to
             // retrieve these here. These descendants are just a list of taxon IDs.
-            let mut child_ids: Option<Vec<u32>> = None;
-            if (descendants) {
-                // First, we check at which rank ID the provided input taxon is situated
+            let children: Option<Vec<u32>> = match descendants {
+                (true) => {
+                    let lineages_at_rank = lineage_store.get_lineages_at_rank(rank.to_string().to_lowercase().as_str(), taxon_id);
+                    match lineages_at_rank {
+                        Some(lins) => {
+                            let mut children_at_rank: Vec<u32> = Vec::new();
+                            for lin in lins {
+                                let taxon_id_at_rank = lin.get_taxon_id_at_rank(descendants_rank.to_lowercase().as_str());
+                                match taxon_id_at_rank {
+                                    Some(tax) => children_at_rank.push(tax.abs() as u32),
+                                    None => {}
+                                }
+                            }
+                            Some(children_at_rank)
+                        },
+                        None => None
+                    }
+                },
+                (false) => None
+            };
 
-
-                let mut child_vec: Vec<u32> = Vec::new();
-                let k = 7;
-            }
-
+            println!("{:?}", children);
 
             Some(TaxaInformation {
                 taxon: Taxon {
@@ -92,7 +98,8 @@ async fn handler(
                     taxon_name: name.to_string(),
                     taxon_rank: rank.clone().into()
                 },
-                lineage
+                lineage,
+                children
             })
         })
         .collect())

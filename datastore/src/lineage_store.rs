@@ -178,17 +178,14 @@ impl LineageStore {
                 mapper.insert(taxon_id, Arc::clone(&lin));
 
                 for i in 0..LineageStore::AMOUNT_OF_RANKS {
-                    match parts[i] {
-                        Some(id) => {
-                            let rank_map = index_references.get_mut(i).unwrap();
-                            let id: u32 = id.abs() as u32;
-                            if !rank_map.contains_key(&id) {
-                                rank_map.insert(id, Vec::new());
-                            }
-                            let vec = rank_map.get_mut(&id).unwrap();
-                            vec.push(Arc::clone(&lin));
-                        },
-                        _ => {}
+                    if let Some(id) = parts[i] {
+                        let rank_map = index_references.get_mut(i).unwrap();
+                        let id: u32 = id.abs() as u32;
+                        if !rank_map.contains_key(&id) {
+                            rank_map.insert(id, Vec::new());
+                        }
+                        let vec = rank_map.get_mut(&id).unwrap();
+                        vec.push(Arc::clone(&lin));
                     }
                 }
 
@@ -198,14 +195,8 @@ impl LineageStore {
         Ok(Self { mapper, index_references })
     }
 
-    pub fn get(&self, key: u32) -> Option<&Lineage> {
-        let result = self.mapper.get(&key);
-        // We need to automatically dereference the value lin here to avoid having to return a
-        // double reference.
-        match result {
-            Some(lin) => Some(lin),
-            None => None
-        }
+    pub fn get(&self, key: u32) -> Option<Arc<Lineage>> {
+        self.mapper.get(&key).cloned()
     }
 
     pub fn get_lineages_at_rank(&self, rank: &str, taxon_id: u32) -> Option<&Vec<Arc<Lineage>>> {

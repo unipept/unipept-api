@@ -67,7 +67,6 @@ async fn handler(
                 (false, _) => None
             };
 
-
             // If the user would like to get all the descendants of the given taxon, we'll try to
             // retrieve these here. These descendants are just a list of taxon IDs.
             let children: Option<Vec<u32>> = match descendants {

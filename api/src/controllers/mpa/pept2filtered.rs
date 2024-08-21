@@ -1,10 +1,8 @@
-use std::collections::HashSet;
-
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    controllers::{generate_handlers, mpa::default_equate_il},
+    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_include_fa},
     helpers::fa_helper::{calculate_fa, FunctionalAggregation},
     AppState
 };
@@ -13,17 +11,18 @@ use crate::{
 pub struct Parameters {
     #[serde(default)]
     peptides: Vec<String>,
-    #[serde(default)]
-    taxa: Vec<u32>,
     #[serde(default = "default_equate_il")]
-    equate_il: bool
+    equate_il: bool,
+    #[serde(default = "default_include_fa")]
+    include_fa: bool
 }
 
 #[derive(Serialize)]
 pub struct FilteredDataItem {
     sequence: String,
     taxa: Vec<u32>,
-    fa: FunctionalAggregation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fa: Option<FunctionalAggregation>
 }
 
 #[derive(Serialize)]
@@ -33,7 +32,7 @@ pub struct FilteredData {
 
 async fn handler(
     State(AppState { index, .. }): State<AppState>,
-    Parameters { mut peptides, taxa, equate_il }: Parameters
+    Parameters { mut peptides, equate_il, include_fa }: Parameters
 ) -> Result<FilteredData, ()> {
     if peptides.is_empty() {
         return Ok(FilteredData { peptides: Vec::new() });
@@ -43,23 +42,26 @@ async fn handler(
     peptides.dedup();
     let result = index.analyse(&peptides, equate_il);
 
-    let taxa_set: HashSet<u32> = HashSet::from_iter(taxa.iter().cloned());
-
     Ok(FilteredData {
         peptides: result
             .into_iter()
             .filter_map(|item| {
-                let item_taxa: HashSet<u32> = item.proteins.iter().map(|protein| protein.taxon).collect();
-                let intersection: Vec<u32> = item_taxa.intersection(&taxa_set).cloned().collect();
+                let item_taxa: Vec<u32> = item.proteins.iter().map(|protein| protein.taxon).collect();
 
-                if intersection.is_empty() {
+                if item_taxa.is_empty() {
                     return None;
                 }
 
+                let fa = if include_fa {
+                    Some(calculate_fa(&item.proteins))
+                } else {
+                    None
+                };
+
                 Some(FilteredDataItem {
                     sequence: item.sequence,
-                    taxa: intersection,
-                    fa: calculate_fa(&item.proteins)
+                    taxa: item_taxa,
+                    fa
                 })
             })
             .collect()

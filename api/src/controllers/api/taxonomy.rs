@@ -13,6 +13,8 @@ use crate::{
     },
     AppState
 };
+use crate::errors::ApiError;
+use crate::errors::ApiError::UnknownRankError;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -49,7 +51,7 @@ async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
     Parameters { input, extra, names, descendants, descendants_rank }: Parameters,
     version: LineageVersion
-) -> Result<Vec<TaxaInformation>, ()> {
+) -> Result<Vec<TaxaInformation>, ApiError> {
     if input.is_empty() {
         return Ok(Vec::new());
     }
@@ -57,7 +59,13 @@ async fn handler(
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
-    Ok(input
+    // Check if the provided rank is actually a valid and known rank
+    if descendants && LineageStore::rank_to_idx(descendants_rank.as_str()).is_none() {
+        return Err(UnknownRankError(String::from("An unknown rank has been passed for the `descendant_rank` parameter.")))
+    }
+
+   Ok(
+       input
         .into_iter()
         .filter_map(|taxon_id| {
             let (name, rank, _) = taxon_store.get(taxon_id)?;
@@ -72,12 +80,6 @@ async fn handler(
             let children: Option<Vec<u32>> = match descendants {
                 true => {
                     let descendants_rank: String = descendants_rank.to_string().to_lowercase();
-
-                    // Check if the provided rank is valid
-                    if LineageStore::rank_to_idx(descendants_rank.as_str()).is_none() {
-                        // TODO update to return the proper HTTP status code and an appropriate error message.
-                        panic!("Cannot retrieve descendants for unknown rank.")
-                    }
 
                     let lineages_at_rank = lineage_store.get_lineages_at_rank(
                         rank.to_string().to_lowercase().as_str(),
@@ -110,7 +112,8 @@ async fn handler(
                 descendants: children
             })
         })
-        .collect())
+        .collect()
+   )
 }
 
 generate_handlers!(
@@ -119,7 +122,7 @@ generate_handlers!(
         state => State<AppState>,
         params => Parameters,
         version: LineageVersion
-    ) -> Result<Json<Vec<TaxaInformation>>, ()> {
+    ) -> Result<Json<Vec<TaxaInformation>>, ApiError> {
         Ok(Json(handler(state, params, version).await?))
     }
 );

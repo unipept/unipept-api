@@ -195,8 +195,8 @@ impl LineageStore {
         Ok(Self { mapper, index_references })
     }
 
-    pub fn get(&self, key: u32) -> Option<Arc<Lineage>> {
-        self.mapper.get(&key).cloned()
+    pub fn get(&self, key: u32) -> Option<&Arc<Lineage>> {
+        self.mapper.get(&key)
     }
 
     pub fn get_lineages_at_rank(&self, rank: &str, taxon_id: u32) -> Option<&Vec<Arc<Lineage>>> {

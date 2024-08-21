@@ -12,6 +12,7 @@ use crate::{
     },
     AppState
 };
+use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -34,6 +35,10 @@ async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters { input, equate_il, extra }: Parameters
 ) -> Result<Vec<EcInformation>, ()> {
+    eprintln!("{:?}", input);
+    let input = sanitize_peptides(input);
+    eprintln!("{:?}", input);
+
     let result = index.analyse(&input, equate_il);
 
     let ec_store = datastore.ec_store();

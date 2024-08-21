@@ -35,9 +35,7 @@ async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters { input, equate_il, extra }: Parameters
 ) -> Result<Vec<EcInformation>, ()> {
-    eprintln!("{:?}", input);
     let input = sanitize_peptides(input);
-    eprintln!("{:?}", input);
 
     let result = index.analyse(&input, equate_il);
 

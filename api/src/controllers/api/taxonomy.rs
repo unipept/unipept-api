@@ -35,7 +35,7 @@ pub struct TaxaInformation {
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     lineage: Option<Lineage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    children: Option<Vec<u32>>
+    descendants: Option<Vec<u32>>
 }
 
 #[derive(Serialize)]
@@ -107,7 +107,7 @@ async fn handler(
                     taxon_rank: rank.clone().into()
                 },
                 lineage,
-                children
+                descendants: children
             })
         })
         .collect())

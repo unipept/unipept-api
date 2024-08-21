@@ -42,6 +42,8 @@ pub struct Lineage {
 }
 
 impl Lineage {
+    /// Retrieves the ID of this lineage at a specific rank name. If the provided rank is invalid
+    /// None is returned.
     pub fn get_taxon_id_at_rank(&self, rank_name: &str) -> Option<i32> {
         match rank_name {
             "superkingdom" => self.superkingdom,
@@ -178,12 +180,12 @@ impl LineageStore {
                 for i in 0..LineageStore::AMOUNT_OF_RANKS {
                     match parts[i] {
                         Some(id) => {
-                            let mut rank_map = index_references.get_mut(i).unwrap();
+                            let rank_map = index_references.get_mut(i).unwrap();
                             let id: u32 = id.abs() as u32;
                             if !rank_map.contains_key(&id) {
                                 rank_map.insert(id, Vec::new());
                             }
-                            let mut vec = rank_map.get_mut(&id).unwrap();
+                            let vec = rank_map.get_mut(&id).unwrap();
                             vec.push(Arc::clone(&lin));
                         },
                         _ => {}
@@ -207,16 +209,8 @@ impl LineageStore {
     }
 
     pub fn get_lineages_at_rank(&self, rank: &str, taxon_id: u32) -> Option<&Vec<Arc<Lineage>>> {
-        println!("Rank is: {:?}", rank);
-        let rank_idx = LineageStore::rank_to_idx(rank);
-        match rank_idx {
-            Some(idx) => {
-                let map= self.index_references.get(idx)?;
-                map.get(&taxon_id)
-            },
-            None => {
-                None
-            }
-        }
+        LineageStore::rank_to_idx(rank)
+            .and_then(|idx| self.index_references.get(idx))
+            .and_then(|map| map.get(&taxon_id))
     }
 }

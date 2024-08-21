@@ -71,27 +71,35 @@ async fn handler(
             // If the user would like to get all the descendants of the given taxon, we'll try to
             // retrieve these here. These descendants are just a list of taxon IDs.
             let children: Option<Vec<u32>> = match descendants {
-                (true) => {
-                    let lineages_at_rank = lineage_store.get_lineages_at_rank(rank.to_string().to_lowercase().as_str(), taxon_id);
-                    match lineages_at_rank {
-                        Some(lins) => {
-                            let mut children_at_rank: HashSet<u32> = HashSet::new();
-                            for lin in lins {
-                                let taxon_id_at_rank = lin.get_taxon_id_at_rank(descendants_rank.to_lowercase().as_str());
-                                match taxon_id_at_rank {
-                                    Some(tax) => { children_at_rank.insert(tax.abs() as u32); },
-                                    None => {}
-                                }
-                            }
-                            Some(Vec::from_iter(children_at_rank))
-                        },
-                        None => None
-                    }
-                },
-                (false) => None
-            };
+                true => {
+                    let descendants_rank: String = descendants_rank.to_string().to_lowercase();
 
-            println!("{:?}", children);
+                    // Check if the provided rank is valid
+                    if LineageStore::rank_to_idx(descendants_rank.as_str()).is_none() {
+                        // TODO update to return the proper HTTP status code and an appropriate error message.
+                        panic!("Cannot retrieve descendants for unknown rank.")
+                    }
+
+                    let lineages_at_rank = lineage_store.get_lineages_at_rank(
+                        rank.to_string().to_lowercase().as_str(),
+                        taxon_id
+                    );
+
+                    let mut children_id_set = HashSet::new();
+
+                    lineages_at_rank?
+                        .iter()
+                        .filter_map(
+                            |lin| {
+                                lin.get_taxon_id_at_rank(descendants_rank.as_str())
+                            }
+                        )
+                        .for_each(|id| { children_id_set.insert(id.abs() as u32); });
+
+                    Some(Vec::from_iter(children_id_set))
+                },
+                false => None
+            };
 
             Some(TaxaInformation {
                 taxon: Taxon {

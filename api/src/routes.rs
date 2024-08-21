@@ -1,12 +1,9 @@
 use axum::{
-    extract::{DefaultBodyLimit, Request},
+    extract::{DefaultBodyLimit},
     routing::get,
-    Router,
-    http::{StatusCode, Uri},
-    middleware::{self, Next},
-    response::{IntoResponse}
+    Router
 };
-use tower::{Layer, ServiceBuilder};
+use tower::{ServiceBuilder};
 use tower_http::limit::RequestBodyLimitLayer;
 
 use crate::{

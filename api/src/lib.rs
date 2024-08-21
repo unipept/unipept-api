@@ -1,16 +1,11 @@
 use std::sync::Arc;
-use axum::http::{StatusCode, Uri};
-use axum::response::IntoResponse;
 use database::Database;
 use datastore::DataStore;
 use index::Index;
 use tokio::net::TcpListener;
 use tower::Layer;
 use axum::{
-    Router,
     ServiceExt, // for `into_make_service`
-    response::Response,
-    middleware::Next,
     extract::Request,
 };
 

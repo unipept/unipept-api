@@ -6,6 +6,7 @@ use crate::{
     helpers::fa_helper::{calculate_fa, FunctionalAggregation},
     AppState
 };
+use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -40,6 +41,8 @@ async fn handler(
 
     peptides.sort();
     peptides.dedup();
+    let peptides = sanitize_peptides(peptides);
+
     let result = index.analyse(&peptides, equate_il);
 
     Ok(FilteredData {

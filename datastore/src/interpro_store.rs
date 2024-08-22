@@ -3,7 +3,7 @@ use std::{
     io::{BufRead, BufReader}
 };
 
-use crate::errors::{EcStoreError, InterproStoreError};
+use crate::errors::InterproStoreError;
 
 pub type InterproEntryDescription = (String, String);
 

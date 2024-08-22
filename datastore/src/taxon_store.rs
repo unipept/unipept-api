@@ -4,7 +4,7 @@ use std::{
     str::FromStr
 };
 
-use crate::errors::{EcStoreError, TaxonStoreError};
+use crate::errors::TaxonStoreError;
 
 pub type TaxonInformation = (String, LineageRank, bool);
 

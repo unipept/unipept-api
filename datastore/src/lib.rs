@@ -13,7 +13,6 @@ pub use interpro_store::InterproStore;
 pub use lineage_store::{Lineage, LineageStore};
 pub use sample_store::SampleStore;
 pub use taxon_store::{LineageRank, TaxonStore};
-use crate::errors::EcStoreError;
 
 pub struct DataStore {
     version: String,

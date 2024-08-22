@@ -2,7 +2,7 @@ use core::str;
 
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{LineageStoreError, SampleStoreError};
+use crate::errors::SampleStoreError;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SampleStore {

@@ -5,7 +5,7 @@ use std::{
 
 use serde::Serialize;
 
-use crate::errors::{EcStoreError, LineageStoreError};
+use crate::errors::LineageStoreError;
 
 #[derive(Clone, Debug, Serialize, Default)]
 pub struct Lineage {

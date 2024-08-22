@@ -3,7 +3,7 @@ use std::{
     io::{BufRead, BufReader}
 };
 
-use crate::errors::{EcStoreError, GoStoreError};
+use crate::errors::GoStoreError;
 
 pub type GoTermDescription = (String, String);
 

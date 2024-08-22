@@ -25,6 +25,8 @@ pub enum ApiError {
     DatabaseError(#[from] database::DatabaseError),
     #[error("Database error")]
     DatabaseInteractionError(#[from] database::InteractError),
+    #[error("Unknown rank error")]
+    UnknownRankError(String),
     #[error("Not implemented: {0}")]
     NotImplementedError(String)
 }
@@ -36,8 +38,9 @@ impl IntoResponse for ApiError {
             ApiError::DatabaseError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
             ApiError::DatabaseInteractionError(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
-            }
-            ApiError::NotImplementedError(message) => (StatusCode::NOT_IMPLEMENTED, message)
+            },
+            ApiError::UnknownRankError(message) => (StatusCode::BAD_REQUEST, message),
+            ApiError::NotImplementedError(message) => (StatusCode::NOT_IMPLEMENTED, message),
         };
 
         Response::builder().status(status).body(message.into()).unwrap()

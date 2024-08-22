@@ -1,6 +1,5 @@
 use http::{Request, Response, Uri};
 use std::{
-    borrow::Cow,
     task::{Context, Poll},
 };
 use tower_layer::Layer;

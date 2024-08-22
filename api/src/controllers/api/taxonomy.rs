@@ -1,9 +1,10 @@
+use std::collections::HashSet;
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
-
+use datastore::LineageStore;
 use crate::{
     controllers::{
-        api::{default_extra, default_names},
+        api::{default_extra, default_names, default_descendants, default_descendants_rank},
         generate_handlers
     },
     helpers::lineage_helper::{
@@ -12,6 +13,8 @@ use crate::{
     },
     AppState
 };
+use crate::errors::ApiError;
+use crate::errors::ApiError::UnknownRankError;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -20,7 +23,11 @@ pub struct Parameters {
     #[serde(default = "default_extra")]
     extra: bool,
     #[serde(default = "default_names")]
-    names: bool
+    names: bool,
+    #[serde(default = "default_descendants")]
+    descendants: bool,
+    #[serde(default = "default_descendants_rank")]
+    descendants_rank: String
 }
 
 #[derive(Serialize)]
@@ -28,7 +35,9 @@ pub struct TaxaInformation {
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    lineage: Option<Lineage>
+    lineage: Option<Lineage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    descendants: Option<Vec<u32>>
 }
 
 #[derive(Serialize)]
@@ -40,9 +49,9 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
-    Parameters { input, extra, names }: Parameters,
+    Parameters { input, extra, names, descendants, descendants_rank }: Parameters,
     version: LineageVersion
-) -> Result<Vec<TaxaInformation>, ()> {
+) -> Result<Vec<TaxaInformation>, ApiError> {
     if input.is_empty() {
         return Ok(Vec::new());
     }
@@ -50,7 +59,13 @@ async fn handler(
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
-    Ok(input
+    // Check if the provided rank is actually a valid and known rank
+    if descendants && LineageStore::rank_to_idx(descendants_rank.as_str()).is_none() {
+        return Err(UnknownRankError(String::from("An unknown rank has been passed for the `descendant_rank` parameter.")))
+    }
+
+   Ok(
+       input
         .into_iter()
         .filter_map(|taxon_id| {
             let (name, rank, _) = taxon_store.get(taxon_id)?;
@@ -60,25 +75,54 @@ async fn handler(
                 (false, _) => None
             };
 
+            // If the user would like to get all the descendants of the given taxon, we'll try to
+            // retrieve these here. These descendants are just a list of taxon IDs.
+            let children: Option<Vec<u32>> = match descendants {
+                true => {
+                    let descendants_rank: String = descendants_rank.to_string().to_lowercase();
+
+                    let lineages_at_rank = lineage_store.get_lineages_at_rank(
+                        rank.to_string().to_lowercase().as_str(),
+                        taxon_id
+                    );
+
+                    let mut children_id_set = HashSet::new();
+
+                    lineages_at_rank?
+                        .iter()
+                        .filter_map(
+                            |lin| {
+                                lin.get_taxon_id_at_rank(descendants_rank.as_str())
+                            }
+                        )
+                        .for_each(|id| { children_id_set.insert(id.abs() as u32); });
+
+                    Some(Vec::from_iter(children_id_set))
+                },
+                false => None
+            };
+
             Some(TaxaInformation {
                 taxon: Taxon {
                     taxon_id,
                     taxon_name: name.to_string(),
                     taxon_rank: rank.clone().into()
                 },
-                lineage
+                lineage,
+                descendants: children
             })
         })
-        .collect())
+        .collect()
+   )
 }
 
-generate_handlers! (
+generate_handlers!(
     [ V1, V2 ]
     async fn json_handler(
         state => State<AppState>,
         params => Parameters,
         version: LineageVersion
-    ) -> Result<Json<Vec<TaxaInformation>>, ()> {
+    ) -> Result<Json<Vec<TaxaInformation>>, ApiError> {
         Ok(Json(handler(state, params, version).await?))
     }
 );

@@ -13,6 +13,7 @@ pub use interpro_store::InterproStore;
 pub use lineage_store::{Lineage, LineageStore};
 pub use sample_store::SampleStore;
 pub use taxon_store::{LineageRank, TaxonStore};
+use crate::errors::EcStoreError;
 
 pub struct DataStore {
     version: String,
@@ -34,7 +35,9 @@ impl DataStore {
         lineage_file: &str,
         taxon_file: &str
     ) -> Result<Self, DataStoreError> {
-        let version = std::fs::read_to_string(version_file)?;
+        let version = std::fs::read_to_string(version_file).map_err(
+            |err| DataStoreError::FileNotFound(version_file.to_string())
+        )?;
         Ok(Self {
             version: version.trim_end().to_string(),
             sample_store: SampleStore::try_from_file(sample_file)?,

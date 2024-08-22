@@ -4,7 +4,7 @@ use std::{
     str::FromStr
 };
 
-use crate::errors::TaxonStoreError;
+use crate::errors::{EcStoreError, TaxonStoreError};
 
 pub type TaxonInformation = (String, LineageRank, bool);
 
@@ -46,7 +46,9 @@ pub struct TaxonStore {
 
 impl TaxonStore {
     pub fn try_from_file(file: &str) -> Result<Self, TaxonStoreError> {
-        let file = std::fs::File::open(file)?;
+        let file = std::fs::File::open(file).map_err(
+            |_| TaxonStoreError::FileNotFound(file.to_string())
+        )?;
 
         let mut mapper = HashMap::new();
         for line in BufReader::new(file).lines() {

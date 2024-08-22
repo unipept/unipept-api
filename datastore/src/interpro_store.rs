@@ -3,7 +3,7 @@ use std::{
     io::{BufRead, BufReader}
 };
 
-use crate::errors::InterproStoreError;
+use crate::errors::{EcStoreError, InterproStoreError};
 
 pub type InterproEntryDescription = (String, String);
 
@@ -14,7 +14,9 @@ pub struct InterproStore {
 
 impl InterproStore {
     pub fn try_from_file(file: &str) -> Result<Self, InterproStoreError> {
-        let file = std::fs::File::open(file)?;
+        let file = std::fs::File::open(file).map_err(
+            |_| InterproStoreError::FileNotFound(file.to_string())
+        )?;
 
         let mut mapper = HashMap::new();
         for line in BufReader::new(file).lines() {

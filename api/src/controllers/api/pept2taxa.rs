@@ -48,7 +48,7 @@ async fn handler(
     Parameters { input, equate_il, extra, names }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<TaxaInformation>, ()> {
-    let result = index.analyse(&input, equate_il);
+    let result = index.analyse(&input, equate_il, None);
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();

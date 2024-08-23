@@ -34,7 +34,7 @@ async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters { input, equate_il, extra }: Parameters
 ) -> Result<Vec<EcInformation>, ()> {
-    let result = index.analyse(&input, equate_il);
+    let result = index.analyse(&input, equate_il, None);
 
     let ec_store = datastore.ec_store();
 

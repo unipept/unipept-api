@@ -59,7 +59,7 @@ async fn handler(
     Parameters { input, equate_il, extra, domains, names }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<PeptInformation>, ()> {
-    let result = index.analyse(&input, equate_il);
+    let result = index.analyse(&input, equate_il, None);
 
     let ec_store = datastore.ec_store();
     let go_store = datastore.go_store();

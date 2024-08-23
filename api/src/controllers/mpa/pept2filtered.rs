@@ -41,7 +41,7 @@ async fn handler(
 
     peptides.sort();
     peptides.dedup();
-    let result = index.analyse(&peptides, equate_il);
+    let result = index.analyse(&peptides, equate_il, Some(10_000));
 
     let taxa_set: HashSet<u32> = HashSet::from_iter(taxa.iter().cloned());
 

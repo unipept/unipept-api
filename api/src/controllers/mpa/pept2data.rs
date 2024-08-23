@@ -42,7 +42,7 @@ async fn handler(
 
     peptides.sort();
     peptides.dedup();
-    let result = index.analyse(&peptides, equate_il);
+    let result = index.analyse(&peptides, equate_il, Some(10_000));
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();

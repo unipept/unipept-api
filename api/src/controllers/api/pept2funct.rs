@@ -40,7 +40,7 @@ async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters { input, equate_il, extra, domains }: Parameters
 ) -> Result<Vec<FunctInformation>, ()> {
-    let result = index.analyse(&input, equate_il);
+    let result = index.analyse(&input, equate_il, None);
 
     let ec_store = datastore.ec_store();
     let go_store = datastore.go_store();

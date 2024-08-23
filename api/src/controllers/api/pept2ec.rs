@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
@@ -36,20 +37,37 @@ async fn handler(
     Parameters { input, equate_il, extra }: Parameters
 ) -> Result<Vec<EcInformation>, ()> {
     let input = sanitize_peptides(input);
-    let result = index.analyse(&input, equate_il, None);
+
+    let mut peptide_counts: HashMap<String, usize> = HashMap::new();
+    for peptide in input.into_iter() {
+        *peptide_counts.entry(peptide).or_insert(0) += 1;
+    }
+
+    let unique_peptides: Vec<String> = peptide_counts.keys().cloned().collect();
+    let result = index.analyse(&unique_peptides, equate_il, None);
+
     let ec_store = datastore.ec_store();
 
-    Ok(result
-        .into_iter()
-        .map(|item| {
+    // Step 6: Duplicate the results according to the original input
+    let mut final_results = Vec::new();
+    for (unique_peptide, item) in unique_peptides.iter().zip(result.into_iter()) {
+        if let Some(count) = peptide_counts.get(unique_peptide) {
             let fa = calculate_fa(&item.proteins);
-
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
-            let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
 
-            EcInformation { peptide: item.sequence, total_protein_count, ec: ecs }
-        })
-        .collect())
+            for _ in 0..*count {
+                let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
+
+                final_results.push(EcInformation {
+                    peptide: item.sequence.clone(),
+                    total_protein_count,
+                    ec: ecs,
+                });
+            }
+        }
+    }
+
+    Ok(final_results)
 }
 
 generate_handlers!(

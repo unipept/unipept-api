@@ -36,9 +36,7 @@ async fn handler(
     Parameters { input, equate_il, extra }: Parameters
 ) -> Result<Vec<EcInformation>, ()> {
     let input = sanitize_peptides(input);
-
-    let result = index.analyse(&input, equate_il);
-
+    let result = index.analyse(&input, equate_il, None);
     let ec_store = datastore.ec_store();
 
     Ok(result

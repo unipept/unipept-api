@@ -53,7 +53,7 @@ async fn handler(
 
     let connection = database.get_conn().await?;
 
-    let result = index.analyse(&input, equate_il);
+    let result = index.analyse(&input, equate_il, None);
 
     let accession_numbers: Vec<String> = result
         .iter()

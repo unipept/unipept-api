@@ -43,9 +43,9 @@ async fn handler(
 
     peptides.sort();
     peptides.dedup();
-    let peptides = sanitize_peptides(peptides);
 
-    let result = index.analyse(&peptides, equate_il);
+    let peptides = sanitize_peptides(peptides);
+    let result = index.analyse(&peptides, equate_il, Some(10_000));
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();

@@ -40,7 +40,9 @@ async fn handler(
     let start = SystemTime::now().duration_since(UNIX_EPOCH).expect("Amai zeg, das niet goed eh").as_millis();
     let result = index.analyse(&input, equate_il, None);
     let end = SystemTime::now().duration_since(UNIX_EPOCH).expect("Amai zeg, das niet goed eh").as_millis();
-    println!("Index analysis took {}ms", end - start);
+    println!("Index for pept2ec analysis took {}ms", end - start);
+
+    println!("Search result for pept2ec has length: {}", result.len());
 
     let ec_store = datastore.ec_store();
 
@@ -57,7 +59,7 @@ async fn handler(
         })
         .collect();
     let end = SystemTime::now().duration_since(UNIX_EPOCH).expect("Amai zeg, das niet goed eh").as_millis();
-    println!("Computing FAs took {}ms", end - start);
+    println!("Computing pept2ec FAs took {}ms", end - start);
 
     Ok(output)
 }

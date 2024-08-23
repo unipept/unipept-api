@@ -14,12 +14,12 @@ pub struct FunctionalAggregation {
 
 pub fn calculate_fa(proteins: &[ProteinInfo]) -> FunctionalAggregation {
     // Keep track of the proteins that have any annotation
-    let mut proteins_with_annotations: HashSet<String> = HashSet::new();
+    let mut proteins_with_annotations: HashSet<&str> = HashSet::new();
 
     // Keep track of the proteins that have a certain annotation
-    let mut proteins_with_ec: HashSet<String> = HashSet::new();
-    let mut proteins_with_go: HashSet<String> = HashSet::new();
-    let mut proteins_with_ipr: HashSet<String> = HashSet::new();
+    let mut proteins_with_ec: HashSet<&str> = HashSet::new();
+    let mut proteins_with_go: HashSet<&str> = HashSet::new();
+    let mut proteins_with_ipr: HashSet<&str> = HashSet::new();
 
     // Keep track of the counts of the different annotations
     let mut data: HashMap<String, u32> = HashMap::new();
@@ -28,16 +28,16 @@ pub fn calculate_fa(proteins: &[ProteinInfo]) -> FunctionalAggregation {
         for annotation in protein.functional_annotations.split(';') {
             match annotation.chars().next() {
                 Some('E') => {
-                    proteins_with_ec.insert(protein.uniprot_accession.clone());
-                    proteins_with_annotations.insert(protein.uniprot_accession.clone());
+                    proteins_with_ec.insert(&protein.uniprot_accession);
+                    proteins_with_annotations.insert(&protein.uniprot_accession);
                 }
                 Some('G') => {
-                    proteins_with_go.insert(protein.uniprot_accession.clone());
-                    proteins_with_annotations.insert(protein.uniprot_accession.clone());
+                    proteins_with_go.insert(&protein.uniprot_accession);
+                    proteins_with_annotations.insert(&protein.uniprot_accession);
                 }
                 Some('I') => {
-                    proteins_with_ipr.insert(protein.uniprot_accession.clone());
-                    proteins_with_annotations.insert(protein.uniprot_accession.clone());
+                    proteins_with_ipr.insert(&protein.uniprot_accession);
+                    proteins_with_annotations.insert(&protein.uniprot_accession);
                 }
                 _ => {}
             };

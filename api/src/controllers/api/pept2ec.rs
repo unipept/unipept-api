@@ -1,5 +1,6 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     controllers::{
@@ -36,10 +37,15 @@ async fn handler(
     Parameters { input, equate_il, extra }: Parameters
 ) -> Result<Vec<EcInformation>, ()> {
     let input = sanitize_peptides(input);
+    let start = SystemTime::now().duration_since(UNIX_EPOCH).expect("Amai zeg, das niet goed eh").as_millis();
     let result = index.analyse(&input, equate_il, None);
+    let end = SystemTime::now().duration_since(UNIX_EPOCH).expect("Amai zeg, das niet goed eh").as_millis();
+    println!("Index analysis took {}ms", end - start);
+
     let ec_store = datastore.ec_store();
 
-    Ok(result
+    let start = SystemTime::now().duration_since(UNIX_EPOCH).expect("Amai zeg, das niet goed eh").as_millis();
+    let output = result
         .into_iter()
         .map(|item| {
             let fa = calculate_fa(&item.proteins);
@@ -49,7 +55,11 @@ async fn handler(
 
             EcInformation { peptide: item.sequence, total_protein_count, ec: ecs }
         })
-        .collect())
+        .collect();
+    let end = SystemTime::now().duration_since(UNIX_EPOCH).expect("Amai zeg, das niet goed eh").as_millis();
+    println!("Computing FAs took {}ms", end - start);
+
+    Ok(output)
 }
 
 generate_handlers!(

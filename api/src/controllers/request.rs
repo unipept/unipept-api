@@ -42,8 +42,6 @@ where
         let form_bytes = form.to_vec();
         let decoded_bytes = urlencoding::decode_binary(&form_bytes);
 
-        eprintln!("{:?}", decoded_bytes);
-
         Ok(Self(serde_qs::from_bytes(&decoded_bytes).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
     }
 }
@@ -67,8 +65,6 @@ where
             let value = field.text().await.unwrap();
             querystring.push_str(&format!("{}={}&", name, value));
         }
-
-        eprintln!("{:?}", querystring);
 
         Ok(Self(serde_qs::from_str(&querystring).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
     }

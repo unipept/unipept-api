@@ -10,6 +10,7 @@ use crate::{
     errors::ApiError,
     AppState
 };
+use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -48,6 +49,8 @@ async fn handler(
     State(AppState { index, datastore, database }): State<AppState>,
     Parameters { input, equate_il, extra }: Parameters
 ) -> Result<Vec<ProtInformation>, ApiError> {
+    let input = sanitize_peptides(input);
+
     let connection = database.get_conn().await?;
 
     let result = index.analyse(&input, equate_il, None);

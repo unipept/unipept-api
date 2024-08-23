@@ -1,7 +1,7 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/anaconda
 {
-  "name": "Unipept Devcontainers",
+  "name": "Unipept API",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
 
   // Features to add to the dev container. More info: https://containers.dev/features.

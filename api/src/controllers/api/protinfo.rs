@@ -19,6 +19,7 @@ use crate::{
     },
     AppState
 };
+use crate::helpers::sanitize_proteins;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -56,6 +57,8 @@ async fn handler(
     Parameters { input, extra, domains, names }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<ProtInformation>, ApiError> {
+    let input = sanitize_proteins(input);
+
     let connection = database.get_conn().await?;
 
     let entries = connection.interact(move |conn| get_accessions(conn, &input)).await??;

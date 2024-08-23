@@ -15,6 +15,7 @@ use crate::{
     },
     AppState
 };
+use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -49,6 +50,7 @@ async fn handler(
     Parameters { input, equate_il, extra, names }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<LcaInformation>, ()> {
+    let input = sanitize_peptides(input);
     let result = index.analyse(&input, equate_il, None);
 
     let taxon_store = datastore.taxon_store();

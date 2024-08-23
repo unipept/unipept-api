@@ -1,17 +1,18 @@
 use std::{
     collections::HashMap,
     io::{BufRead, BufReader},
-    str::FromStr
+    str::FromStr,
+    fmt
 };
 
 use crate::errors::TaxonStoreError;
 
 pub type TaxonInformation = (String, LineageRank, bool);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LineageRank {
     NoRank,
-    Superkindom,
+    Superkingdom,
     Kingdom,
     Subkingdom,
     Superphylum,
@@ -39,6 +40,17 @@ pub enum LineageRank {
     Varietas,
     Forma
 }
+
+impl fmt::Display for LineageRank {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if *self == LineageRank::NoRank {
+            write!(f, "{:?}", "root")
+        } else {
+            write!(f, "{:?}", self)
+        }
+    }
+}
+
 
 pub struct TaxonStore {
     pub mapper: HashMap<u32, TaxonInformation>
@@ -86,7 +98,7 @@ impl FromStr for LineageRank {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "no rank" => Ok(Self::NoRank),
-            "superkingdom" => Ok(Self::Superkindom),
+            "superkingdom" => Ok(Self::Superkingdom),
             "kingdom" => Ok(Self::Kingdom),
             "subkingdom" => Ok(Self::Subkingdom),
             "superphylum" => Ok(Self::Superphylum),
@@ -122,7 +134,7 @@ impl From<LineageRank> for String {
     fn from(val: LineageRank) -> Self {
         match val {
             LineageRank::NoRank => "no rank".to_string(),
-            LineageRank::Superkindom => "superkingdom".to_string(),
+            LineageRank::Superkingdom => "superkingdom".to_string(),
             LineageRank::Kingdom => "kingdom".to_string(),
             LineageRank::Subkingdom => "subkingdom".to_string(),
             LineageRank::Superphylum => "superphylum".to_string(),

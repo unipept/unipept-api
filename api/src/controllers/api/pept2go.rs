@@ -12,6 +12,7 @@ use crate::{
     },
     AppState
 };
+use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -36,6 +37,7 @@ async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters { input, equate_il, extra, domains }: Parameters
 ) -> Result<Vec<GoInformation>, ()> {
+    let input = sanitize_peptides(input);
     let result = index.analyse(&input, equate_il, None);
 
     let go_store = datastore.go_store();

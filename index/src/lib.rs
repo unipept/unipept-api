@@ -35,7 +35,7 @@ impl Index {
     }
 
     pub fn analyse(&self, peptides: &Vec<String>, equate_il: bool, cutoff: Option<usize>) -> Vec<SearchResult> {
-        search_all_peptides(&self.searcher, peptides, cutoff.unwrap_or(10_000), equate_il)
+        search_all_peptides(&self.searcher, peptides, cutoff.unwrap_or(50_000), equate_il)
     }
 }
 

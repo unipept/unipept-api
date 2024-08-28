@@ -57,7 +57,7 @@ async fn handler(
 
     let accession_numbers: Vec<String> = result
         .iter()
-        .flat_map(|item| item.proteins.iter().map(|protein| protein.uniprot_accession.clone()))
+        .flat_map(|item| item.proteins.iter().map(|protein| protein.uniprot_id.clone()))
         .collect();
 
     let accessions_map = connection.interact(move |conn| get_accessions_map(conn, &accession_numbers)).await??;
@@ -70,7 +70,7 @@ async fn handler(
             item.proteins
                 .into_iter()
                 .filter_map(|protein| {
-                    let uniprot_entry = accessions_map.get(&protein.uniprot_accession)?;
+                    let uniprot_entry = accessions_map.get(&protein.uniprot_id)?;
 
                     if extra {
                         let taxon_name = taxon_store.get_name(uniprot_entry.taxon_id)?;
@@ -97,7 +97,7 @@ async fn handler(
 
                         Some(ProtInformation::Extra {
                             peptide: item.sequence.clone(),
-                            uniprot_id: protein.uniprot_accession.clone(),
+                            uniprot_id: protein.uniprot_id.clone(),
                             protein_name: uniprot_entry.name.clone(),
                             taxon_id: uniprot_entry.taxon_id,
                             taxon_name: taxon_name.clone(),
@@ -109,7 +109,7 @@ async fn handler(
                     } else {
                         Some(ProtInformation::Default {
                             peptide: item.sequence.clone(),
-                            uniprot_id: protein.uniprot_accession.clone(),
+                            uniprot_id: protein.uniprot_id.clone(),
                             protein_name: uniprot_entry.name.clone(),
                             taxon_id: uniprot_entry.taxon_id,
                             protein: uniprot_entry.protein.clone()

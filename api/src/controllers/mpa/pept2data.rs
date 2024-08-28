@@ -55,7 +55,7 @@ async fn handler(
             .into_iter()
             .map(|item| {
                 let lca = calculate_lca(
-                    item.proteins.iter().map(|protein| protein.taxon).collect(),
+                    item.proteins.iter().map(|protein| protein.taxon_id).collect(),
                     LineageVersion::V2,
                     taxon_store,
                     lineage_store

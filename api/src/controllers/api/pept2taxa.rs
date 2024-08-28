@@ -58,7 +58,7 @@ async fn handler(
     Ok(result
         .into_iter()
         .flat_map(|item| {
-            item.proteins.iter().map(|protein| protein.taxon).collect::<HashSet<u32>>().into_iter().filter_map(
+            item.proteins.iter().map(|protein| protein.taxon_id).collect::<HashSet<u32>>().into_iter().filter_map(
                 move |taxon| {
                     let (name, rank, _) = taxon_store.get(taxon)?;
                     let lineage = match (extra, names) {

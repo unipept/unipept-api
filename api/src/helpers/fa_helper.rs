@@ -12,73 +12,92 @@ pub struct FunctionalAggregation {
     pub data: HashMap<String, u32>
 }
 
-fn count_annotations(
-    proteins: &[ProteinInfo],
-    annotation_prefix: char
-) -> (HashSet<String>, HashMap<String, u32>) {
-    let mut proteins_with_annotation: HashSet<String> = HashSet::new();
-    let mut protein_data: HashMap<String, u32> = HashMap::new();
+pub fn calculate_ec(proteins: &[ProteinInfo]) -> FunctionalAggregation {
+    let mut proteins_with_ec: HashSet<&str> = HashSet::new();
+
+    let mut data: HashMap<String, u32> = HashMap::new();
 
     for protein in proteins.iter() {
-        for annotation in protein.functional_annotations.split(';') {
-            match annotation.chars().next() {
-                Some(c) => {
-                    if c == annotation_prefix {
-                        proteins_with_annotation.insert(protein.uniprot_accession.clone());
-                        proteins_with_annotation.insert(protein.uniprot_accession.clone());
-                        protein_data.entry(annotation.to_string()).and_modify(|c| *c += 1).or_insert(1);
-                    }
-                }
-                _ => {}
-            };
+        for ec_number in protein.ec_numbers.split(';') {
+            proteins_with_ec.insert(&protein.uniprot_accession); // TODO: outside of loop?
+            data.entry(ec_number.to_string()).and_modify(|c| *c += 1).or_insert(1);
         }
     }
-
-    (proteins_with_annotation, protein_data)
-}
-
-pub fn calculate_ec(proteins: &[ProteinInfo]) -> FunctionalAggregation {
-    let (proteins_with_ec, ec_protein_data) = count_annotations(proteins, 'E');
 
     let mut counts: HashMap<String, usize> = HashMap::new();
     counts.insert("all".to_string(), proteins_with_ec.len());
 
-    FunctionalAggregation { counts, data: ec_protein_data }
+    FunctionalAggregation { counts, data }
 }
 
 pub fn calculate_go(proteins: &[ProteinInfo]) -> FunctionalAggregation {
-    let (proteins_with_go, go_protein_data) = count_annotations(proteins, 'G');
+    let mut proteins_with_go: HashSet<&str> = HashSet::new();
+
+    let mut data: HashMap<String, u32> = HashMap::new();
+
+    for protein in proteins.iter() {
+        for go_term in protein.go_terms.split(';') {
+            proteins_with_go.insert(&protein.uniprot_accession); // TODO: outside of loop?
+            data.entry(go_term.to_string()).and_modify(|c| *c += 1).or_insert(1);
+        }
+    }
 
     let mut counts: HashMap<String, usize> = HashMap::new();
     counts.insert("all".to_string(), proteins_with_go.len());
 
-    FunctionalAggregation { counts, data: go_protein_data }
+    FunctionalAggregation { counts, data }
 }
 
 pub fn calculate_ipr(proteins: &[ProteinInfo]) -> FunctionalAggregation {
-    let (proteins_with_ipr, ipr_protein_data) = count_annotations(proteins, 'I');
+    let mut proteins_with_ipr: HashSet<&str> = HashSet::new();
+
+    let mut data: HashMap<String, u32> = HashMap::new();
+
+    for protein in proteins.iter() {
+        for interpro_entry in protein.interpro_entries.split(';') {
+            proteins_with_ipr.insert(&protein.uniprot_accession);
+            data.entry(interpro_entry.to_string()).and_modify(|c| *c += 1).or_insert(1);
+        }
+    }
 
     let mut counts: HashMap<String, usize> = HashMap::new();
     counts.insert("all".to_string(), proteins_with_ipr.len());
 
-    FunctionalAggregation { counts, data: ipr_protein_data }
+    FunctionalAggregation { counts, data }
 }
 
 pub fn calculate_fa(proteins: &[ProteinInfo]) -> FunctionalAggregation {
-    // Keep track of the proteins that have a certain annotation
-    let (proteins_with_ec, ec_protein_data) = count_annotations(proteins, 'E');
-    let (proteins_with_go, go_protein_data) = count_annotations(proteins, 'G');
-    let (proteins_with_ipr, ipr_protein_data) = count_annotations(proteins, 'I');
+    // Keep track of the proteins that have any annotation
+    let mut proteins_with_annotations: HashSet<&str> = HashSet::new();
 
-    // Keep track of the counts of the different annotations
+    let mut proteins_with_ec: HashSet<&str> = HashSet::new();
+    let mut proteins_with_go: HashSet<&str> = HashSet::new();
+    let mut proteins_with_ipr: HashSet<&str> = HashSet::new();
+
     let mut data: HashMap<String, u32> = HashMap::new();
 
-    data.extend(ec_protein_data);
-    data.extend(go_protein_data);
-    data.extend(ipr_protein_data);
+    for protein in proteins.iter() {
+        for ec_number in protein.ec_numbers.split(';') {
+            proteins_with_ec.insert(&protein.uniprot_accession);
+            proteins_with_annotations.insert(&protein.uniprot_accession);
+            data.entry(ec_number.to_string()).and_modify(|c| *c += 1).or_insert(1);
+        }
+
+        for go_term in protein.go_terms.split(';') {
+            proteins_with_go.insert(&protein.uniprot_accession);
+            proteins_with_annotations.insert(&protein.uniprot_accession);
+            data.entry(go_term.to_string()).and_modify(|c| *c += 1).or_insert(1);
+        }
+
+        for interpro_entry in protein.interpro_entries.split(';') {
+            proteins_with_ipr.insert(&protein.uniprot_accession);
+            proteins_with_annotations.insert(&protein.uniprot_accession);
+            data.entry(interpro_entry.to_string()).and_modify(|c| *c += 1).or_insert(1);
+        }
+    }
 
     let mut counts: HashMap<String, usize> = HashMap::new();
-    counts.insert("all".to_string(), proteins_with_ec.len() + proteins_with_go.len() + proteins_with_ipr.len());
+    counts.insert("all".to_string(), proteins_with_annotations.len());
     counts.insert("EC".to_string(), proteins_with_ec.len());
     counts.insert("GO".to_string(), proteins_with_go.len());
     counts.insert("IPR".to_string(), proteins_with_ipr.len());

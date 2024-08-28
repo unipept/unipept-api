@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use axum::{extract::State, Json};
 use database::get_accessions_map;
 use serde::{Deserialize, Serialize};
@@ -57,7 +58,7 @@ async fn handler(
         return Ok(ProteinInformation::default());
     }
 
-    let accession_numbers: Vec<String> =
+    let accession_numbers: HashSet<String> =
         result[0].proteins.iter().map(|protein| protein.uniprot_accession.clone()).collect();
 
     let accessions_map = connection.interact(move |conn| get_accessions_map(conn, &accession_numbers)).await??;

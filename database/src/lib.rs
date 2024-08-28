@@ -1,10 +1,11 @@
 use std::{collections::HashMap, ops::Deref};
-
+use std::collections::HashSet;
 use deadpool_diesel::mysql::{Manager, Object, Pool};
 pub use deadpool_diesel::InteractError;
 use diesel::{prelude::*, MysqlConnection, QueryDsl};
 pub use errors::DatabaseError;
 use models::UniprotEntry;
+use itertools::Itertools;
 
 mod errors;
 mod models;
@@ -36,16 +37,29 @@ impl Deref for Database {
 
 pub fn get_accessions(
     conn: &mut MysqlConnection,
-    accessions: &Vec<String>
+    accessions: &HashSet<String>
 ) -> Result<Vec<UniprotEntry>, DatabaseError> {
     use schema::uniprot_entries::dsl::*;
 
-    Ok(uniprot_entries.filter(uniprot_accession_number.eq_any(accessions)).load(conn)?)
+    let mut result: Vec<UniprotEntry> = Vec::new();
+
+    accessions
+        .into_iter()
+        .chunks(1000)
+        .into_iter()
+        .for_each(|chunk| {
+            let data = uniprot_entries.filter(uniprot_accession_number.eq_any(accessions)).load(conn);
+            if data.is_ok() {
+                result.extend(data.unwrap());
+            }
+        });
+
+    Ok(result)
 }
 
 pub fn get_accessions_map(
     conn: &mut MysqlConnection,
-    accessions: &Vec<String>
+    accessions: &HashSet<String>
 ) -> Result<HashMap<String, UniprotEntry>, DatabaseError> {
     Ok(get_accessions(conn, accessions)?
         .into_iter()

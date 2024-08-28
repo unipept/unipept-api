@@ -12,6 +12,7 @@ use crate::{
     },
     AppState
 };
+use crate::helpers::fa_helper::calculate_go;
 use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
@@ -45,7 +46,7 @@ async fn handler(
     Ok(result
         .into_iter()
         .map(|item| {
-            let fa = calculate_fa(&item.proteins);
+            let fa = calculate_go(&item.proteins);
 
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let gos = go_terms_from_map(&fa.data, go_store, extra, domains);

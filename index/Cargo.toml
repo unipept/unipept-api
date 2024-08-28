@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-sa-compression = { git = "https://github.com/unipept/unipept-index.git" }
-sa-index = { git = "https://github.com/unipept/unipept-index.git" }
-sa-mappings = { git = "https://github.com/unipept/unipept-index.git" }
+sa-compression = { git = "https://github.com/unipept/unipept-index.git", rev = "352bcb797dcd6c369275aec178417bc14e6d2480" }
+sa-index = { git = "https://github.com/unipept/unipept-index.git", rev = "352bcb797dcd6c369275aec178417bc14e6d2480" }
+sa-mappings = { git = "https://github.com/unipept/unipept-index.git", rev = "352bcb797dcd6c369275aec178417bc14e6d2480" }
 thiserror = "1.0"

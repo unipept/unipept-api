@@ -2,7 +2,7 @@ use std::{
     fs::File,
     io::{BufReader, Read}
 };
-
+use std::str::from_utf8;
 pub use errors::IndexError;
 use errors::LoadIndexError;
 use sa_compression::load_compressed_suffix_array;
@@ -29,7 +29,7 @@ impl Index {
         let proteins = Proteins::try_from_database_file(proteins_file)
             .map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
 
-        let searcher = SparseSearcher::new(suffix_array, proteins);
+        let searcher = SparseSearcher::new(suffix_array, proteins, 5);
 
         Ok(Self { searcher })
     }

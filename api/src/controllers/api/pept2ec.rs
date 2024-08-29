@@ -53,7 +53,7 @@ async fn handler(
     let mut final_results = Vec::new();
     for (unique_peptide, item) in unique_peptides.iter().zip(result.into_iter()) {
         if let Some(count) = peptide_counts.get(unique_peptide) {
-            let fa = calculate_ec(&item.proteins);
+            let fa = calculate_ec(item.proteins(&index.searcher));
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
 
             for _ in 0..*count {

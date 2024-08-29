@@ -58,14 +58,14 @@ async fn handler(
     }
 
     let accession_numbers: Vec<String> =
-        result[0].proteins.iter().map(|protein| protein.uniprot_id.clone()).collect();
+        result[0].proteins(&index.searcher).map(|protein| protein.uniprot_id.clone()).collect();
 
     let accessions_map = connection.interact(move |conn| get_accessions_map(conn, &accession_numbers)).await??;
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
-    let taxa = result[0].proteins.iter().map(|protein| protein.taxon_id).collect();
+    let taxa = result[0].proteins(&index.searcher).map(|protein| protein.taxon_id).collect();
     let lca = calculate_lca(taxa, LineageVersion::V2, taxon_store, lineage_store);
 
     let common_lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store)
@@ -77,8 +77,7 @@ async fn handler(
         lca,
         common_lineage,
         proteins: result[0]
-            .proteins
-            .iter()
+            .proteins(&index.searcher)
             .filter_map(|protein| {
                 let uniprot_entry = accessions_map.get(&protein.uniprot_id)?;
 

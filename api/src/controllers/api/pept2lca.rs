@@ -60,7 +60,7 @@ async fn handler(
         .into_iter()
         .filter_map(|item| {
             let lca = calculate_lca(
-                item.proteins.iter().map(|protein| protein.taxon_id).collect(),
+                item.proteins(&index.searcher).map(|protein| protein.taxon_id).collect(),
                 version,
                 taxon_store,
                 lineage_store

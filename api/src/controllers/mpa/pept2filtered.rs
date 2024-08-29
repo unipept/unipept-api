@@ -49,14 +49,14 @@ async fn handler(
         peptides: result
             .into_iter()
             .filter_map(|item| {
-                let item_taxa: Vec<u32> = item.proteins.iter().map(|protein| protein.taxon_id).collect();
+                let item_taxa: Vec<u32> = item.proteins(&index.searcher).map(|protein| protein.taxon_id).collect();
 
                 if item_taxa.is_empty() {
                     return None;
                 }
 
                 let fa = if include_fa {
-                    Some(calculate_fa(&item.proteins))
+                    Some(calculate_fa(item.proteins(&index.searcher)))
                 } else {
                     None
                 };

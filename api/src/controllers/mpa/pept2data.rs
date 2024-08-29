@@ -55,18 +55,19 @@ async fn handler(
             .into_iter()
             .map(|item| {
                 let lca = calculate_lca(
-                    item.proteins.iter().map(|protein| protein.taxon_id).collect(),
+                    item.proteins(&index.searcher).map(|protein| protein.taxon_id).collect(),
                     LineageVersion::V2,
                     taxon_store,
                     lineage_store
                 );
                 let lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store);
 
+                let fa = calculate_fa(item.proteins(&index.searcher));
                 DataItem {
                     sequence: item.sequence,
                     lca: Some(lca as u32),
                     lineage,
-                    fa: calculate_fa(&item.proteins)
+                    fa
                 }
             })
             .collect()

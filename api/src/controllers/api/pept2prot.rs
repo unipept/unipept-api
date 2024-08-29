@@ -57,7 +57,7 @@ async fn handler(
 
     let accession_numbers: Vec<String> = result
         .iter()
-        .flat_map(|item| item.proteins.iter().map(|protein| protein.uniprot_id.clone()))
+        .flat_map(|item| item.proteins(&index.searcher).map(|protein| protein.uniprot_id.clone()))
         .collect();
 
     let accessions_map = connection.interact(move |conn| get_accessions_map(conn, &accession_numbers)).await??;
@@ -67,7 +67,7 @@ async fn handler(
     Ok(result
         .into_iter()
         .flat_map(|item| {
-            item.proteins
+            item.proteins(&index.searcher)
                 .into_iter()
                 .filter_map(|protein| {
                     let uniprot_entry = accessions_map.get(&protein.uniprot_id)?;

@@ -72,7 +72,7 @@ async fn handler(
     Ok(result
         .into_iter()
         .filter_map(|item| {
-            let fa = calculate_fa(&item.proteins);
+            let fa = calculate_fa(item.proteins(&index.searcher));
 
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
@@ -80,7 +80,7 @@ async fn handler(
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
 
             let lca = calculate_lca(
-                item.proteins.iter().map(|protein| protein.taxon_id).collect(),
+                item.proteins(&index.searcher).map(|protein| protein.taxon_id).collect(),
                 version,
                 taxon_store,
                 lineage_store

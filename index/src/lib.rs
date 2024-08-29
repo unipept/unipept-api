@@ -6,7 +6,7 @@ use std::str::from_utf8;
 pub use errors::IndexError;
 use errors::LoadIndexError;
 use sa_compression::load_compressed_suffix_array;
-pub use sa_index::peptide_search::ProteinInfo;
+pub use sa_index::peptide_search::ProteinsIterator;
 pub use sa_mappings::proteins::Protein;
 use sa_index::{
     binary::load_suffix_array,
@@ -19,7 +19,7 @@ use sa_mappings::proteins::Proteins;
 mod errors;
 
 pub struct Index {
-    searcher: SparseSearcher
+    pub searcher: SparseSearcher
 }
 
 impl Index {

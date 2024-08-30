@@ -14,12 +14,13 @@ use sa_index::{
     sa_searcher::SparseSearcher,
     SuffixArray
 };
+use sa_index::sa_searcher::RankSearcher;
 use sa_mappings::proteins::Proteins;
 
 mod errors;
 
 pub struct Index {
-    pub searcher: SparseSearcher
+    pub searcher: RankSearcher
 }
 
 impl Index {
@@ -30,7 +31,7 @@ impl Index {
         let proteins = Proteins::try_from_database_file(proteins_file)
             .map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
 
-        let searcher = SparseSearcher::new(suffix_array, proteins, 5);
+        let searcher = RankSearcher::new(suffix_array, proteins, 5);
 
         Ok(Self { searcher })
     }

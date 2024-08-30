@@ -13,6 +13,7 @@ use crate::{
     },
     AppState
 };
+use crate::controllers::request::{GetContent, PostContent};
 use crate::helpers::fa_helper::calculate_ec;
 use crate::helpers::sanitize_peptides;
 
@@ -79,3 +80,80 @@ generate_handlers!(
         Ok(Json(handler(state, params).await?))
     }
 );
+
+pub async fn test_get_json_handler(
+    State(AppState { index, datastore, .. }): State<AppState>,
+    GetContent(Parameters { input, equate_il, extra }): GetContent<Parameters>
+) -> Result<Json<Vec<EcInformation>>, ()> {
+    let input = sanitize_peptides(input);
+
+    let mut peptide_counts: HashMap<String, usize> = HashMap::new();
+    for peptide in input.into_iter() {
+        *peptide_counts.entry(peptide).or_insert(0) += 1;
+    }
+
+    let unique_peptides: Vec<String> = peptide_counts.keys().cloned().collect();
+    let result = index.analyse(&unique_peptides, equate_il, None);
+
+    let ec_store = datastore.ec_store();
+
+    // Step 6: Duplicate the results according to the original input
+    let mut final_results = Vec::new();
+    for (unique_peptide, item) in unique_peptides.iter().zip(result.into_iter()) {
+        if let Some(count) = peptide_counts.get(unique_peptide) {
+            let fa = calculate_ec(item.proteins(&index.searcher));
+            let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
+
+            for _ in 0..*count {
+                let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
+
+                final_results.push(EcInformation {
+                    peptide: item.sequence.clone(),
+                    total_protein_count,
+                    ec: ecs,
+                });
+            }
+        }
+    }
+
+    Ok(Json(final_results))
+}
+
+
+pub async fn test_post_json_handler(
+    State(AppState { index, datastore, .. }): State<AppState>,
+    PostContent(Parameters { input, equate_il, extra }): PostContent<Parameters>
+) -> Result<Json<Vec<EcInformation>>, ()> {
+    let input = sanitize_peptides(input);
+
+    let mut peptide_counts: HashMap<String, usize> = HashMap::new();
+    for peptide in input.into_iter() {
+        *peptide_counts.entry(peptide).or_insert(0) += 1;
+    }
+
+    let unique_peptides: Vec<String> = peptide_counts.keys().cloned().collect();
+    let result = index.analyse(&unique_peptides, equate_il, None);
+
+    let ec_store = datastore.ec_store();
+
+    // Step 6: Duplicate the results according to the original input
+    let mut final_results = Vec::new();
+    for (unique_peptide, item) in unique_peptides.iter().zip(result.into_iter()) {
+        if let Some(count) = peptide_counts.get(unique_peptide) {
+            let fa = calculate_ec(item.proteins(&index.searcher));
+            let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
+
+            for _ in 0..*count {
+                let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
+
+                final_results.push(EcInformation {
+                    peptide: item.sequence.clone(),
+                    total_protein_count,
+                    ec: ecs,
+                });
+            }
+        }
+    }
+
+    Ok(Json(final_results))
+}

@@ -50,7 +50,7 @@ fn create_api_routes() -> Router<AppState> {
 fn create_api_v1_routes() -> Router<AppState> {
     define_routes!(
         "/pept2ec",
-        get(pept2ec::get_json_handler).post(pept2ec::post_json_handler),
+        get(pept2ec::test_get_json_handler).post(pept2ec::test_post_json_handler),
         "/pept2funct",
         get(pept2funct::get_json_handler).post(pept2funct::post_json_handler),
         "/pept2go",
@@ -80,7 +80,7 @@ fn create_api_v1_routes() -> Router<AppState> {
 fn create_api_v2_routes() -> Router<AppState> {
     define_routes!(
         "/pept2ec",
-        get(pept2ec::get_json_handler).post(pept2ec::post_json_handler),
+        get(pept2ec::test_get_json_handler).post(pept2ec::test_get_json_handler),
         "/pept2funct",
         get(pept2funct::get_json_handler).post(pept2funct::post_json_handler),
         "/pept2go",

@@ -9,7 +9,6 @@ use crate::{
     },
     helpers::{
         ec_helper::{ec_numbers_from_map, EcNumber},
-        fa_helper::calculate_fa
     },
     AppState
 };

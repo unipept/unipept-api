@@ -7,7 +7,6 @@ use crate::{
         generate_handlers
     },
     helpers::{
-        fa_helper::calculate_fa,
         go_helper::{go_terms_from_map, GoTerms}
     },
     AppState

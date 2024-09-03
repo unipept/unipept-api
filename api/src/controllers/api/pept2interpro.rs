@@ -7,7 +7,6 @@ use crate::{
         generate_handlers
     },
     helpers::{
-        fa_helper::calculate_fa,
         interpro_helper::{interpro_entries_from_map, InterproEntries}
     },
     AppState

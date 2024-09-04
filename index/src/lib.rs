@@ -2,23 +2,25 @@ use std::{
     fs::File,
     io::{BufReader, Read}
 };
-
+use std::str::from_utf8;
 pub use errors::IndexError;
 use errors::LoadIndexError;
 use sa_compression::load_compressed_suffix_array;
-pub use sa_index::peptide_search::ProteinInfo;
+pub use sa_index::peptide_search::ProteinsIterator;
+pub use sa_mappings::proteins::Protein;
 use sa_index::{
     binary::load_suffix_array,
     peptide_search::{search_all_peptides, SearchResult},
     sa_searcher::SparseSearcher,
     SuffixArray
 };
+use sa_index::sa_searcher::RankSearcher;
 use sa_mappings::proteins::Proteins;
 
 mod errors;
 
 pub struct Index {
-    searcher: SparseSearcher
+    pub searcher: RankSearcher
 }
 
 impl Index {
@@ -29,7 +31,7 @@ impl Index {
         let proteins = Proteins::try_from_database_file(proteins_file)
             .map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
 
-        let searcher = SparseSearcher::new(suffix_array, proteins);
+        let searcher = RankSearcher::new(suffix_array, proteins, 5);
 
         Ok(Self { searcher })
     }

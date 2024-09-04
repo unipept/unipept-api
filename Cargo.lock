@@ -232,7 +232,7 @@ dependencies = [
 [[package]]
 name = "bitarray"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#f15e3f8b11d5563096a35cdf33e090ea27570894"
+source = "git+https://github.com/unipept/unipept-index.git?rev=352bcb797dcd6c369275aec178417bc14e6d2480#352bcb797dcd6c369275aec178417bc14e6d2480"
 
 [[package]]
 name = "bitflags"
@@ -508,7 +508,7 @@ dependencies = [
 [[package]]
 name = "fa-compression"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#f15e3f8b11d5563096a35cdf33e090ea27570894"
+source = "git+https://github.com/unipept/unipept-index.git?rev=352bcb797dcd6c369275aec178417bc14e6d2480#352bcb797dcd6c369275aec178417bc14e6d2480"
 
 [[package]]
 name = "fnv"
@@ -1042,7 +1042,7 @@ checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
 [[package]]
 name = "sa-compression"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#f15e3f8b11d5563096a35cdf33e090ea27570894"
+source = "git+https://github.com/unipept/unipept-index.git?rev=352bcb797dcd6c369275aec178417bc14e6d2480#352bcb797dcd6c369275aec178417bc14e6d2480"
 dependencies = [
  "bitarray",
  "sa-index",
@@ -1051,7 +1051,7 @@ dependencies = [
 [[package]]
 name = "sa-index"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#f15e3f8b11d5563096a35cdf33e090ea27570894"
+source = "git+https://github.com/unipept/unipept-index.git?rev=352bcb797dcd6c369275aec178417bc14e6d2480#352bcb797dcd6c369275aec178417bc14e6d2480"
 dependencies = [
  "bitarray",
  "clap",
@@ -1064,7 +1064,7 @@ dependencies = [
 [[package]]
 name = "sa-mappings"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#f15e3f8b11d5563096a35cdf33e090ea27570894"
+source = "git+https://github.com/unipept/unipept-index.git?rev=352bcb797dcd6c369275aec178417bc14e6d2480#352bcb797dcd6c369275aec178417bc14e6d2480"
 dependencies = [
  "bytelines",
  "fa-compression",

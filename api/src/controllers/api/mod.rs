@@ -29,7 +29,9 @@ pub fn default_names() -> bool {
 
 pub fn default_descendants() -> bool { false }
 
-pub fn default_descendants_rank() -> String { String::from("species") }
+pub fn default_descendants_ranks() -> Vec<String> {
+    vec![String::from("species")]
+}
 
 pub fn default_link() -> bool {
     false

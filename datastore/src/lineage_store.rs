@@ -204,4 +204,11 @@ impl LineageStore {
             .and_then(|idx| self.index_references.get(idx))
             .and_then(|map| map.get(&taxon_id))
     }
+
+    /// Returns all unique taxon IDs at a specific rank in the NCBI taxonomy.
+    pub fn get_all_taxon_ids_at_rank(&self, rank: &str) -> Option<Vec<u32>> {
+        LineageStore::rank_to_idx(rank)
+            .and_then(|idx| self.index_references.get(idx))
+            .and_then(|map| Some(map.keys().cloned().collect()))
+    }
 }

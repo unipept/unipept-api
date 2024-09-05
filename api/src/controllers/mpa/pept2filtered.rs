@@ -32,7 +32,7 @@ pub struct FilteredData {
 }
 
 async fn handler(
-    State(AppState { index, .. }): State<AppState>,
+    State(AppState { index, datastore, .. }): State<AppState>,
     Parameters { mut peptides, equate_il, include_fa }: Parameters
 ) -> Result<FilteredData, ()> {
     if peptides.is_empty() {
@@ -45,11 +45,13 @@ async fn handler(
     let peptides = sanitize_peptides(peptides);
     let result = index.analyse(&peptides, equate_il, Some(10_000));
 
+    let taxon_store = datastore.taxon_store();
+
     Ok(FilteredData {
         peptides: result
             .into_iter()
             .filter_map(|item| {
-                let item_taxa: Vec<u32> = item.proteins.iter().map(|protein| protein.taxon).collect();
+                let item_taxa: Vec<u32> = item.proteins.iter().map(|protein| protein.taxon).filter(|&taxon_id| taxon_store.is_valid(taxon_id)).collect();
 
                 if item_taxa.is_empty() {
                     return None;

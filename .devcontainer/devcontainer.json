@@ -16,7 +16,7 @@
   // "forwardPorts": [],
 
   // Use 'postCreateCommand' to run commands after the container is created.
-  "postCreateCommand": "apt update && apt install --yes libmysqlclient-dev",
+  "postCreateCommand": "apt update && apt install --yes libmysqlclient-dev"
 
   // Configure tool-specific properties.
   // "customizations": {},

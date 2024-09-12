@@ -4,7 +4,6 @@ use std::{
     str::FromStr,
     fmt
 };
-
 use crate::errors::TaxonStoreError;
 
 pub type TaxonInformation = (String, LineageRank, bool);
@@ -53,7 +52,7 @@ impl fmt::Display for LineageRank {
 
 
 pub struct TaxonStore {
-    pub mapper: HashMap<u32, TaxonInformation>
+    pub mapper: HashMap<u32, TaxonInformation>,
 }
 
 impl TaxonStore {

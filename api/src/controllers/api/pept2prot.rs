@@ -1,4 +1,6 @@
+use std::collections::HashSet;
 use axum::{extract::State, Json};
+use itertools::Itertools;
 use database::get_accessions_map;
 use serde::{Deserialize, Serialize};
 
@@ -55,7 +57,7 @@ async fn handler(
 
     let result = index.analyse(&input, equate_il, None);
 
-    let accession_numbers: Vec<String> = result
+    let accession_numbers: HashSet<String> = result
         .iter()
         .flat_map(|item| item.proteins.iter().map(|protein| protein.uniprot_accession.clone()))
         .collect();

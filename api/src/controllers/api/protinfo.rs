@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use axum::{extract::State, Json};
 use database::get_accessions;
 use serde::{Deserialize, Serialize};
@@ -58,6 +59,7 @@ async fn handler(
     version: LineageVersion
 ) -> Result<Vec<ProtInformation>, ApiError> {
     let input = sanitize_proteins(input);
+    let input = HashSet::from_iter(input.into_iter());
 
     let connection = database.get_conn().await?;
 

@@ -232,7 +232,7 @@ dependencies = [
 [[package]]
 name = "bitarray"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#f15e3f8b11d5563096a35cdf33e090ea27570894"
+source = "git+https://github.com/unipept/unipept-index.git?rev=e308ed3#e308ed3b01e95f84e63d2964d4f04725c57c3e14"
 
 [[package]]
 name = "bitflags"
@@ -508,7 +508,7 @@ dependencies = [
 [[package]]
 name = "fa-compression"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#f15e3f8b11d5563096a35cdf33e090ea27570894"
+source = "git+https://github.com/unipept/unipept-index.git?rev=e308ed3#e308ed3b01e95f84e63d2964d4f04725c57c3e14"
 
 [[package]]
 name = "fnv"
@@ -1042,7 +1042,7 @@ checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
 [[package]]
 name = "sa-compression"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#f15e3f8b11d5563096a35cdf33e090ea27570894"
+source = "git+https://github.com/unipept/unipept-index.git?rev=e308ed3#e308ed3b01e95f84e63d2964d4f04725c57c3e14"
 dependencies = [
  "bitarray",
  "sa-index",
@@ -1051,7 +1051,7 @@ dependencies = [
 [[package]]
 name = "sa-index"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#f15e3f8b11d5563096a35cdf33e090ea27570894"
+source = "git+https://github.com/unipept/unipept-index.git?rev=e308ed3#e308ed3b01e95f84e63d2964d4f04725c57c3e14"
 dependencies = [
  "bitarray",
  "clap",
@@ -1059,15 +1059,18 @@ dependencies = [
  "sa-mappings",
  "serde",
  "serde_json",
+ "text-compression",
 ]
 
 [[package]]
 name = "sa-mappings"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#f15e3f8b11d5563096a35cdf33e090ea27570894"
+source = "git+https://github.com/unipept/unipept-index.git?rev=e308ed3#e308ed3b01e95f84e63d2964d4f04725c57c3e14"
 dependencies = [
+ "bitarray",
  "bytelines",
  "fa-compression",
+ "text-compression",
 ]
 
 [[package]]
@@ -1193,6 +1196,14 @@ name = "sync_wrapper"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7065abeca94b6a8a577f9bd45aa0867a2238b74e8eb67cf10d492bc39351394"
+
+[[package]]
+name = "text-compression"
+version = "0.1.0"
+source = "git+https://github.com/unipept/unipept-index.git?rev=e308ed3#e308ed3b01e95f84e63d2964d4f04725c57c3e14"
+dependencies = [
+ "bitarray",
+]
 
 [[package]]
 name = "thiserror"

@@ -61,7 +61,7 @@ async fn handler(
     version: LineageVersion
 ) -> Result<Vec<PeptInformation>, ()> {
     let input = sanitize_peptides(input);
-    let result = index.analyse(&input, equate_il, None);
+    let result = index.analyse(&input, equate_il, None, None);
 
     let ec_store = datastore.ec_store();
     let go_store = datastore.go_store();

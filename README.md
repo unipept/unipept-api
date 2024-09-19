@@ -52,4 +52,5 @@ Follow these steps in order to easily work on the Unipept API in the devcontaine
 
 * You first have to build the binaries by running `cargo build --release`.
 * Then, you should start the mariadb server: `sudo service mariadb start`
+* Sometimes the password for the database user has not been initialized properly, open a MySQL shell and execute this command: `alter user 'root'@'localhost' identified by 'root_pass'; flush privileges;`.
 * Finally, the Unipept API can be started with this command: `./target/release/unipept-api -i "/unipept-index-data" -d "mysql://root:root_pass@localhost:3306/unipept" -p 80`.

@@ -19,6 +19,10 @@ pub fn default_extra() -> bool {
     false
 }
 
+pub fn default_tryptic() -> bool {
+    false
+}
+
 pub fn default_domains() -> bool {
     false
 }

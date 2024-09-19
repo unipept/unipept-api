@@ -2,7 +2,7 @@ use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_include_fa},
+    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_include_fa, mpa::default_tryptic},
     helpers::fa_helper::{calculate_fa, FunctionalAggregation},
     AppState
 };
@@ -15,7 +15,9 @@ pub struct Parameters {
     #[serde(default = "default_equate_il")]
     equate_il: bool,
     #[serde(default = "default_include_fa")]
-    include_fa: bool
+    include_fa: bool,
+    #[serde(default = "default_tryptic")]
+    tryptic: bool
 }
 
 #[derive(Serialize)]
@@ -33,7 +35,7 @@ pub struct FilteredData {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { mut peptides, equate_il, include_fa }: Parameters
+    Parameters { mut peptides, equate_il, include_fa, tryptic }: Parameters
 ) -> Result<FilteredData, ()> {
     if peptides.is_empty() {
         return Ok(FilteredData { peptides: Vec::new() });
@@ -43,7 +45,7 @@ async fn handler(
     peptides.dedup();
 
     let peptides = sanitize_peptides(peptides);
-    let result = index.analyse(&peptides, equate_il, Some(10_000));
+    let result = index.analyse(&peptides, equate_il, Some(10_000), Some(tryptic));
 
     let taxon_store = datastore.taxon_store();
 

@@ -38,7 +38,7 @@ async fn handler(
     Parameters { input, equate_il, extra, domains }: Parameters
 ) -> Result<Vec<InterproInformation>, ()> {
     let input = sanitize_peptides(input);
-    let result = index.analyse(&input, equate_il, None);
+    let result = index.analyse(&input, equate_il, None, None);
 
     let interpro_store = datastore.interpro_store();
 

@@ -34,8 +34,8 @@ impl Index {
         Ok(Self { searcher })
     }
 
-    pub fn analyse(&self, peptides: &Vec<String>, equate_il: bool, cutoff: Option<usize>) -> Vec<SearchResult> {
-        search_all_peptides(&self.searcher, peptides, cutoff.unwrap_or(10_000), equate_il)
+    pub fn analyse(&self, peptides: &Vec<String>, equate_il: bool, cutoff: Option<usize>, tryptic: Option<bool>) -> Vec<SearchResult> {
+        search_all_peptides(&self.searcher, peptides, cutoff.unwrap_or(10_000), equate_il, tryptic.unwrap_or(false))
     }
 }
 

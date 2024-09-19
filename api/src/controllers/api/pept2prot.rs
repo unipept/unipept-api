@@ -55,22 +55,14 @@ async fn handler(
 ) -> Result<Vec<ProtInformation>, ApiError> {
     let input = sanitize_peptides(input);
 
-    println!("Input has been sanitized...");
-
     let connection = database.get_conn().await?;
 
-    println!("Got connection to the database...");
-
     let result = index.analyse(&input, equate_il, None, Some(tryptic));
-
-    println!("Analysing peptides succeeded... -> Length {}", result.len());
 
     let accession_numbers: HashSet<String> = result
         .iter()
         .flat_map(|item| item.proteins.iter().map(|protein| protein.uniprot_accession.clone()))
         .collect();
-
-    println!("Accession numbers ok...");
 
     let accessions_map = connection
         .interact(move |conn| get_accessions_map(conn, &accession_numbers))
@@ -83,8 +75,6 @@ async fn handler(
             println!("Error occurred: {:?}", e);
             e
         })?;
-
-    println!("Accessions map ok...");
 
     let taxon_store = datastore.taxon_store();
 

@@ -27,7 +27,9 @@ impl Index {
             load_index_file(index_file).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?;
 
         let proteins = Proteins::try_from_database_file(proteins_file)
-            .map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
+            .map_err(|_| LoadIndexError::LoadProteinsErrors(
+                LoadIndexError::FileNotFound(proteins_file.to_string()).to_string(),
+            ))?;
 
         let searcher = SparseSearcher::new(suffix_array, proteins);
 
@@ -41,7 +43,9 @@ impl Index {
 
 fn load_index_file(index_file: &str) -> Result<SuffixArray, LoadIndexError> {
     // Open the suffix array file
-    let mut sa_file = File::open(index_file)?;
+    let mut sa_file = File::open(index_file).map_err(
+        |_| LoadIndexError::FileNotFound(index_file.to_string())
+    )?;
 
     // Create a buffer reader for the file
     let mut reader = BufReader::new(&mut sa_file);

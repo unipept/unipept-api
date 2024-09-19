@@ -124,7 +124,9 @@ impl LineageStore {
     }
 
     pub fn try_from_file(file: &str) -> Result<Self, LineageStoreError> {
-        let file = std::fs::File::open(file)?;
+        let file = std::fs::File::open(file).map_err(
+            |_| LineageStoreError::FileNotFound(file.to_string())
+        )?;
 
         let mut mapper = HashMap::new();
 

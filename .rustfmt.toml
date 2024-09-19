@@ -1,0 +1,15 @@
+unstable_features = true
+version = "Two"
+
+max_width = 120
+use_small_heuristics = "max"
+chain_width = 100
+struct_lit_width = 60
+struct_variant_width = 60
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+normalize_comments = true
+normalize_doc_attributes = true
+overflow_delimited_expr = true
+trailing_comma = "Never"
+use_field_init_shorthand = true

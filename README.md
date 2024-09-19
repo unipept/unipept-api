@@ -44,3 +44,13 @@ This is an exhaustive list of all endpoints that are exposed by this API
 * `/private_api/metadata`
 * `/mpa/pept2data`
 * `/datasets/sampledata`
+
+## Developing the Unipept API
+You can use the included devcontainer in order to start working on this API.
+The devcontainer will automatically download the most recent version of the Unipept Index built from SwissProt.
+Follow these steps in order to easily work on the Unipept API in the devcontainer:
+
+* You first have to build the binaries by running `cargo build --release`.
+* Then, you should start the mariadb server: `sudo service mariadb start`
+* Sometimes the password for the database user has not been initialized properly, open a MySQL shell and execute this command: `alter user 'root'@'localhost' identified by 'root_pass'; flush privileges;`.
+* Finally, the Unipept API can be started with this command: `./target/release/unipept-api -i "/unipept-index-data" -d "mysql://root:root_pass@localhost:3306/unipept" -p 80`.

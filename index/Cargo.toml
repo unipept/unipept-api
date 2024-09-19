@@ -1,0 +1,10 @@
+[package]
+name = "index"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sa-compression = { git = "https://github.com/unipept/unipept-index.git" }
+sa-index = { git = "https://github.com/unipept/unipept-index.git" }
+sa-mappings = { git = "https://github.com/unipept/unipept-index.git" }
+thiserror = "1.0"

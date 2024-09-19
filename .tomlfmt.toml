@@ -1,0 +1,9 @@
+multiline_trailing_comma = false
+table_order = [
+    "package",
+    "features",
+    "dependencies",
+    "build-dependencies",
+    "dev-dependencies",
+    "workspace"
+]

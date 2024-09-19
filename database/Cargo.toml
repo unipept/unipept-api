@@ -6,4 +6,5 @@ edition = "2021"
 [dependencies]
 deadpool-diesel = { version = "0.4.1", features = ["mysql"] }
 diesel = { version = "2", features = ["mysql"] }
+itertools = "0.13.0"
 thiserror = "1.0"

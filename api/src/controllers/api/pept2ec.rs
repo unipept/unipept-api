@@ -44,7 +44,7 @@ async fn handler(
     }
 
     let unique_peptides: Vec<String> = peptide_counts.keys().cloned().collect();
-    let result = index.analyse(&unique_peptides, equate_il, None, None);
+    let result = index.analyse(&unique_peptides, equate_il, false, None);
 
     let ec_store = datastore.ec_store();
 

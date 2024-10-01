@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use axum::{extract::State, Json};
-use itertools::Itertools;
 use database::get_accessions_map;
 use serde::{Deserialize, Serialize};
 
@@ -57,7 +56,7 @@ async fn handler(
 
     let connection = database.get_conn().await?;
 
-    let result = index.analyse(&input, equate_il, None, Some(tryptic));
+    let result = index.analyse(&input, equate_il, tryptic, None);
 
     let accession_numbers: HashSet<String> = result
         .iter()

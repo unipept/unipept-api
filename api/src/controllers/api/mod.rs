@@ -40,3 +40,7 @@ pub fn default_descendants_ranks() -> Vec<String> {
 pub fn default_link() -> bool {
     false
 }
+
+pub fn default_compact() -> bool {
+    false
+}

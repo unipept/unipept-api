@@ -45,7 +45,7 @@ async fn handler(
     peptides.dedup();
 
     let peptides = sanitize_peptides(peptides);
-    let result = index.analyse(&peptides, equate_il, Some(10_000), Some(tryptic));
+    let result = index.analyse(&peptides, equate_il, tryptic, Some(10_000));
 
     let taxon_store = datastore.taxon_store();
 

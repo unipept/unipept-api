@@ -51,7 +51,7 @@ async fn handler(
     version: LineageVersion
 ) -> Result<Vec<LcaInformation>, ()> {
     let input = sanitize_peptides(input);
-    let result = index.analyse(&input, equate_il, None, None);
+    let result = index.analyse(&input, equate_il, false, None);
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();

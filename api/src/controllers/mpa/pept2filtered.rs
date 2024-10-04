@@ -1,11 +1,9 @@
 use std::collections::HashSet;
 use axum::{extract::State, Json};
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use datastore::{LineageRank, LineageStore};
 use index::{ProteinInfo, SearchResult};
 use crate::{
-    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_include_fa, mpa::default_tryptic},
+    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic},
     helpers::fa_helper::{calculate_fa, FunctionalAggregation},
     AppState
 };

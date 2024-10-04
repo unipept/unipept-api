@@ -10,10 +10,10 @@ use crate::{
     AppState
 };
 use crate::helpers::lca_helper::calculate_lca;
-use crate::helpers::lca_helper::filters::protein_filter::ProteinFilter;
-use crate::helpers::lca_helper::filters::proteome_filter::ProteomeFilter;
-use crate::helpers::lca_helper::filters::taxa_filter::TaxaFilter;
-use crate::helpers::lca_helper::filters::UniprotFilter;
+use crate::helpers::filters::protein_filter::ProteinFilter;
+use crate::helpers::filters::proteome_filter::ProteomeFilter;
+use crate::helpers::filters::taxa_filter::TaxaFilter;
+use crate::helpers::filters::UniprotFilter;
 use crate::helpers::lineage_helper::{get_lineage_array, LineageVersion};
 use crate::helpers::sanitize_peptides;
 

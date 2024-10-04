@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use datastore::LineageStore;
 use index::ProteinInfo;
-use crate::helpers::lca_helper::filters::UniprotFilter;
+use crate::helpers::filters::UniprotFilter;
 use crate::helpers::lineage_helper::{get_lineage_array, LineageVersion};
 
 pub struct TaxaFilter<'a> {

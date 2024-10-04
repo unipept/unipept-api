@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use index::ProteinInfo;
-use crate::helpers::lca_helper::filters::UniprotFilter;
+use crate::helpers::filters::UniprotFilter;
 
 pub struct ProteomeFilter {
     pub proteins: HashSet<String>

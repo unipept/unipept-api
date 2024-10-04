@@ -1,31 +1,50 @@
+use std::collections::HashSet;
 use axum::{extract::State, Json};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-
+use datastore::{LineageRank, LineageStore};
+use index::{ProteinInfo, SearchResult};
 use crate::{
     controllers::{generate_handlers, mpa::default_equate_il, mpa::default_include_fa, mpa::default_tryptic},
     helpers::fa_helper::{calculate_fa, FunctionalAggregation},
     AppState
 };
+use crate::helpers::lca_helper::calculate_lca;
+use crate::helpers::lca_helper::filters::protein_filter::ProteinFilter;
+use crate::helpers::lca_helper::filters::proteome_filter::ProteomeFilter;
+use crate::helpers::lca_helper::filters::taxa_filter::TaxaFilter;
+use crate::helpers::lca_helper::filters::UniprotFilter;
+use crate::helpers::lineage_helper::{get_lineage_array, LineageVersion};
 use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
 pub struct Parameters {
     #[serde(default)]
     peptides: Vec<String>,
+    #[serde(flatten)]
+    filter: Filter,
     #[serde(default = "default_equate_il")]
     equate_il: bool,
-    #[serde(default = "default_include_fa")]
-    include_fa: bool,
     #[serde(default = "default_tryptic")]
     tryptic: bool
+}
+
+#[derive(Deserialize)]
+pub enum Filter {
+    #[serde(rename = "taxa")]
+    Taxa(HashSet<u32>),
+    #[serde(rename = "proteomes")]
+    Proteomes(HashSet<String>),
+    #[serde(rename = "proteins")]
+    Proteins(HashSet<String>)
 }
 
 #[derive(Serialize)]
 pub struct FilteredDataItem {
     sequence: String,
-    taxa: Vec<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    fa: Option<FunctionalAggregation>
+    lca: Option<u32>,
+    lineage: Vec<Option<i32>>,
+    fa: FunctionalAggregation
 }
 
 #[derive(Serialize)]
@@ -35,7 +54,7 @@ pub struct FilteredData {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { mut peptides, equate_il, include_fa, tryptic }: Parameters
+    Parameters { mut peptides, equate_il, tryptic, filter }: Parameters
 ) -> Result<FilteredData, ()> {
     if peptides.is_empty() {
         return Ok(FilteredData { peptides: Vec::new() });
@@ -48,27 +67,46 @@ async fn handler(
     let result = index.analyse(&peptides, equate_il, tryptic, Some(10_000));
 
     let taxon_store = datastore.taxon_store();
+    let lineage_store = datastore.lineage_store();
+
+    let filter_proteins: Box<dyn UniprotFilter> = match filter {
+        Filter::Taxa(taxa) => {
+            Box::new(TaxaFilter::new(taxa, lineage_store))
+        },
+        Filter::Proteomes(proteomes) => {
+            Box::new(ProteomeFilter::new(proteomes).await.unwrap())
+        },
+        Filter::Proteins(proteins) => {
+            Box::new(ProteinFilter::new(proteins))
+        }
+    };
 
     Ok(FilteredData {
         peptides: result
             .into_iter()
-            .filter_map(|item| {
-                let item_taxa: Vec<u32> = item.proteins.iter().map(|protein| protein.taxon).filter(|&taxon_id| taxon_store.is_valid(taxon_id)).collect();
+            .filter_map(|SearchResult { proteins, sequence, .. }| {
+                let filtered_proteins: Vec<ProteinInfo> = proteins
+                    .into_iter()
+                    .filter(|protein| filter_proteins.filter(protein))
+                    .collect();
 
-                if item_taxa.is_empty() {
+                if filtered_proteins.is_empty() {
                     return None;
                 }
 
-                let fa = if include_fa {
-                    Some(calculate_fa(&item.proteins))
-                } else {
-                    None
-                };
+                let lca = calculate_lca(
+                    filtered_proteins.iter().map(|protein| protein.taxon).collect(),
+                    LineageVersion::V2,
+                    taxon_store,
+                    lineage_store
+                );
+                let lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store);
 
                 Some(FilteredDataItem {
-                    sequence: item.sequence,
-                    taxa: item_taxa,
-                    fa
+                    sequence,
+                    lca: Some(lca as u32),
+                    lineage,
+                    fa: calculate_fa(&filtered_proteins)
                 })
             })
             .collect()

@@ -1,3 +1,5 @@
+pub mod filters;
+
 use datastore::{LineageStore, TaxonStore};
 
 use super::lineage_helper::{

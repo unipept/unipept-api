@@ -1,3 +1,5 @@
+use serde::Deserialize;
+
 pub mod pept2ec;
 pub mod pept2funct;
 pub mod pept2go;
@@ -10,6 +12,19 @@ pub mod protinfo;
 pub mod taxa2lca;
 pub mod taxa2tree;
 pub mod taxonomy;
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum EitherVec<T, U> {
+    Left(Vec<T>),
+    Right(Vec<U>)
+}
+
+impl<T, U> Default for EitherVec<T, U> {
+    fn default() -> Self {
+        EitherVec::Left(Vec::new())
+    }
+}
 
 pub fn default_equate_il() -> bool {
     true

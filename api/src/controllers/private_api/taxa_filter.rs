@@ -1,5 +1,4 @@
 use axum::{extract::State, Json};
-use http::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -48,7 +47,7 @@ async fn count_handler(
 ) -> Result<TaxonCountResult, ()> {
     let taxon_store = datastore.taxon_store();
 
-    if (filter == "") {
+    if filter == "" {
         Ok(TaxonCountResult {
             count: taxon_store.mapper.len() as u32
         })

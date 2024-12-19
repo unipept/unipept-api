@@ -1,6 +1,6 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
-
+use datastore::LineageRank;
 use crate::{
     controllers::generate_handlers,
     AppState
@@ -13,7 +13,7 @@ fn default_filter() -> String {
 #[derive(Deserialize)]
 pub struct TaxaCountParameters {
     #[serde(default = "default_filter")]
-    filter: String
+    filter: String,
 }
 
 #[derive(Deserialize)]
@@ -33,12 +33,12 @@ pub struct Taxon {
     id: u32,
     name: String,
     rank: String,
-    lineage: Vec<Option<i32>>
+    lineage: Vec<Option<i32>>,
 }
 
 #[derive(Serialize)]
 pub struct TaxonCountResult {
-    count: u32
+    count: u32,
 }
 
 async fn count_handler(
@@ -47,15 +47,18 @@ async fn count_handler(
 ) -> Result<TaxonCountResult, ()> {
     let taxon_store = datastore.taxon_store();
 
-    if filter == "" {
+    if filter.is_empty() {
         Ok(TaxonCountResult {
-            count: taxon_store.mapper.len() as u32
+            count: taxon_store.mapper
+                .values()
+                .filter(|&(_, rank, is_valid)| *is_valid && *rank != LineageRank::NoRank)
+                .count() as u32,
         })
     } else {
         Ok(TaxonCountResult {
             count: taxon_store.mapper
                 .values()
-                .filter(|&(name, _, _)| name.to_lowercase().contains(&filter.to_lowercase()))
+                .filter(|&(name, rank, is_valid)| *is_valid && *rank != LineageRank::NoRank && name.to_lowercase().contains(&filter.to_lowercase()))
                 .count() as u32,
         })
     }
@@ -75,11 +78,11 @@ async fn filter_handler(
 
     let mut filtered_taxa: Vec<_> = taxon_store.mapper
         .iter()
-        .filter(|(_, (name, _, _))| name.to_lowercase().contains(&filter.to_lowercase()))
+        .filter(|(_, (name, rank, is_valid))| *is_valid && *rank != LineageRank::NoRank && name.to_lowercase().contains(&filter.to_lowercase()))
         .map(|(id, (name, rank, _))| Taxon {
             id: *id,
             name: name.clone(),
-            rank: rank.to_string(),
+            rank: LineageRank::to_string(rank),
             lineage: vec![], // Assuming lineage information is not present in the provided code
         })
         .collect();
@@ -133,5 +136,3 @@ generate_handlers!(
         Ok(Json(filter_handler(state, params).await?))
     }
 );
-
-

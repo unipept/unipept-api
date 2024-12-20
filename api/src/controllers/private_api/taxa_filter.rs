@@ -29,14 +29,6 @@ pub struct TaxaFilterParameters {
 }
 
 #[derive(Serialize)]
-pub struct Taxon {
-    id: u32,
-    name: String,
-    rank: String,
-    lineage: Vec<Option<i32>>,
-}
-
-#[derive(Serialize)]
 pub struct TaxonCountResult {
     count: u32,
 }
@@ -73,48 +65,51 @@ async fn filter_handler(
         sort_by,
         sort_descending,
     }: TaxaFilterParameters,
-) -> Result<Vec<Taxon>, ()> {
+) -> Result<Vec<u32>, ()> {
     let taxon_store = datastore.taxon_store();
 
     let mut filtered_taxa: Vec<_> = taxon_store.mapper
         .iter()
         .filter(|(_, (name, rank, is_valid))| *is_valid && *rank != LineageRank::NoRank && name.to_lowercase().contains(&filter.to_lowercase()))
-        .map(|(id, (name, rank, _))| Taxon {
-            id: *id,
-            name: name.clone(),
-            rank: LineageRank::to_string(rank),
-            lineage: vec![], // Assuming lineage information is not present in the provided code
-        })
+        .map(|(id, _)| *id)
         .collect();
 
     // Sort based on the `sort_by` field
     match sort_by.as_str() {
         "name" => {
             if sort_descending {
-                filtered_taxa.sort_by(|a, b| b.name.cmp(&a.name));
+                filtered_taxa.sort_by(|&a_id, &b_id| {
+                    taxon_store.mapper[&b_id].0.cmp(&taxon_store.mapper[&a_id].0)
+                });
             } else {
-                filtered_taxa.sort_by(|a, b| a.name.cmp(&b.name));
+                filtered_taxa.sort_by(|&a_id, &b_id| {
+                    taxon_store.mapper[&a_id].0.cmp(&taxon_store.mapper[&b_id].0)
+                });
             }
         }
         "rank" => {
             if sort_descending {
-                filtered_taxa.sort_by(|a, b| b.rank.cmp(&a.rank));
+                filtered_taxa.sort_by(|&a_id, &b_id| {
+                    LineageRank::to_string(&taxon_store.mapper[&b_id].1).cmp(&LineageRank::to_string(&taxon_store.mapper[&a_id].1))
+                });
             } else {
-                filtered_taxa.sort_by(|a, b| a.rank.cmp(&b.rank));
+                filtered_taxa.sort_by(|&a_id, &b_id| {
+                    LineageRank::to_string(&taxon_store.mapper[&a_id].1).cmp(&LineageRank::to_string(&taxon_store.mapper[&b_id].1))
+                });
             }
         }
         _ => {
             // Default to sorting by id
             if sort_descending {
-                filtered_taxa.sort_by(|a, b| b.id.cmp(&a.id));
+                filtered_taxa.sort_by(|a, b| b.cmp(a));
             } else {
-                filtered_taxa.sort_by(|a, b| a.id.cmp(&b.id));
+                filtered_taxa.sort_by(|a, b| a.cmp(b));
             }
         }
     }
 
     // Take the range [start, end)
-    let taxa: Vec<_> = filtered_taxa.into_iter().skip(start).take(end - start).collect();
+    let taxa: Vec<u32> = filtered_taxa.into_iter().skip(start).take(end - start).collect();
 
     Ok(taxa)
 }
@@ -132,7 +127,7 @@ generate_handlers!(
     async fn json_filter_handler(
         state => State<AppState>,
         params => TaxaFilterParameters
-    ) -> Result<Json<Vec<Taxon>>, ()> {
+    ) -> Result<Json<Vec<u32>>, ()> {
         Ok(Json(filter_handler(state, params).await?))
     }
 );

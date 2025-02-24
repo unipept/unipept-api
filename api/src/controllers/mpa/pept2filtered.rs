@@ -19,7 +19,6 @@ use crate::helpers::sanitize_peptides;
 pub struct Parameters {
     #[serde(default)]
     peptides: Vec<String>,
-    #[serde(flatten)]
     filter: Filter,
     #[serde(default = "default_equate_il")]
     equate_il: bool,

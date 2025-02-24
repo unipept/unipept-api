@@ -37,7 +37,7 @@ where
     type Rejection = Response;
 
     async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
-        let RawForm(form) = req.extract().await.map_err(IntoResponse::into_response)?;
+        let RawForm(form) = req.extract().await.map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body").into_response())?;
 
         let form_bytes = form.to_vec();
         let decoded_bytes = urlencoding::decode_binary(&form_bytes);
@@ -57,7 +57,7 @@ where
     type Rejection = Response;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        let mut multipart = Multipart::from_request(req, state).await.map_err(IntoResponse::into_response)?;
+        let mut multipart = Multipart::from_request(req, state).await.map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body").into_response())?;
 
         let mut querystring = String::new();
         while let Some(field) = multipart.next_field().await.unwrap() {
@@ -89,17 +89,17 @@ where
 
         if let Some(content_type) = content_type {
             if content_type.starts_with("application/json") {
-                let Json(payload) = req.extract().await.map_err(IntoResponse::into_response)?;
+                let Json(payload) = req.extract().await.map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body").into_response())?;
                 return Ok(Self(payload));
             }
 
             if content_type.starts_with("application/x-www-form-urlencoded") {
-                let Form(payload) = req.extract().await.map_err(IntoResponse::into_response)?;
+                let Form(payload) = req.extract().await.map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body").into_response())?;
                 return Ok(Self(payload));
             }
 
             if content_type.starts_with("multipart/form-data") {
-                let MultiPart(payload) = req.extract().await.map_err(IntoResponse::into_response)?;
+                let MultiPart(payload) = req.extract().await.map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body").into_response())?;
                 return Ok(Self(payload));
             }
         }

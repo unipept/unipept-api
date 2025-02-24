@@ -15,14 +15,17 @@ pub mod taxonomy;
 
 #[derive(Deserialize)]
 #[serde(untagged)]
-pub enum EitherVec<T, U> {
-    Left(Vec<T>),
-    Right(Vec<U>)
+pub enum Either<T, U> {
+    Left(T),
+    Right(U)
 }
 
-impl<T, U> Default for EitherVec<T, U> {
-    fn default() -> Self {
-        EitherVec::Left(Vec::new())
+impl From<&Either<u32, String>> for u32 {
+    fn from(either: &Either<u32, String>) -> Self {
+        match either {
+            Either::Left(n) => *n,
+            Either::Right(s) => s.parse().unwrap_or_default()
+        }
     }
 }
 

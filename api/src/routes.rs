@@ -13,7 +13,7 @@ use crate::{
             taxa2tree, taxonomy
         },
         datasets::sampledata,
-        mpa::{pept2data, pept2filtered},
+        mpa::{pept2data},
         private_api::{ecnumbers, goterms, interpros, metadata, proteins, taxa, taxa_filter}
     },
     middleware::{
@@ -46,6 +46,24 @@ pub fn create_router(state: AppState) -> Router {
 fn create_api_routes() -> Router<AppState> {
     Router::new().nest("/v1", create_api_v1_routes()).nest("/v2", create_api_v2_routes())
 }
+
+macro_rules! define_routes {
+    (
+        $( $path:tt, $handlers:expr),*
+    ) => {{
+        let mut router = Router::new();
+
+        $(
+            router = router
+                .route($path, $handlers)
+                .route(concat!($path, ".json"), $handlers);
+        )*
+
+        router
+    }};
+}
+
+pub(crate) use define_routes;
 
 fn create_api_v1_routes() -> Router<AppState> {
     define_routes!(
@@ -114,9 +132,7 @@ fn create_datasets_routes() -> Router<AppState> {
 fn create_mpa_routes() -> Router<AppState> {
     define_routes!(
         "/pept2data",
-        get(pept2data::get_json_handler).post(pept2data::post_json_handler),
-        "/pept2filtered",
-        get(pept2filtered::get_json_handler).post(pept2filtered::post_json_handler)
+        get(pept2data::get_json_handler).post(pept2data::post_json_handler)
     )
 }
 
@@ -140,21 +156,3 @@ fn create_private_api_routes() -> Router<AppState> {
         get(taxa_filter::get_json_filter_handler).post(taxa_filter::post_json_filter_handler)
     )
 }
-
-macro_rules! define_routes {
-    (
-        $( $path:tt, $handlers:expr),*
-    ) => {{
-        let mut router = Router::new();
-
-        $(
-            router = router
-                .route($path, $handlers)
-                .route(concat!($path, ".json"), $handlers);
-        )*
-
-        router
-    }};
-}
-
-pub(crate) use define_routes;

@@ -59,6 +59,10 @@ pub fn default_link() -> bool {
     false
 }
 
+pub fn default_compact() -> bool {
+    false
+}
+
 pub fn default_cutoff() -> usize {
     10000
 }

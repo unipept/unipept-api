@@ -58,7 +58,7 @@ async fn handler(
 
     let connection = database.get_conn().await?;
 
-    let result = index.analyse(&input, equate_il, Some(cutoff), Some(tryptic));
+    let result = index.analyse(&input, equate_il, tryptic, Some(cutoff));
 
     let accession_numbers: HashSet<String> = result
         .iter()

@@ -51,7 +51,6 @@ impl fmt::Display for LineageRank {
     }
 }
 
-
 pub struct TaxonStore {
     pub mapper: HashMap<u32, TaxonInformation>
 }

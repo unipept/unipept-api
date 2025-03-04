@@ -52,7 +52,7 @@ async fn handler(
 ) -> Result<ProteinInformation, ApiError> {
     let connection = database.get_conn().await?;
 
-    let result = index.analyse(&vec![peptide], equate_il, None, None);
+    let result = index.analyse(&vec![peptide], equate_il, false, None);
 
     if result.is_empty() {
         return Ok(ProteinInformation::default());

@@ -7,9 +7,10 @@ pub use errors::IndexError;
 use errors::LoadIndexError;
 use sa_compression::load_compressed_suffix_array;
 pub use sa_index::peptide_search::ProteinInfo;
+pub use sa_index::peptide_search::SearchResult;
 use sa_index::{
     binary::load_suffix_array,
-    peptide_search::{search_all_peptides, SearchResult},
+    peptide_search::{search_all_peptides},
     sa_searcher::SparseSearcher,
     SuffixArray
 };
@@ -36,8 +37,8 @@ impl Index {
         Ok(Self { searcher })
     }
 
-    pub fn analyse(&self, peptides: &Vec<String>, equate_il: bool, cutoff: Option<usize>, tryptic: Option<bool>) -> Vec<SearchResult> {
-        search_all_peptides(&self.searcher, peptides, cutoff.unwrap_or(10_000), equate_il, tryptic.unwrap_or(false))
+    pub fn analyse(&self, peptides: &Vec<String>, equate_il: bool, tryptic: bool, cutoff: Option<usize>) -> Vec<SearchResult> {
+        search_all_peptides(&self.searcher, peptides, cutoff.unwrap_or(10_000), equate_il, tryptic)
     }
 }
 

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_equate_il, default_extra, default_names},
+        api::{default_equate_il, default_extra, default_names, default_compact, default_tryptic},
         generate_handlers
     },
     helpers::lineage_helper::{
@@ -25,16 +25,34 @@ pub struct Parameters {
     #[serde(default = "default_extra")]
     extra: bool,
     #[serde(default = "default_names")]
-    names: bool
+    names: bool,
+    #[serde(default = "default_tryptic")]
+    tryptic: bool,
+    #[serde(default = "default_compact")]
+    compact: bool
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum TaxaInformation {
+    Dense (DenseTaxaInformation),
+    Compact (CompactTaxaInformation)
 }
 
 #[derive(Serialize)]
-pub struct TaxaInformation {
+pub struct DenseTaxaInformation {
     peptide: String,
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     lineage: Option<Lineage>
+}
+
+#[derive(Serialize)]
+pub struct CompactTaxaInformation {
+    peptide: String,
+    taxa: Vec<u32>
 }
 
 #[derive(Serialize)]
@@ -46,14 +64,33 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, names }: Parameters,
+    Parameters { input, equate_il, extra, names, tryptic, compact }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<TaxaInformation>, ()> {
     let input = sanitize_peptides(input);
-    let result = index.analyse(&input, equate_il, None, None);
+    let result = index.analyse(&input, equate_il, tryptic, None);
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
+
+    if compact {
+        return Ok(result
+            .into_iter()
+            .filter_map(|item| {
+                let item_taxa: Vec<u32> = item.proteins.iter().map(|protein| protein.taxon).filter(|&taxon_id| taxon_store.is_valid(taxon_id)).collect();
+
+                if item_taxa.is_empty() {
+                    return None;
+                }
+
+                Some(TaxaInformation::Compact(CompactTaxaInformation {
+                    peptide: item.sequence,
+                    taxa: item_taxa,
+                }))
+            })
+            .collect()
+        )
+    }
 
     Ok(result
         .into_iter()
@@ -67,7 +104,7 @@ async fn handler(
                         (false, _) => None
                     };
 
-                    Some(TaxaInformation {
+                    Some(TaxaInformation::Dense(DenseTaxaInformation {
                         peptide: item.sequence.clone(),
                         taxon: Taxon {
                             taxon_id: taxon,
@@ -75,7 +112,7 @@ async fn handler(
                             taxon_rank: rank.clone().into()
                         },
                         lineage
-                    })
+                    }))
                 }
             )
         })

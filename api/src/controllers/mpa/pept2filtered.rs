@@ -7,6 +7,7 @@ use crate::{
     helpers::fa_helper::{calculate_fa, FunctionalAggregation},
     AppState
 };
+use crate::helpers::filters::empty_filter::EmptyFilter;
 use crate::helpers::lca_helper::calculate_lca;
 use crate::helpers::filters::protein_filter::ProteinFilter;
 use crate::helpers::filters::proteome_filter::ProteomeFilter;
@@ -19,11 +20,11 @@ use crate::helpers::sanitize_peptides;
 pub struct Parameters {
     #[serde(default)]
     peptides: Vec<String>,
-    filter: Filter,
     #[serde(default = "default_equate_il")]
     equate_il: bool,
     #[serde(default = "default_tryptic")]
-    tryptic: bool
+    tryptic: bool,
+    filter: Option<Filter>,
 }
 
 #[derive(Deserialize)]
@@ -67,15 +68,20 @@ async fn handler(
     let lineage_store = datastore.lineage_store();
 
     let filter_proteins: Box<dyn UniprotFilter> = match filter {
-        Filter::Taxa(taxa) => {
-            Box::new(TaxaFilter::new(taxa, lineage_store))
+        Some(Filter::Taxa(taxa)) => {
+            if taxa.contains(&1) {
+                Box::new(EmptyFilter::new())
+            } else {
+                Box::new(TaxaFilter::new(taxa, lineage_store))
+            }
         },
-        Filter::Proteomes(proteomes) => {
+        Some(Filter::Proteomes(proteomes)) => {
             Box::new(ProteomeFilter::new(proteomes).await.unwrap())
         },
-        Filter::Proteins(proteins) => {
+        Some(Filter::Proteins(proteins)) => {
             Box::new(ProteinFilter::new(proteins))
-        }
+        },
+        None => Box::new(EmptyFilter::new())
     };
 
     Ok(FilteredData {

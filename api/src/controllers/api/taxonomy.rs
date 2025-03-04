@@ -59,7 +59,7 @@ pub struct Taxon {
 /// * `rank` - The rank of the taxon that was passed using the `taxon_id` parameter
 /// * `descendants_rank` - The rank from which the children should be retrieved.
 /// * `lineage_store` - A reference to the LineageStore that can be used to retrieve lineages and
-/// taxonomic information from the database.
+///     taxonomic information from the database.
 fn get_children_at_rank(
     taxon_id: u32,
     rank: LineageRank,
@@ -82,7 +82,7 @@ fn get_children_at_rank(
                 lin.get_taxon_id_at_rank(descendants_rank.as_str())
             }
         )
-        .for_each(|id| { children_id_set.insert(id.abs() as u32); });
+        .for_each(|id| { children_id_set.insert(id.unsigned_abs()); });
 
     Some(children_id_set)
 }
@@ -121,18 +121,14 @@ async fn handler(
                 if descendants {
                     children = Some(lineage_store.get_all_taxon_ids_at_rank("superkingdom")?
                         .iter()
-                        .map(|sk_taxon| {
+                        .flat_map(|sk_taxon| {
                             descendants_ranks
                                 .iter()
                                 .cloned()
-                                .map(|desc_rank| get_children_at_rank(*sk_taxon, LineageRank::Superkingdom, desc_rank, lineage_store))
-                                .into_iter()
-                                .flatten()
+                                .filter_map(|desc_rank| get_children_at_rank(*sk_taxon, LineageRank::Superkingdom, desc_rank, lineage_store))
                                 .flat_map(|set| set.into_iter())
                                 .collect::<Vec<u32>>()
                         })
-                        .into_iter()
-                        .flatten()
                         .collect());
                 }
 
@@ -176,8 +172,8 @@ async fn handler(
                             lineage_store
                         );
 
-                        if items.is_some() {
-                            child_vector.extend(items.unwrap().into_iter())
+                        if let Some(values) = items {
+                            child_vector.extend(values.into_iter())
                         }
                     }
 

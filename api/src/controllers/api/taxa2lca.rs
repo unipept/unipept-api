@@ -15,11 +15,12 @@ use crate::{
     },
     AppState
 };
+use crate::controllers::api::Either;
 
 #[derive(Deserialize)]
 pub struct Parameters {
     #[serde(default)]
-    input: Vec<u32>,
+    input: Vec<Either<u32, String>>,
     #[serde(default = "default_extra")]
     extra: bool,
     #[serde(default = "default_names")]
@@ -49,8 +50,13 @@ async fn handler(
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
+    let casted_input: Vec<u32> = input
+        .iter()
+        .map(|v| v.into())
+        .collect();
+
     // Calculate the LCA of all taxa
-    let lca: i32 = calculate_lca(input, version, taxon_store, lineage_store);
+    let lca: i32 = calculate_lca(casted_input, version, taxon_store, lineage_store);
 
     if let Some((taxon_name, taxon_rank, _)) = taxon_store.get(lca as u32) {
         // Calculate the lineage of the LCA

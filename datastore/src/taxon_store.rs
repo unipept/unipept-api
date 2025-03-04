@@ -69,10 +69,7 @@ impl TaxonStore {
             if parts.len() == 5 {
                 mapper.insert(
                     parts[0].parse()?,
-                    (parts[1].to_string(), parts[2].parse::<LineageRank>()?, match parts[4] {
-                        "\x01" => true,
-                        _ => false
-                    })
+                    (parts[1].to_string(), parts[2].parse::<LineageRank>()?, matches!(parts[4], "\x01"))
                 );
             }
         }

@@ -3,7 +3,7 @@ use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 use index::{ProteinInfo, SearchResult};
 use crate::{
-    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic},
+    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic, api::default_cutoff},
     helpers::{
         fa_helper::{calculate_fa, FunctionalAggregation},
         lca_helper::calculate_lca,
@@ -26,6 +26,8 @@ pub struct Parameters {
     equate_il: bool,
     #[serde(default = "default_tryptic")]
     tryptic: bool,
+    #[serde(default = "default_cutoff")]
+    cutoff: usize,
     filter: Option<Filter>,
 }
 
@@ -54,7 +56,7 @@ pub struct Data {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { mut peptides, equate_il, tryptic, filter }: Parameters
+    Parameters { mut peptides, equate_il, tryptic, cutoff, filter }: Parameters
 ) -> Result<Data, ()> {
     if peptides.is_empty() {
         return Ok(Data { peptides: Vec::new() });
@@ -64,7 +66,7 @@ async fn handler(
     peptides.dedup();
 
     let peptides = sanitize_peptides(peptides);
-    let result = index.analyse(&peptides, equate_il, tryptic, Some(10_000));
+    let result = index.analyse(&peptides, equate_il, tryptic, Some(cutoff));
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();

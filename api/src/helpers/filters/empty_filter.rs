@@ -14,3 +14,9 @@ impl EmptyFilter {
         EmptyFilter
     }
 }
+
+impl Default for EmptyFilter { 
+    fn default() -> Self {
+        Self::new()
+    }
+}

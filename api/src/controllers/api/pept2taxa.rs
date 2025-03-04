@@ -32,6 +32,7 @@ pub struct Parameters {
     compact: bool
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Serialize)]
 #[serde(untagged)]
 pub enum TaxaInformation {

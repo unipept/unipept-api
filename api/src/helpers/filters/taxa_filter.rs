@@ -14,7 +14,7 @@ impl UniprotFilter for TaxaFilter<'_> {
         get_lineage_array(protein.taxon, LineageVersion::V2, self.lineage_store)
             .iter()
             .flatten()
-            .any(|ancestor| self.taxa.contains(&(ancestor.abs() as u32)))
+            .any(|ancestor| self.taxa.contains(&(ancestor.unsigned_abs())))
     }
 }
 

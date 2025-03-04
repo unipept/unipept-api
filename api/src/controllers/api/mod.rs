@@ -1,3 +1,5 @@
+use serde::Deserialize;
+
 pub mod pept2ec;
 pub mod pept2funct;
 pub mod pept2go;
@@ -10,6 +12,22 @@ pub mod protinfo;
 pub mod taxa2lca;
 pub mod taxa2tree;
 pub mod taxonomy;
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum Either<T, U> {
+    Left(T),
+    Right(U)
+}
+
+impl From<&Either<u32, String>> for u32 {
+    fn from(either: &Either<u32, String>) -> Self {
+        match either {
+            Either::Left(n) => *n,
+            Either::Right(s) => s.parse().unwrap_or_default()
+        }
+    }
+}
 
 pub fn default_equate_il() -> bool {
     true

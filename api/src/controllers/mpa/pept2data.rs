@@ -1,6 +1,7 @@
+use std::collections::HashSet;
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
-
+use index::{ProteinInfo, SearchResult};
 use crate::{
     controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic},
     helpers::{
@@ -10,6 +11,11 @@ use crate::{
     },
     AppState
 };
+use crate::helpers::filters::empty_filter::EmptyFilter;
+use crate::helpers::filters::protein_filter::ProteinFilter;
+use crate::helpers::filters::proteome_filter::ProteomeFilter;
+use crate::helpers::filters::taxa_filter::TaxaFilter;
+use crate::helpers::filters::UniprotFilter;
 use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
@@ -19,7 +25,18 @@ pub struct Parameters {
     #[serde(default = "default_equate_il")]
     equate_il: bool,
     #[serde(default = "default_tryptic")]
-    tryptic: bool
+    tryptic: bool,
+    filter: Option<Filter>,
+}
+
+#[derive(Deserialize)]
+pub enum Filter {
+    #[serde(rename = "taxa")]
+    Taxa(HashSet<u32>),
+    #[serde(rename = "proteomes")]
+    Proteomes(HashSet<String>),
+    #[serde(rename = "proteins")]
+    Proteins(HashSet<String>)
 }
 
 #[derive(Serialize)]
@@ -37,7 +54,7 @@ pub struct Data {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { mut peptides, equate_il, tryptic }: Parameters
+    Parameters { mut peptides, equate_il, tryptic, filter }: Parameters
 ) -> Result<Data, ()> {
     if peptides.is_empty() {
         return Ok(Data { peptides: Vec::new() });
@@ -52,24 +69,50 @@ async fn handler(
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
+    let filter_proteins: Box<dyn UniprotFilter> = match filter {
+        Some(Filter::Taxa(taxa)) => {
+            if taxa.contains(&1) {
+                Box::new(EmptyFilter::new())
+            } else {
+                Box::new(TaxaFilter::new(taxa, lineage_store))
+            }
+        },
+        Some(Filter::Proteomes(proteomes)) => {
+            Box::new(ProteomeFilter::new(proteomes).await.unwrap())
+        },
+        Some(Filter::Proteins(proteins)) => {
+            Box::new(ProteinFilter::new(proteins))
+        },
+        None => Box::new(EmptyFilter::new())
+    };
+
     Ok(Data {
         peptides: result
             .into_iter()
-            .map(|item| {
+            .filter_map(|SearchResult { proteins, sequence, .. }| {
+                let filtered_proteins: Vec<ProteinInfo> = proteins
+                    .into_iter()
+                    .filter(|protein| filter_proteins.filter(protein))
+                    .collect();
+
+                if filtered_proteins.is_empty() {
+                    return None;
+                }
+
                 let lca = calculate_lca(
-                    item.proteins.iter().map(|protein| protein.taxon).collect(),
+                    filtered_proteins.iter().map(|protein| protein.taxon).collect(),
                     LineageVersion::V2,
                     taxon_store,
                     lineage_store
                 );
                 let lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store);
 
-                DataItem {
-                    sequence: item.sequence,
+                Some(DataItem {
+                    sequence,
                     lca: Some(lca as u32),
                     lineage,
-                    fa: calculate_fa(&item.proteins)
-                }
+                    fa: calculate_fa(&filtered_proteins)
+                })
             })
             .collect()
     })

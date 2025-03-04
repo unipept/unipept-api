@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use axum::{extract::State, Json};
-use itertools::Itertools;
 use database::get_accessions_map;
 use serde::{Deserialize, Serialize};
 

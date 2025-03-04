@@ -103,6 +103,7 @@ async fn filter_handler(
             if sort_descending {
                 filtered_taxa.sort_by(|a, b| b.cmp(a));
             } else {
+                #[allow(clippy::unnecessary_sort_by)]
                 filtered_taxa.sort_by(|a, b| a.cmp(b));
             }
         }

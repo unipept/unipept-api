@@ -44,13 +44,13 @@ pub fn get_accessions(
     let mut result: Vec<UniprotEntry> = Vec::new();
 
     accessions
-        .into_iter()
+        .iter()
         .chunks(1000)
         .into_iter()
         .for_each(|chunk| {
             let data = uniprot_entries.filter(uniprot_accession_number.eq_any(chunk)).load(conn);
-            if data.is_ok() {
-                result.extend(data.unwrap());
+            if let Ok(data) = data {
+                result.extend(data);
             }
         });
 

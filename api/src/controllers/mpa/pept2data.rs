@@ -3,7 +3,7 @@ use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 use index::{ProteinInfo, SearchResult};
 use crate::{
-    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic, api::default_cutoff},
+    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic, mpa::default_report_taxa, api::default_cutoff},
     helpers::{
         fa_helper::{calculate_fa, FunctionalAggregation},
         lca_helper::calculate_lca,
@@ -28,6 +28,8 @@ pub struct Parameters {
     tryptic: bool,
     #[serde(default = "default_cutoff")]
     cutoff: usize,
+    #[serde(default = "default_report_taxa")]
+    report_taxa: bool,
     filter: Option<Filter>,
 }
 
@@ -46,7 +48,9 @@ pub struct DataItem {
     sequence: String,
     lca: Option<u32>,
     lineage: Vec<Option<i32>>,
-    fa: FunctionalAggregation
+    fa: FunctionalAggregation,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    taxa: Option<Vec<u32>>
 }
 
 #[derive(Serialize)]
@@ -56,7 +60,7 @@ pub struct Data {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { mut peptides, equate_il, tryptic, cutoff, filter }: Parameters
+    Parameters { mut peptides, equate_il, tryptic, cutoff, report_taxa, filter }: Parameters
 ) -> Result<Data, ()> {
     if peptides.is_empty() {
         return Ok(Data { peptides: Vec::new() });
@@ -101,8 +105,10 @@ async fn handler(
                     return None;
                 }
 
+                let taxa: Vec<u32> = filtered_proteins.iter().map(|protein| protein.taxon).collect();
+
                 let lca = calculate_lca(
-                    filtered_proteins.iter().map(|protein| protein.taxon).collect(),
+                    taxa.clone(),
                     LineageVersion::V2,
                     taxon_store,
                     lineage_store
@@ -113,7 +119,8 @@ async fn handler(
                     sequence,
                     lca: Some(lca as u32),
                     lineage,
-                    fa: calculate_fa(&filtered_proteins)
+                    fa: calculate_fa(&filtered_proteins),
+                    taxa: if report_taxa { Some(taxa) } else { None }
                 })
             })
             .collect()

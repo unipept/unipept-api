@@ -37,6 +37,7 @@ pub struct Parameters {
 #[derive(Serialize)]
 pub struct ProtInformation {
     protein: String,
+    name: String,
     #[serde(flatten)]
     taxon: Taxon,
     ec: Vec<EcNumber>,
@@ -88,6 +89,7 @@ async fn handler(
 
             Some(ProtInformation {
                 protein: entry.uniprot_accession_number,
+                name: entry.name,
                 taxon: Taxon {
                     taxon_id: entry.taxon_id,
                     taxon_name: name.to_string(),

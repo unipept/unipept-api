@@ -2,6 +2,7 @@ use std::{collections::HashMap, ops::Deref};
 use std::collections::HashSet;
 use deadpool_diesel::mysql::{Manager, Object, Pool};
 pub use deadpool_diesel::InteractError;
+use deadpool_diesel::ManagerConfig;
 use diesel::{prelude::*, MysqlConnection, QueryDsl};
 pub use errors::DatabaseError;
 use models::UniprotEntry;
@@ -17,7 +18,9 @@ pub struct Database {
 
 impl Database {
     pub fn try_from_url(url: &str) -> Result<Self, DatabaseError> {
-        let manager = Manager::new(url, deadpool_diesel::Runtime::Tokio1);
+        let manager = Manager::from_config(url, deadpool_diesel::Runtime::Tokio1, ManagerConfig {
+            recycling_method: deadpool_diesel::RecyclingMethod::Verified
+        });
         let pool = Pool::builder(manager).build().map_err(|err| DatabaseError::BuildPoolError(err.to_string()))?;
         Ok(Self { pool })
     }

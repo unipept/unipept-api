@@ -12,6 +12,8 @@ pub enum IndexError {
 pub enum LoadIndexError {
     #[error("{0}")]
     IoError(#[from] std::io::Error),
+    #[error("File not found: {0}")]
+    FileNotFound(String),
     #[error("Error while loading suffix array: {0}")]
     LoadSuffixArrayError(String),
     #[error("Error while loading proteins: {0}")]

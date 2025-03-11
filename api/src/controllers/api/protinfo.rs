@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use axum::{extract::State, Json};
 use database::get_accessions;
 use serde::{Deserialize, Serialize};
@@ -36,6 +37,7 @@ pub struct Parameters {
 #[derive(Serialize)]
 pub struct ProtInformation {
     protein: String,
+    name: String,
     #[serde(flatten)]
     taxon: Taxon,
     ec: Vec<EcNumber>,
@@ -58,6 +60,7 @@ async fn handler(
     version: LineageVersion
 ) -> Result<Vec<ProtInformation>, ApiError> {
     let input = sanitize_proteins(input);
+    let input = HashSet::from_iter(input.into_iter());
 
     let connection = database.get_conn().await?;
 
@@ -86,6 +89,7 @@ async fn handler(
 
             Some(ProtInformation {
                 protein: entry.uniprot_accession_number,
+                name: entry.name,
                 taxon: Taxon {
                     taxon_id: entry.taxon_id,
                     taxon_name: name.to_string(),

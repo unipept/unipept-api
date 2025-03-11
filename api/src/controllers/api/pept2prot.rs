@@ -1,10 +1,11 @@
+use std::collections::HashSet;
 use axum::{extract::State, Json};
 use database::get_accessions_map;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_equate_il, default_extra},
+        api::{default_equate_il, default_extra, default_tryptic, default_cutoff},
         generate_handlers
     },
     errors::ApiError,
@@ -19,7 +20,11 @@ pub struct Parameters {
     #[serde(default = "default_equate_il")]
     equate_il: bool,
     #[serde(default = "default_extra")]
-    extra: bool
+    extra: bool,
+    #[serde(default = "default_tryptic")]
+    tryptic: bool,
+    #[serde(default = "default_cutoff")]
+    cutoff: usize
 }
 
 #[derive(Serialize)]
@@ -47,20 +52,30 @@ pub enum ProtInformation {
 
 async fn handler(
     State(AppState { index, datastore, database }): State<AppState>,
-    Parameters { input, equate_il, extra }: Parameters
+    Parameters { input, equate_il, extra, tryptic, cutoff }: Parameters
 ) -> Result<Vec<ProtInformation>, ApiError> {
     let input = sanitize_peptides(input);
 
     let connection = database.get_conn().await?;
 
-    let result = index.analyse(&input, equate_il, None);
+    let result = index.analyse(&input, equate_il, tryptic, Some(cutoff));
 
-    let accession_numbers: Vec<String> = result
+    let accession_numbers: HashSet<String> = result
         .iter()
         .flat_map(|item| item.proteins.iter().map(|protein| protein.uniprot_accession.clone()))
         .collect();
 
-    let accessions_map = connection.interact(move |conn| get_accessions_map(conn, &accession_numbers)).await??;
+    let accessions_map = connection
+        .interact(move |conn| get_accessions_map(conn, &accession_numbers))
+        .await
+        .map_err(|e| {
+            println!("Error occurred: {:?}", e);
+            e
+        })?
+        .map_err(|e| {
+            println!("Error occurred: {:?}", e);
+            e
+        })?;
 
     let taxon_store = datastore.taxon_store();
 

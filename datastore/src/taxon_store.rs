@@ -50,14 +50,15 @@ impl fmt::Display for LineageRank {
     }
 }
 
-
 pub struct TaxonStore {
     pub mapper: HashMap<u32, TaxonInformation>,
 }
 
 impl TaxonStore {
     pub fn try_from_file(file: &str) -> Result<Self, TaxonStoreError> {
-        let file = std::fs::File::open(file)?;
+        let file = std::fs::File::open(file).map_err(
+            |_| TaxonStoreError::FileNotFound(file.to_string())
+        )?;
 
         let mut mapper = HashMap::new();
         for line in BufReader::new(file).lines() {
@@ -67,10 +68,7 @@ impl TaxonStore {
             if parts.len() == 5 {
                 mapper.insert(
                     parts[0].parse()?,
-                    (parts[1].to_string(), parts[2].parse::<LineageRank>()?, match parts[4] {
-                        "\x01" => true,
-                        _ => false
-                    })
+                    (parts[1].to_string(), parts[2].parse::<LineageRank>()?, matches!(parts[4], "\x01"))
                 );
             }
         }

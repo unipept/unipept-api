@@ -124,7 +124,9 @@ impl LineageStore {
     }
 
     pub fn try_from_file(file: &str) -> Result<Self, LineageStoreError> {
-        let file = std::fs::File::open(file)?;
+        let file = std::fs::File::open(file).map_err(
+            |_| LineageStoreError::FileNotFound(file.to_string())
+        )?;
 
         let mut mapper = HashMap::new();
 
@@ -177,13 +179,11 @@ impl LineageStore {
 
                 mapper.insert(taxon_id, Arc::clone(&lin));
 
-                for i in 0..LineageStore::AMOUNT_OF_RANKS {
-                    if let Some(id) = parts[i] {
+                for (i, part) in parts.iter().enumerate().take(LineageStore::AMOUNT_OF_RANKS) {
+                    if let Some(id) = part {
                         let rank_map = index_references.get_mut(i).unwrap();
-                        let id: u32 = id.abs() as u32;
-                        if !rank_map.contains_key(&id) {
-                            rank_map.insert(id, Vec::new());
-                        }
+                        let id: u32 = id.unsigned_abs();
+                        rank_map.entry(id).or_insert_with(Vec::new);
                         let vec = rank_map.get_mut(&id).unwrap();
                         vec.push(Arc::clone(&lin));
                     }
@@ -208,7 +208,6 @@ impl LineageStore {
     /// Returns all unique taxon IDs at a specific rank in the NCBI taxonomy.
     pub fn get_all_taxon_ids_at_rank(&self, rank: &str) -> Option<Vec<u32>> {
         LineageStore::rank_to_idx(rank)
-            .and_then(|idx| self.index_references.get(idx))
-            .and_then(|map| Some(map.keys().cloned().collect()))
+            .and_then(|idx| self.index_references.get(idx)).map(|map| map.keys().cloned().collect())
     }
 }

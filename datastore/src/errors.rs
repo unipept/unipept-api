@@ -2,8 +2,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum DataStoreError {
-    #[error("{0}")]
-    IoError(#[from] std::io::Error),
+    #[error("File not found: {0}")]
+    FileNotFound(String),
     #[error("Sample store error: {0}")]
     SampleStoreError(#[from] SampleStoreError),
     #[error("Ec store error: {0}")]
@@ -22,6 +22,8 @@ pub enum DataStoreError {
 pub enum SampleStoreError {
     #[error("{0}")]
     IoError(#[from] std::io::Error),
+    #[error("File not found: {0}")]
+    FileNotFound(String),
     #[error("{0}")]
     SerdeError(#[from] serde_json::Error)
 }
@@ -29,31 +31,41 @@ pub enum SampleStoreError {
 #[derive(Error, Debug)]
 pub enum EcStoreError {
     #[error("{0}")]
-    IoError(#[from] std::io::Error)
+    IoError(#[from] std::io::Error),
+    #[error("File not found: {0}")]
+    FileNotFound(String)
 }
 
 #[derive(Error, Debug)]
 pub enum GoStoreError {
     #[error("{0}")]
-    IoError(#[from] std::io::Error)
+    IoError(#[from] std::io::Error),
+    #[error("File not found: {0}")]
+    FileNotFound(String)
 }
 
 #[derive(Error, Debug)]
 pub enum InterproStoreError {
     #[error("{0}")]
-    IoError(#[from] std::io::Error)
+    IoError(#[from] std::io::Error),
+    #[error("File not found: {0}")]
+    FileNotFound(String)
 }
 
 #[derive(Error, Debug)]
 pub enum LineageStoreError {
     #[error("{0}")]
-    IoError(#[from] std::io::Error)
+    IoError(#[from] std::io::Error),
+    #[error("File not found: {0}")]
+    FileNotFound(String)
 }
 
 #[derive(Error, Debug)]
 pub enum TaxonStoreError {
     #[error("{0}")]
     IoError(#[from] std::io::Error),
+    #[error("File not found: {0}")]
+    FileNotFound(String),
     #[error("Taxon id `{0}` not found in taxon store")]
     InvalidTaxonError(#[from] std::num::ParseIntError),
     #[error("Lineage rank `{0}` not found in lineage store")]

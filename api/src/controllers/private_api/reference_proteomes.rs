@@ -31,8 +31,7 @@ async fn handler(
                 datastore.reference_proteome_store().get(proteome).map(|(taxon_id, protein_count)| {
                     let taxon_name = datastore
                         .taxon_store()
-                        .get_name(*taxon_id)
-                        .map(|name| name.clone()) // Clone the &String to String
+                        .get_name(*taxon_id).cloned() // Clone the &String to String
                         .unwrap_or_else(|| "Unknown".to_string()); // Use `unwrap_or_else` for a default
 
                     ReferenceProteome {

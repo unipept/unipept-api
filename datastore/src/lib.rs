@@ -28,6 +28,7 @@ pub struct DataStore {
 }
 
 impl DataStore {
+    #[allow(clippy::too_many_arguments)]
     pub fn try_from_files(
         version_file: &str,
         sample_file: &str,

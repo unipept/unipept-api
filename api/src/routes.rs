@@ -152,6 +152,8 @@ fn create_private_api_routes() -> Router<AppState> {
         get(reference_proteomes::get_json_handler).post(reference_proteomes::post_json_handler),
         "/proteomes/count",
         get(reference_proteomes_filter::get_json_count_handler).post(reference_proteomes_filter::post_json_count_handler),
+        "/proteomes/filter",
+        get(reference_proteomes_filter::get_json_filter_handler).post(reference_proteomes_filter::post_json_filter_handler),
         "/taxa",
         get(taxa::get_json_handler).post(taxa::post_json_handler),
         "/taxa/count",

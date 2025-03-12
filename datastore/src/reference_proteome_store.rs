@@ -7,7 +7,7 @@ pub type ReferenceProteomeDescription = (u32, u32);
 
 #[derive(Clone)]
 pub struct ReferenceProteomeStore {
-    mapper: HashMap<String, ReferenceProteomeDescription>
+    pub mapper: HashMap<String, ReferenceProteomeDescription>
 }
 
 impl ReferenceProteomeStore {

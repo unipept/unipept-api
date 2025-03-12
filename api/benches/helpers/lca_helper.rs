@@ -29,7 +29,7 @@ fn generate_arguments() -> (Vec<u32>, LineageVersion, TaxonStore, LineageStore) 
 pub fn lca_benchmark(c: &mut criterion::Criterion) {
     c.bench_function("calculate_lca", |b| {
         b.iter_batched(
-            || generate_arguments(),
+            generate_arguments,
             |arguments|  {
                 let (taxa, version, taxon_store, lineage_store) = arguments;
                 black_box(calculate_lca(taxa, version, &taxon_store, &lineage_store))

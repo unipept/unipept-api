@@ -109,26 +109,22 @@ async fn filter_handler(
             });
         },
         "protein_count" => {
-            if sort_descending {
-                filtered_proteomes.sort_by(|(_, (_, a_protein_count)), (_, &(_, b_protein_count))| {
-                    b_protein_count.cmp(a_protein_count)
-                });
-            } else {
-                filtered_proteomes.sort_by(|(_, &(_, a_protein_count)), (_, (_, b_protein_count))| {
-                    a_protein_count.cmp(b_protein_count)
-                });
-            }
+            filtered_proteomes.sort_by(|(_, &(_, a_protein_count)), (_, &(_, b_protein_count))| {
+                if sort_descending {
+                    b_protein_count.cmp(&a_protein_count)
+                } else {
+                    a_protein_count.cmp(&b_protein_count)
+                }
+            });
         },
         _ => {
-            if sort_descending {
-                filtered_proteomes.sort_by(|(a_proteome_id, _), (b_proteome_id, _)| {
+            filtered_proteomes.sort_by(|(a_proteome_id, _), (b_proteome_id, _)| {
+                if sort_descending {
                     b_proteome_id.cmp(a_proteome_id)
-                });
-            } else {
-                filtered_proteomes.sort_by(|(a_proteome_id, _), (b_proteome_id, _)| {
-                    a_proteome_id.cmp(b_proteome_id)
-                });
-            }
+                } else {
+                    a_proteome_id.cmp(b_proteome_id) 
+                }
+            });
         },
     }
 

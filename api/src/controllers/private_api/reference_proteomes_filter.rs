@@ -32,12 +32,18 @@ pub struct ReferenceProteomeCountResult {
     count: u32
 }
 
+fn get_taxon_name_by_id(taxon_store: &datastore::TaxonStore, taxon_id: u32) -> String {
+    taxon_store
+        .get_name(taxon_id)
+        .cloned()
+        .unwrap_or_else(|| "Unknown".to_string())
+}
+
 async fn count_handler(
     State(AppState { datastore, .. }): State<AppState>,
     ReferenceProteomeCountParameters { filter }: ReferenceProteomeCountParameters
 ) -> Result<ReferenceProteomeCountResult, ()> {
     let proteome_store = datastore.reference_proteome_store();
-    let taxon_store = datastore.taxon_store();
     
     if filter.is_empty() {
         Ok(ReferenceProteomeCountResult {
@@ -50,10 +56,7 @@ async fn count_handler(
             count: proteome_store.mapper
                 .iter()
                 .filter(|(key, (taxon_id, _))| {
-                    let taxon_name = datastore
-                        .taxon_store()
-                        .get_name(*taxon_id).cloned() // Clone the &String to String
-                        .unwrap_or_else(|| "Unknown".to_string());
+                    let taxon_name = get_taxon_name_by_id(datastore.taxon_store(), *taxon_id);
 
                     key.to_lowercase().contains(&filter.to_lowercase()) ||
                         taxon_id.to_string().contains(&filter) || 
@@ -79,10 +82,7 @@ async fn filter_handler(
     let mut filtered_proteomes: Vec<(&String, &(u32, u32))> = proteome_store.mapper
         .iter()
         .filter(|(key, (taxon_id, _))| {
-            let taxon_name = datastore
-                .taxon_store()
-                .get_name(*taxon_id).cloned() // Clone the &String to String
-                .unwrap_or_else(|| "Unknown".to_string());
+            let taxon_name = get_taxon_name_by_id(datastore.taxon_store(), *taxon_id);
 
             key.to_lowercase().contains(&filter.to_lowercase()) ||
                 taxon_id.to_string().contains(&filter) ||
@@ -93,33 +93,20 @@ async fn filter_handler(
     // Sort based on the `sort_by` field
     match sort_by.as_str() {
         "taxon_name" => {
-            if sort_descending {
-                filtered_proteomes.sort_by(|(_, &(a_taxon_id, _)), (_, &(b_taxon_id,_))| {
-                    let taxon_name_a = datastore
-                        .taxon_store()
-                        .get_name(a_taxon_id).cloned() // Clone the &String to String
-                        .unwrap_or_else(|| "Unknown".to_string());
+            let sort_fn = |a_taxon_id, b_taxon_id| {
+                let taxon_name_a = get_taxon_name_by_id(datastore.taxon_store(), a_taxon_id);
+                let taxon_name_b = get_taxon_name_by_id(datastore.taxon_store(), b_taxon_id);
 
-                    let taxon_name_b = datastore
-                        .taxon_store()
-                        .get_name(b_taxon_id).cloned() // Clone the &String to String
-                        .unwrap_or_else(|| "Unknown".to_string());
+                if sort_descending {
                     taxon_name_b.cmp(&taxon_name_a)
-                });
-            } else {
-                filtered_proteomes.sort_by(|(_, &(a_taxon_id, _)), (_, &(b_taxon_id,_))| {
-                    let taxon_name_a = datastore
-                        .taxon_store()
-                        .get_name(a_taxon_id).cloned() // Clone the &String to String
-                        .unwrap_or_else(|| "Unknown".to_string());
-
-                    let taxon_name_b = datastore
-                        .taxon_store()
-                        .get_name(b_taxon_id).cloned() // Clone the &String to String
-                        .unwrap_or_else(|| "Unknown".to_string());
+                } else {
                     taxon_name_a.cmp(&taxon_name_b)
-                });
-            }
+                }
+            };
+            
+            filtered_proteomes.sort_by(|(_, &(a_taxon_id, _)), (_, &(b_taxon_id,_))| {
+                sort_fn(a_taxon_id, b_taxon_id)
+            });
         },
         "protein_count" => {
             if sort_descending {

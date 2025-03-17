@@ -16,7 +16,7 @@ pub struct Parameters {
 
 #[derive(Serialize)]
 pub struct Protein {
-    uniprot_accession_id: u32,
+    uniprot_accession_id: String,
     name: String,
     taxon_id: u32,
     db_type: String
@@ -33,7 +33,7 @@ async fn handler(
     Ok(entries
         .into_iter()
         .map(|entry| Protein {
-            uniprot_accession_id: entry.id,
+            uniprot_accession_id: entry.uniprot_accession_number,
             name: entry.name,
             taxon_id: entry.taxon_id,
             db_type: entry.db_type,

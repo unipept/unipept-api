@@ -3,7 +3,8 @@ use std::collections::HashSet;
 use deadpool_diesel::mysql::{Manager, Object, Pool};
 pub use deadpool_diesel::InteractError;
 use deadpool_diesel::ManagerConfig;
-use diesel::{prelude::*, MysqlConnection, QueryDsl};
+use diesel::{prelude::*, sql_query, MysqlConnection, QueryDsl};
+use diesel::sql_types::{BigInt, Integer, Text, Unsigned};
 pub use errors::DatabaseError;
 use models::UniprotEntry;
 use itertools::Itertools;
@@ -15,6 +16,8 @@ mod schema;
 pub struct Database {
     pool: Pool
 }
+
+const COUNT_THRESHOLD: u32 = 100000;
 
 impl Database {
     pub fn try_from_url(url: &str) -> Result<Self, DatabaseError> {
@@ -92,7 +95,8 @@ pub fn get_accessions_map(
         .collect())
 }
 
-/// Counts the number of UniProt entries in the database that match the given filter string
+/// Counts the number of UniProt entries in the database that match the given filter string. Returns
+/// COUNT_THRESHOLD if the number of matching items is more than this threshold.
 ///
 /// # Arguments
 /// * `conn` - Database connection handle
@@ -117,21 +121,39 @@ pub fn get_accessions_count_by_filter(
     use schema::uniprot_entries::dsl::*;
 
     if filter.is_empty() {
-        return Ok(uniprot_entries.count().get_result::<i64>(conn)? as u32);
+        return Ok(COUNT_THRESHOLD);
     }
 
     let filter_pattern = format!("%{}%", filter);
 
-    Ok(uniprot_entries
-        .filter(
-            name.like(&filter_pattern)
-                .or(uniprot_accession_number.like(&filter_pattern))
-                .or(db_type.like(&filter_pattern))
-                // TODO update this taxon id filter such that it also works for organism names (and for matching parts of the ID instead of the complete integer)
-                .or(taxon_id.eq(filter.parse::<u32>().unwrap_or(0)))
-        )
-        .count()
-        .get_result::<i64>(conn)? as u32)
+    #[derive(QueryableByName)]
+    struct CountResult {
+        #[sql_type = "diesel::sql_types::BigInt"]
+        total_count: i64,
+    }
+
+
+    let query: CountResult = sql_query(
+        "SELECT COUNT(*) AS total_count FROM (
+            SELECT `uniprot_entries`.`uniprot_accession_number`
+            FROM `uniprot_entries`
+            WHERE (
+                (`uniprot_entries`.`name` LIKE ?) 
+                OR (`uniprot_entries`.`uniprot_accession_number` LIKE ?)
+                OR (`uniprot_entries`.`type` LIKE ?)
+                OR (`uniprot_entries`.`taxon_id` = ?)
+            )
+            LIMIT ?
+        ) AS subquery"
+    )
+        .bind::<Text, _>(filter_pattern.clone())
+        .bind::<Text, _>(filter_pattern.clone())
+        .bind::<Text, _>(filter_pattern.clone())
+        .bind::<Unsigned<Integer>, _>(filter.parse::<u32>().unwrap_or(0)) // Replace "0" with taxon_id logic if needed
+        .bind::<Unsigned<Integer>, _>(COUNT_THRESHOLD) // LIMIT clause value
+        .get_result(conn)?; // Replace `conn` with your MySQL connection handle
+
+    Ok(query.total_count as u32)
 }
 
 /// Gets UniProt accession IDs from the database that match the given filter criteria

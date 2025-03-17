@@ -4,7 +4,7 @@ use deadpool_diesel::mysql::{Manager, Object, Pool};
 pub use deadpool_diesel::InteractError;
 use deadpool_diesel::ManagerConfig;
 use diesel::{prelude::*, sql_query, MysqlConnection, QueryDsl};
-use diesel::sql_types::{BigInt, Integer, Text, Unsigned};
+use diesel::sql_types::{Integer, Text, Unsigned};
 pub use errors::DatabaseError;
 use models::UniprotEntry;
 use itertools::Itertools;
@@ -118,8 +118,6 @@ pub fn get_accessions_count_by_filter(
     conn: &mut MysqlConnection,
     filter: String,
 ) -> Result<u32, DatabaseError> {
-    use schema::uniprot_entries::dsl::*;
-
     if filter.is_empty() {
         return Ok(COUNT_THRESHOLD);
     }

@@ -3,6 +3,7 @@ pub mod goterms;
 pub mod interpros;
 pub mod metadata;
 pub mod proteins;
+pub mod proteins_filter;
 pub mod taxa;
 pub mod taxa_filter;
 pub mod reference_proteomes;

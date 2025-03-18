@@ -126,11 +126,10 @@ pub fn get_accessions_count_by_filter(
 
     #[derive(QueryableByName)]
     struct CountResult {
-        #[sql_type = "diesel::sql_types::BigInt"]
+        #[diesel(sql_type = diesel::sql_types::BigInt)]
         total_count: i64,
     }
-
-
+    
     let query: CountResult = sql_query(
         "SELECT COUNT(*) AS total_count FROM (
             SELECT `uniprot_entries`.`uniprot_accession_number`

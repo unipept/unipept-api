@@ -12,6 +12,8 @@ pub enum DataStoreError {
     GoStoreError(#[from] GoStoreError),
     #[error("Interpro store error: {0}")]
     InterproStoreError(#[from] InterproStoreError),
+    #[error("Reference proteome store error: {0}")]
+    ReferenceProteomeStoreError(#[from] ReferenceProteomeStoreError),
     #[error("Lineage store error: {0}")]
     LineageStoreError(#[from] LineageStoreError),
     #[error("Taxon store error: {0}")]
@@ -50,6 +52,16 @@ pub enum InterproStoreError {
     IoError(#[from] std::io::Error),
     #[error("File not found: {0}")]
     FileNotFound(String)
+}
+
+#[derive(Error, Debug)]
+pub enum ReferenceProteomeStoreError {
+    #[error("{0}")]
+    IoError(#[from] std::io::Error),
+    #[error("File not found: {0}")]
+    FileNotFound(String),
+    #[error("Error while parsing: {0}")]
+    ParseError(String),
 }
 
 #[derive(Error, Debug)]

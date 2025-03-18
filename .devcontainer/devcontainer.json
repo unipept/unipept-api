@@ -6,7 +6,7 @@
 
   // Features to add to the dev container. More info: https://containers.dev/features.
   "features": {
-    "https://github.com/unipept/unipept-devcontainers/releases/download/v1.0.0/devcontainer-feature-unipept-index.tgz": {
+    "https://github.com/unipept/unipept-devcontainers/releases/download/v1.0.1/devcontainer-feature-unipept-index.tgz": {
       "version": "latest"
     },
     "ghcr.io/devcontainers/features/rust:1": {}

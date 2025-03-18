@@ -14,7 +14,7 @@ use crate::{
         },
         datasets::sampledata,
         mpa::{pept2data},
-        private_api::{ecnumbers, goterms, interpros, metadata, proteins, taxa, taxa_filter}
+        private_api::{ecnumbers, goterms, interpros, metadata, proteins, reference_proteomes, reference_proteomes_filter, taxa, taxa_filter}
     },
     middleware::{
         cors::create_cors_layer,
@@ -148,6 +148,12 @@ fn create_private_api_routes() -> Router<AppState> {
         get(metadata::get_json_handler).post(metadata::post_json_handler),
         "/proteins",
         get(proteins::get_json_handler).post(proteins::post_json_handler),
+        "/proteomes",
+        get(reference_proteomes::get_json_handler).post(reference_proteomes::post_json_handler),
+        "/proteomes/count",
+        get(reference_proteomes_filter::get_json_count_handler).post(reference_proteomes_filter::post_json_count_handler),
+        "/proteomes/filter",
+        get(reference_proteomes_filter::get_json_filter_handler).post(reference_proteomes_filter::post_json_filter_handler),
         "/taxa",
         get(taxa::get_json_handler).post(taxa::post_json_handler),
         "/taxa/count",

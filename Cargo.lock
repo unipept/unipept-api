@@ -419,7 +419,7 @@ dependencies = [
 
 [[package]]
 name = "database"
-version = "0.1.0"
+version = "2.3.2"
 dependencies = [
  "deadpool-diesel",
  "diesel",
@@ -429,7 +429,7 @@ dependencies = [
 
 [[package]]
 name = "datastore"
-version = "0.1.0"
+version = "2.3.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -989,7 +989,7 @@ dependencies = [
 
 [[package]]
 name = "index"
-version = "0.1.0"
+version = "2.3.2"
 dependencies = [
  "sa-compression",
  "sa-index",

@@ -83,7 +83,7 @@ fn handler(
 }
 
 generate_handlers!(
-    [ V1, V2 ]
+    [ V2 ]
     async fn json_handler(
         state => State<AppState>,
         GetContent(params) => GetContent<GetParameters>,
@@ -94,7 +94,7 @@ generate_handlers!(
 );
 
 generate_handlers!(
-    [ V1, V2 ]
+    [ V2 ]
     async fn json_handler(
         state => State<AppState>,
         PostContent(params) => PostContent<PostParameters>,
@@ -105,7 +105,7 @@ generate_handlers!(
 );
 
 generate_handlers!(
-    [ V1, V2 ]
+    [ V2 ]
     async fn html_handler(
         state => State<AppState>,
         GetContent(params) => GetContent<GetParameters>,
@@ -123,7 +123,7 @@ generate_handlers!(
 );
 
 generate_handlers!(
-    [ V1, V2 ]
+    [ V2 ]
     async fn html_handler(
         state => State<AppState>,
         PostContent(params) => PostContent<PostParameters>,

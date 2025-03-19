@@ -1,4 +1,3 @@
-pub mod v1;
 pub mod v2;
 
 use datastore::{LineageStore, TaxonStore};
@@ -96,43 +95,36 @@ pub(crate) use create_lineages;
 
 #[derive(Clone, Copy)]
 pub enum LineageVersion {
-    V1,
     V2
 }
 
 #[derive(Serialize, Debug)]
 #[serde(untagged)]
 pub enum Lineage {
-    DefaultV1(v1::Lineage),
-    NamesV1(v1::LineageWithNames),
     DefaultV2(v2::Lineage),
     NamesV2(v2::LineageWithNames)
 }
 
 pub fn get_lineage(taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore) -> Option<Lineage> {
     match version {
-        LineageVersion::V1 => v1::get_lineage(taxon_id, lineage_store).map(Lineage::DefaultV1),
         LineageVersion::V2 => v2::get_lineage(taxon_id, lineage_store).map(Lineage::DefaultV2)
     }
 }
 
 pub fn get_empty_lineage(version: LineageVersion) -> Option<Lineage> {
     match version {
-        LineageVersion::V1 => v1::get_empty_lineage().map(Lineage::DefaultV1),
         LineageVersion::V2 => v2::get_empty_lineage().map(Lineage::DefaultV2)
     }
 }
 
 pub fn get_lineage_array(taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore) -> Vec<Option<i32>> {
     match version {
-        LineageVersion::V1 => v1::get_lineage_array(taxon_id, lineage_store),
         LineageVersion::V2 => v2::get_lineage_array(taxon_id, lineage_store)
     }
 }
 
 pub fn get_lineage_array_numeric(taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore) -> Vec<i32> {
     match version {
-        LineageVersion::V1 => v1::get_lineage_array_numeric(taxon_id, lineage_store),
         LineageVersion::V2 => v2::get_lineage_array_numeric(taxon_id, lineage_store)
     }
 }
@@ -144,35 +136,30 @@ pub fn get_lineage_with_names(
     taxon_store: &TaxonStore
 ) -> Option<Lineage> {
     match version {
-        LineageVersion::V1 => v1::get_lineage_with_names(taxon_id, lineage_store, taxon_store).map(Lineage::NamesV1),
         LineageVersion::V2 => v2::get_lineage_with_names(taxon_id, lineage_store, taxon_store).map(Lineage::NamesV2)
     }
 }
 
 pub fn get_empty_lineage_with_names(version: LineageVersion) -> Option<Lineage> {
     match version {
-        LineageVersion::V1 => v1::get_empty_lineage_with_names().map(Lineage::NamesV1),
         LineageVersion::V2 => v2::get_empty_lineage_with_names().map(Lineage::NamesV2)
     }
 }
 
 pub fn get_amount_of_ranks(version: LineageVersion) -> u8 {
     match version {
-        LineageVersion::V1 => 28,
-        LineageVersion::V2 => 27
+        LineageVersion::V2 => 28
     }
 }
 
 pub fn get_genus_index(version: LineageVersion) -> u8 {
     match version {
-        LineageVersion::V1 => 20,
-        LineageVersion::V2 => 18
+        LineageVersion::V2 => 19
     }
 }
 
 pub fn get_species_index(version: LineageVersion) -> u8 {
     match version {
-        LineageVersion::V1 => 24,
-        LineageVersion::V2 => 22
+        LineageVersion::V2 => 23
     }
 }

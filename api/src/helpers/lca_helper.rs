@@ -22,16 +22,16 @@ pub fn calculate_lca(
     let species_index = get_species_index(version);
 
     for rank in (0..amount_of_ranks).rev() {
-
         let mut iterator = lineages
             .iter()
             .map(|x| x[rank as usize])
             .filter(|&x| if rank == genus_index || rank == species_index { x > 0 } else { x >= 0 });
 
         // Check if all elements in the iterator are the same
-        let first = iterator.next().unwrap();
-        if first > 0 && iterator.all(|item| item == first) {
-            return first;
+        if let Some(first) = iterator.next() {
+            if first > 0 && iterator.all(|item| item == first) {
+                return first;
+            }
         }
     }
 

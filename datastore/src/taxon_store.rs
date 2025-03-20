@@ -11,7 +11,8 @@ pub type TaxonInformation = (String, LineageRank, bool);
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LineageRank {
     NoRank,
-    Superkingdom,
+    Domain,
+    Realm,
     Kingdom,
     Subkingdom,
     Superphylum,
@@ -95,7 +96,8 @@ impl FromStr for LineageRank {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "no rank" => Ok(Self::NoRank),
-            "superkingdom" => Ok(Self::Superkingdom),
+            "domain" => Ok(Self::Domain),
+            "realm" => Ok(Self::Realm),
             "kingdom" => Ok(Self::Kingdom),
             "subkingdom" => Ok(Self::Subkingdom),
             "superphylum" => Ok(Self::Superphylum),
@@ -131,7 +133,8 @@ impl From<LineageRank> for String {
     fn from(val: LineageRank) -> Self {
         match val {
             LineageRank::NoRank => "no rank".to_string(),
-            LineageRank::Superkingdom => "superkingdom".to_string(),
+            LineageRank::Domain => "domain".to_string(),
+            LineageRank::Realm => "realm".to_string(),
             LineageRank::Kingdom => "kingdom".to_string(),
             LineageRank::Subkingdom => "subkingdom".to_string(),
             LineageRank::Superphylum => "superphylum".to_string(),

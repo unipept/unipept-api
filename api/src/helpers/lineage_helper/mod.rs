@@ -59,7 +59,7 @@ macro_rules! create_lineages {
 
             pub fn get_lineage_array_numeric(taxon_id: u32, lineage_store: &LineageStore) -> Vec<i32> {
                 let lineage = lineage_store.get(taxon_id).cloned().unwrap_or_default();
-
+                
                 vec![
                     $(
                         get_id(lineage.$field).unwrap_or(0),
@@ -69,7 +69,7 @@ macro_rules! create_lineages {
 
             pub fn get_lineage_with_names(taxon_id: u32, lineage_store: &LineageStore, taxon_store: &TaxonStore) -> Option<LineageWithNames> {
                 let lineage = lineage_store.get(taxon_id)?;
-
+                
                 Some(LineageWithNames {
                     $(
                         [<$field _id>]: get_id(lineage.$field),
@@ -135,9 +135,7 @@ pub fn get_lineage_with_names(
     lineage_store: &LineageStore,
     taxon_store: &TaxonStore
 ) -> Option<Lineage> {
-    match version {
-        LineageVersion::V2 => v2::get_lineage_with_names(taxon_id, lineage_store, taxon_store).map(Lineage::NamesV2)
-    }
+    v2::get_lineage_with_names(taxon_id, lineage_store, taxon_store).map(Lineage::NamesV2)
 }
 
 pub fn get_empty_lineage_with_names(version: LineageVersion) -> Option<Lineage> {

@@ -86,7 +86,7 @@ pub struct LineageStore {
 }
 
 impl LineageStore {
-    const AMOUNT_OF_RANKS: usize = 26;
+    const AMOUNT_OF_RANKS: usize = 28;
 
     pub fn rank_to_idx(s: &str) -> Option<usize> {
         match s {
@@ -138,55 +138,55 @@ impl LineageStore {
         for line in BufReader::new(file).lines() {
             let line = line?;
             let mut splitted_line = line.split('\t');
-
+            
             let taxon_id: u32 = splitted_line.next().unwrap().parse().unwrap();
             let parts: Vec<Option<i32>> =
                 splitted_line.map(|x| if x == "\\N" { None } else { Some(x.parse::<i32>().unwrap()) }).collect();
+            
+            // All lines in the input should be of equal length. If, for some reason, this is not the case, panic and inform the user!
+            assert_eq!(parts.len(), LineageStore::AMOUNT_OF_RANKS, "Input lineage has not the correct dimension.");
+            
+            let lin = Arc::new(Lineage {
+                domain: parts[0],
+                realm: parts[1],
+                kingdom: parts[2],
+                subkingdom: parts[3],
+                superphylum: parts[4],
+                phylum: parts[5],
+                subphylum: parts[6],
+                superclass: parts[7],
+                class: parts[8],
+                subclass: parts[9],
+                superorder: parts[10],
+                order: parts[11],
+                suborder: parts[12],
+                infraorder: parts[13],
+                superfamily: parts[14],
+                family: parts[15],
+                subfamily: parts[16],
+                tribe: parts[17],
+                subtribe: parts[18],
+                genus: parts[19],
+                subgenus: parts[20],
+                species_group: parts[21],
+                species_subgroup: parts[22],
+                species: parts[23],
+                subspecies: parts[24],
+                strain: parts[25],
+                varietas: parts[26],
+                forma: parts[27]
+            });
 
-            if parts.len() == 27 {
-                let lin = Arc::new(Lineage {
-                    domain: parts[0],
-                    realm: parts[1],
-                    kingdom: parts[2],
-                    subkingdom: parts[3],
-                    superphylum: parts[4],
-                    phylum: parts[5],
-                    subphylum: parts[6],
-                    superclass: parts[7],
-                    class: parts[8],
-                    subclass: parts[9],
-                    superorder: parts[10],
-                    order: parts[11],
-                    suborder: parts[12],
-                    infraorder: parts[13],
-                    superfamily: parts[14],
-                    family: parts[15],
-                    subfamily: parts[16],
-                    tribe: parts[17],
-                    subtribe: parts[18],
-                    genus: parts[19],
-                    subgenus: parts[20],
-                    species_group: parts[21],
-                    species_subgroup: parts[22],
-                    species: parts[23],
-                    subspecies: parts[24],
-                    strain: parts[25],
-                    varietas: parts[26],
-                    forma: parts[27]
-                });
+            mapper.insert(taxon_id, Arc::clone(&lin));
 
-                mapper.insert(taxon_id, Arc::clone(&lin));
-
-                for (i, part) in parts.iter().enumerate().take(LineageStore::AMOUNT_OF_RANKS) {
-                    if let Some(id) = part {
-                        let rank_map = index_references.get_mut(i).unwrap();
-                        let id: u32 = id.unsigned_abs();
-                        rank_map.entry(id).or_insert_with(Vec::new);
-                        let vec = rank_map.get_mut(&id).unwrap();
-                        vec.push(Arc::clone(&lin));
-                    }
+            for (i, part) in parts.iter().enumerate().take(LineageStore::AMOUNT_OF_RANKS) {
+                if let Some(id) = part {
+                    let rank_map = index_references.get_mut(i).unwrap();
+                    let id: u32 = id.unsigned_abs();
+                    rank_map.entry(id).or_insert_with(Vec::new);
+                    let vec = rank_map.get_mut(&id).unwrap();
+                    vec.push(Arc::clone(&lin));
                 }
-
             }
         }
 

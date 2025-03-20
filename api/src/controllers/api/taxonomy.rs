@@ -119,13 +119,13 @@ async fn handler(
                 // If descendants is true, we need to get all the taxa at the requested level and
                 // report those as children of the root.
                 if descendants {
-                    children = Some(lineage_store.get_all_taxon_ids_at_rank("superkingdom")?
+                    children = Some(lineage_store.get_all_taxon_ids_at_rank("domain")?
                         .iter()
                         .flat_map(|sk_taxon| {
                             descendants_ranks
                                 .iter()
                                 .cloned()
-                                .filter_map(|desc_rank| get_children_at_rank(*sk_taxon, LineageRank::Superkingdom, desc_rank, lineage_store))
+                                .filter_map(|desc_rank| get_children_at_rank(*sk_taxon, LineageRank::Domain, desc_rank, lineage_store))
                                 .flat_map(|set| set.into_iter())
                                 .collect::<Vec<u32>>()
                         })

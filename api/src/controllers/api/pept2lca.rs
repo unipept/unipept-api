@@ -87,7 +87,7 @@ async fn handler(
 }
 
 generate_handlers! (
-    [ V1, V2 ]
+    [ V2 ]
     async fn json_handler(
         state => State<AppState>,
         params => Parameters,

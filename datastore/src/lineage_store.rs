@@ -10,7 +10,8 @@ use crate::errors::LineageStoreError;
 
 #[derive(Clone, Debug, Serialize, Default)]
 pub struct Lineage {
-    pub superkingdom: Option<i32>,
+    pub domain: Option<i32>,
+    pub realm: Option<i32>,
     pub kingdom: Option<i32>,
     pub subkingdom: Option<i32>,
     pub superphylum: Option<i32>,
@@ -19,12 +20,10 @@ pub struct Lineage {
     pub superclass: Option<i32>,
     pub class: Option<i32>,
     pub subclass: Option<i32>,
-    pub infraclass: Option<i32>,
     pub superorder: Option<i32>,
     pub order: Option<i32>,
     pub suborder: Option<i32>,
     pub infraorder: Option<i32>,
-    pub parvorder: Option<i32>,
     pub superfamily: Option<i32>,
     pub family: Option<i32>,
     pub subfamily: Option<i32>,
@@ -46,7 +45,8 @@ impl Lineage {
     /// None is returned.
     pub fn get_taxon_id_at_rank(&self, rank_name: &str) -> Option<i32> {
         match rank_name {
-            "superkingdom" => self.superkingdom,
+            "domain" => self.domain,
+            "realm" => self.realm,
             "kingdom" => self.kingdom,
             "subkingdom" => self.subkingdom,
             "superphylum" => self.superphylum,
@@ -55,12 +55,10 @@ impl Lineage {
             "superclass" => self.superclass,
             "class" => self.class,
             "subclass" => self.subclass,
-            "infraclass" => self.infraclass,
             "superorder" => self.superorder,
             "order" => self.order,
             "suborder" => self.suborder,
             "infraorder" => self.infraorder,
-            "parvorder" => self.parvorder,
             "superfamily" => self.superfamily,
             "family" => self.family,
             "subfamily" => self.subfamily,
@@ -88,37 +86,38 @@ pub struct LineageStore {
 }
 
 impl LineageStore {
-    const AMOUNT_OF_RANKS: usize = 26;
+    const AMOUNT_OF_RANKS: usize = 28;
 
     pub fn rank_to_idx(s: &str) -> Option<usize> {
         match s {
-            "superkingdom" => Some(0),
-            "kingdom" => Some(1),
-            "subkingdom" => Some(2),
-            "superphylum" => Some(3),
-            "phylum" => Some(4),
-            "subphylum" => Some(5),
-            "superclass" => Some(6),
-            "class" => Some(7),
-            "subclass" => Some(8),
-            "superorder" => Some(9),
-            "order" => Some(10),
-            "suborder" => Some(11),
-            "infraorder" => Some(12),
-            "superfamily" => Some(13),
-            "family" => Some(14),
-            "subfamily" => Some(15),
-            "tribe" => Some(16),
-            "subtribe" => Some(17),
-            "genus" => Some(18),
-            "subgenus" => Some(19),
-            "species_group" => Some(20),
-            "species_subgroup" => Some(21),
-            "species" => Some(22),
-            "subspecies" => Some(23),
-            "strain" => Some(24),
-            "varietas" => Some(25),
-            "forma" => Some(26),
+            "domain" => Some(0),
+            "realm" => Some(1),
+            "kingdom" => Some(2),
+            "subkingdom" => Some(3),
+            "superphylum" => Some(4),
+            "phylum" => Some(5),
+            "subphylum" => Some(6),
+            "superclass" => Some(7),
+            "class" => Some(8),
+            "subclass" => Some(9),
+            "superorder" => Some(10),
+            "order" => Some(11),
+            "suborder" => Some(12),
+            "infraorder" => Some(13),
+            "superfamily" => Some(14),
+            "family" => Some(15),
+            "subfamily" => Some(16),
+            "tribe" => Some(17),
+            "subtribe" => Some(18),
+            "genus" => Some(19),
+            "subgenus" => Some(20),
+            "species_group" => Some(21),
+            "species_subgroup" => Some(22),
+            "species" => Some(23),
+            "subspecies" => Some(24),
+            "strain" => Some(25),
+            "varietas" => Some(26),
+            "forma" => Some(27),
             _ => None,
         }
     }
@@ -139,56 +138,55 @@ impl LineageStore {
         for line in BufReader::new(file).lines() {
             let line = line?;
             let mut splitted_line = line.split('\t');
-
+            
             let taxon_id: u32 = splitted_line.next().unwrap().parse().unwrap();
             let parts: Vec<Option<i32>> =
                 splitted_line.map(|x| if x == "\\N" { None } else { Some(x.parse::<i32>().unwrap()) }).collect();
+            
+            // All lines in the input should be of equal length. If, for some reason, this is not the case, panic and inform the user!
+            assert_eq!(parts.len(), LineageStore::AMOUNT_OF_RANKS, "Input lineage has not the correct dimension.");
+            
+            let lin = Arc::new(Lineage {
+                domain: parts[0],
+                realm: parts[1],
+                kingdom: parts[2],
+                subkingdom: parts[3],
+                superphylum: parts[4],
+                phylum: parts[5],
+                subphylum: parts[6],
+                superclass: parts[7],
+                class: parts[8],
+                subclass: parts[9],
+                superorder: parts[10],
+                order: parts[11],
+                suborder: parts[12],
+                infraorder: parts[13],
+                superfamily: parts[14],
+                family: parts[15],
+                subfamily: parts[16],
+                tribe: parts[17],
+                subtribe: parts[18],
+                genus: parts[19],
+                subgenus: parts[20],
+                species_group: parts[21],
+                species_subgroup: parts[22],
+                species: parts[23],
+                subspecies: parts[24],
+                strain: parts[25],
+                varietas: parts[26],
+                forma: parts[27]
+            });
 
-            if parts.len() == 27 {
-                let lin = Arc::new(Lineage {
-                    superkingdom: parts[0],
-                    kingdom: parts[1],
-                    subkingdom: parts[2],
-                    superphylum: parts[3],
-                    phylum: parts[4],
-                    subphylum: parts[5],
-                    superclass: parts[6],
-                    class: parts[7],
-                    subclass: parts[8],
-                    infraclass: None,
-                    superorder: parts[9],
-                    order: parts[10],
-                    suborder: parts[11],
-                    infraorder: parts[12],
-                    parvorder: None,
-                    superfamily: parts[13],
-                    family: parts[14],
-                    subfamily: parts[15],
-                    tribe: parts[16],
-                    subtribe: parts[17],
-                    genus: parts[18],
-                    subgenus: parts[19],
-                    species_group: parts[20],
-                    species_subgroup: parts[21],
-                    species: parts[22],
-                    subspecies: parts[23],
-                    strain: parts[24],
-                    varietas: parts[25],
-                    forma: parts[26]
-                });
+            mapper.insert(taxon_id, Arc::clone(&lin));
 
-                mapper.insert(taxon_id, Arc::clone(&lin));
-
-                for (i, part) in parts.iter().enumerate().take(LineageStore::AMOUNT_OF_RANKS) {
-                    if let Some(id) = part {
-                        let rank_map = index_references.get_mut(i).unwrap();
-                        let id: u32 = id.unsigned_abs();
-                        rank_map.entry(id).or_insert_with(Vec::new);
-                        let vec = rank_map.get_mut(&id).unwrap();
-                        vec.push(Arc::clone(&lin));
-                    }
+            for (i, part) in parts.iter().enumerate().take(LineageStore::AMOUNT_OF_RANKS) {
+                if let Some(id) = part {
+                    let rank_map = index_references.get_mut(i).unwrap();
+                    let id: u32 = id.unsigned_abs();
+                    rank_map.entry(id).or_insert_with(Vec::new);
+                    let vec = rank_map.get_mut(&id).unwrap();
+                    vec.push(Arc::clone(&lin));
                 }
-
             }
         }
 

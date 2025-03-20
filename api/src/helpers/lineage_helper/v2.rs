@@ -5,7 +5,8 @@ use serde::Serialize;
 use super::create_lineages;
 
 create_lineages!(
-    superkingdom,
+    domain,
+    realm,
     kingdom,
     subkingdom,
     superphylum,

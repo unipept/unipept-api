@@ -11,12 +11,12 @@ pub fn calculate_lca(
     lineage_store: &LineageStore
 ) -> i32 {
     let cleaned_taxa = taxa.into_iter().filter(|&taxon_id| taxon_store.is_valid(taxon_id));
-
+    
     let lineages: Vec<Vec<i32>> = cleaned_taxa
         .into_iter()
         .map(|taxon_id| get_lineage_array_numeric(taxon_id, version, lineage_store))
         .collect();
-
+    
     let amount_of_ranks = get_amount_of_ranks(version);
     let genus_index = get_genus_index(version);
     let species_index = get_species_index(version);

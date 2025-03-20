@@ -100,6 +100,7 @@ pub enum LineageVersion {
 
 #[derive(Serialize, Debug)]
 #[serde(untagged)]
+#[allow(clippy::large_enum_variant)]
 pub enum Lineage {
     DefaultV2(v2::Lineage),
     NamesV2(v2::LineageWithNames)
@@ -131,7 +132,7 @@ pub fn get_lineage_array_numeric(taxon_id: u32, version: LineageVersion, lineage
 
 pub fn get_lineage_with_names(
     taxon_id: u32,
-    version: LineageVersion,
+    _version: LineageVersion,
     lineage_store: &LineageStore,
     taxon_store: &TaxonStore
 ) -> Option<Lineage> {

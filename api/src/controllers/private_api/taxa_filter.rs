@@ -49,8 +49,14 @@ async fn count_handler(
     } else {
         Ok(TaxonCountResult {
             count: taxon_store.mapper
-                .values()
-                .filter(|&(name, rank, is_valid)| *is_valid && *rank != LineageRank::NoRank && name.to_lowercase().contains(&filter.to_lowercase()))
+                .iter()
+                .filter(|(taxon_id, (name, rank, is_valid))|
+                    *is_valid && *rank != LineageRank::NoRank && (
+                        name.to_lowercase().contains(&filter.to_lowercase()) ||
+                            taxon_id.to_string().to_lowercase().contains(&filter.to_lowercase()) ||
+                            rank.to_string().to_lowercase().contains(&filter.to_lowercase())
+                    )
+                )
                 .count() as u32,
         })
     }
@@ -70,7 +76,13 @@ async fn filter_handler(
 
     let mut filtered_taxa: Vec<_> = taxon_store.mapper
         .iter()
-        .filter(|(_, (name, rank, is_valid))| *is_valid && *rank != LineageRank::NoRank && name.to_lowercase().contains(&filter.to_lowercase()))
+        .filter(|(taxon_id, (name, rank, is_valid))|
+            *is_valid && *rank != LineageRank::NoRank && (
+                name.to_lowercase().contains(&filter.to_lowercase()) ||
+                    taxon_id.to_string().to_lowercase().contains(&filter.to_lowercase()) ||
+                    rank.to_string().to_lowercase().contains(&filter.to_lowercase())
+            )
+        )
         .map(|(id, _)| *id)
         .collect();
 

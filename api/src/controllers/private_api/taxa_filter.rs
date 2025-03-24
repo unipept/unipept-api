@@ -90,11 +90,11 @@ async fn filter_handler(
         "rank" => {
             if sort_descending {
                 filtered_taxa.sort_by(|&a_id, &b_id| {
-                    LineageRank::to_string(&taxon_store.mapper[&b_id].1).cmp(&LineageRank::to_string(&taxon_store.mapper[&a_id].1))
+                    taxon_store.mapper[&b_id].1.cmp(&taxon_store.mapper[&a_id].1)
                 });
             } else {
                 filtered_taxa.sort_by(|&a_id, &b_id| {
-                    LineageRank::to_string(&taxon_store.mapper[&a_id].1).cmp(&LineageRank::to_string(&taxon_store.mapper[&b_id].1))
+                    taxon_store.mapper[&a_id].1.cmp(&taxon_store.mapper[&b_id].1)
                 });
             }
         }

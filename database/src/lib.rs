@@ -4,7 +4,7 @@ use deadpool_diesel::mysql::{Manager, Object, Pool};
 pub use deadpool_diesel::InteractError;
 use deadpool_diesel::ManagerConfig;
 use diesel::{prelude::*, sql_query, MysqlConnection, QueryDsl};
-use diesel::sql_types::{Integer, Text, Unsigned};
+use diesel::sql_types::{BigInt, Integer, Text, Unsigned};
 pub use errors::DatabaseError;
 use models::UniprotEntry;
 use itertools::Itertools;
@@ -122,7 +122,7 @@ pub fn get_accessions_count_by_filter(
         return Ok(COUNT_THRESHOLD);
     }
 
-    let filter_pattern = format!("%{}%", filter);
+    let filter_pattern = format!("{}*", filter);
 
     #[derive(QueryableByName)]
     struct CountResult {
@@ -135,15 +135,13 @@ pub fn get_accessions_count_by_filter(
             SELECT `uniprot_entries`.`uniprot_accession_number`
             FROM `uniprot_entries`
             WHERE (
-                (`uniprot_entries`.`name` LIKE ?) 
-                OR (`uniprot_entries`.`uniprot_accession_number` LIKE ?)
-                OR (`uniprot_entries`.`type` LIKE ?)
+                MATCH(`uniprot_entries`.`name`) AGAINST (? IN BOOLEAN MODE) 
+                OR MATCH(`uniprot_entries`.`uniprot_accession_number`) AGAINST (? IN BOOLEAN MODE)
                 OR (`uniprot_entries`.`taxon_id` = ?)
             )
             LIMIT ?
         ) AS subquery"
     )
-        .bind::<Text, _>(filter_pattern.clone())
         .bind::<Text, _>(filter_pattern.clone())
         .bind::<Text, _>(filter_pattern.clone())
         .bind::<Unsigned<Integer>, _>(filter.parse::<u32>().unwrap_or(0)) // Replace "0" with taxon_id logic if needed
@@ -160,7 +158,7 @@ pub fn get_accessions_count_by_filter(
 /// * `filter` - String to filter entries by. If empty, returns unfiltered results
 /// * `start` - Starting index for pagination
 /// * `end` - Ending index for pagination 
-/// * `sort_by` - Field to sort results by (name, uniprot_accession_number, db_type, or taxon_id)
+/// * `sort_by` - Field to sort results by (name, uniprot_accession_number, or taxon_id)
 /// * `sort_descending` - Whether to sort in descending order
 ///
 /// # Returns
@@ -170,7 +168,6 @@ pub fn get_accessions_count_by_filter(
 /// This function returns UniProt accession IDs where either:
 /// - Entry name contains the filter string (case-sensitive)
 /// - UniProt accession number contains the filter string
-/// - Database type contains the filter string
 /// - Taxon ID exactly matches filter string if it can be parsed as u32
 ///
 /// The filter is applied as a partial match (using SQL LIKE with wildcards),
@@ -184,34 +181,73 @@ pub fn get_accessions_by_filter(
     sort_by: String,
     sort_descending: bool,
 ) -> Result<Vec<String>, DatabaseError> {
-    use schema::uniprot_entries::dsl::*;
+    // Define filter pattern with `*` for prefix matching in BOOLEAN MODE
+    let filter_pattern = if filter.is_empty() {
+        String::new()
+    } else {
+        format!("{}*", filter)
+    };
 
-    let filter_pattern = format!("%{}%", filter);
+    #[derive(QueryableByName)]
+    struct AccessionResult {
+        #[diesel(sql_type = diesel::sql_types::Text)]
+        uniprot_accession_number: String,
+    }
 
-    let mut query = uniprot_entries.select(uniprot_accession_number).into_boxed();
-
-    if !filter.is_empty() {
-        query = query.filter(
-            name.like(&filter_pattern)
-                .or(uniprot_accession_number.like(&filter_pattern))
-                .or(db_type.like(&filter_pattern))
-                .or(taxon_id.eq(filter.parse::<u32>().unwrap_or(0)))
+    let base_query = {
+        let mut sql = String::from(
+            "SELECT `uniprot_entries`.`uniprot_accession_number` \
+            FROM `uniprot_entries` WHERE ",
         );
-    }
 
-    // Apply sorting
-    if !sort_by.is_empty() {
-        query = match sort_by.as_str() {
-            "name" => if sort_descending { query.order(name.desc()) } else { query.order(name.asc()) },
-            "uniprot_accession_number" => if sort_descending { query.order(uniprot_accession_number.desc()) } else { query.order(uniprot_accession_number.asc()) },
-            "db_type" => if sort_descending { query.order(db_type.desc()) } else { query.order(db_type.asc()) },
-            "taxon_id" => if sort_descending { query.order(taxon_id.desc()) } else { query.order(taxon_id.asc()) },
-            _ => query
-        };
-    }
+        // Build conditions for FILTER (MATCH, taxon_id)
+        if !filter.is_empty() {
+            sql.push_str(
+                "(MATCH(`uniprot_entries`.`name`) AGAINST (? IN BOOLEAN MODE) \
+                OR MATCH(`uniprot_entries`.`uniprot_accession_number`) AGAINST (? IN BOOLEAN MODE) \
+                OR `uniprot_entries`.`taxon_id` = ?) ",
+            );
+        }
 
-    // Apply pagination
-    query = query.offset(start as i64).limit((end - start) as i64);
+        // Append ORDER BY logic
+        if !sort_by.is_empty() {
+            match sort_by.as_str() {
+                "name" => sql.push_str(&format!(
+                    "ORDER BY `uniprot_entries`.`name` {} ",
+                    if sort_descending { "DESC" } else { "ASC" }
+                )),
+                "uniprot_accession_number" => sql.push_str(&format!(
+                    "ORDER BY `uniprot_entries`.`uniprot_accession_number` {} ",
+                    if sort_descending { "DESC" } else { "ASC" }
+                )),
+                "taxon_id" => sql.push_str(&format!(
+                    "ORDER BY `uniprot_entries`.`taxon_id` {} ",
+                    if sort_descending { "DESC" } else { "ASC" }
+                )),
+                _ => (), // No ordering
+            }
+        }
 
-    Ok(query.load::<String>(conn)?)
+        // Append LIMIT and OFFSET for pagination
+        sql.push_str("LIMIT ? OFFSET ?");
+
+        sql
+    };
+
+    let query = sql_query(base_query)
+        .bind::<Text, _>(&filter_pattern)
+        .bind::<Text, _>(&filter_pattern)         // For MATCH on uniprot_accession_number
+        .bind::<Unsigned<Integer>, _>(filter.parse::<u32>().unwrap_or(0)) // For taxon_id
+        .bind::<BigInt, _>(end as i64 - start as i64) // LIMIT clause
+        .bind::<BigInt, _>(start as i64);           // OFFSET clause
+
+    // Execute the query and collect the results
+    let results: Vec<AccessionResult> = query.get_results(conn)?;
+
+    // Map the results to a vector of accession numbers
+    Ok(results
+        .into_iter()
+        .map(|r| r.uniprot_accession_number)
+        .collect())
 }
+

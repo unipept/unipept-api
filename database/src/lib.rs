@@ -197,13 +197,13 @@ pub fn get_accessions_by_filter(
     let base_query = {
         let mut sql = String::from(
             "SELECT `uniprot_entries`.`uniprot_accession_number` \
-            FROM `uniprot_entries` WHERE ",
+            FROM `uniprot_entries` ",
         );
 
         // Build conditions for FILTER (MATCH, taxon_id)
         if !filter.is_empty() {
             sql.push_str(
-                "(MATCH(`uniprot_entries`.`name`) AGAINST (? IN BOOLEAN MODE) \
+                " WHERE (MATCH(`uniprot_entries`.`name`) AGAINST (? IN BOOLEAN MODE) \
                 OR MATCH(`uniprot_entries`.`uniprot_accession_number`) AGAINST (? IN BOOLEAN MODE) \
                 OR `uniprot_entries`.`taxon_id` = ?) ",
             );

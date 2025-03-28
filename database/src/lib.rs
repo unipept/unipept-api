@@ -17,7 +17,7 @@ pub struct Database {
     pool: Pool
 }
 
-const COUNT_THRESHOLD: u32 = 100000;
+const COUNT_THRESHOLD: u32 = 1000;
 
 impl Database {
     pub fn try_from_url(url: &str) -> Result<Self, DatabaseError> {
@@ -210,22 +210,20 @@ pub fn get_accessions_by_filter(
         }
 
         // Append ORDER BY logic
-        if !sort_by.is_empty() {
-            match sort_by.as_str() {
-                "name" => sql.push_str(&format!(
-                    "ORDER BY `uniprot_entries`.`name` {} ",
-                    if sort_descending { "DESC" } else { "ASC" }
-                )),
-                "uniprot_accession_number" => sql.push_str(&format!(
-                    "ORDER BY `uniprot_entries`.`uniprot_accession_number` {} ",
-                    if sort_descending { "DESC" } else { "ASC" }
-                )),
-                "taxon_id" => sql.push_str(&format!(
-                    "ORDER BY `uniprot_entries`.`taxon_id` {} ",
-                    if sort_descending { "DESC" } else { "ASC" }
-                )),
-                _ => (), // No ordering
-            }
+        match sort_by.as_str() {
+            "name" => sql.push_str(&format!(
+                "ORDER BY `uniprot_entries`.`name` {} ",
+                if sort_descending { "DESC" } else { "ASC" }
+            )),
+            "uniprot_accession_number" => sql.push_str(&format!(
+                "ORDER BY `uniprot_entries`.`uniprot_accession_number` {} ",
+                if sort_descending { "DESC" } else { "ASC" }
+            )),
+            "taxon_id" => sql.push_str(&format!(
+                "ORDER BY `uniprot_entries`.`taxon_id` {} ",
+                if sort_descending { "DESC" } else { "ASC" }
+            )),
+            _ => (), // No ordering
         }
 
         // Append LIMIT and OFFSET for pagination
@@ -233,16 +231,27 @@ pub fn get_accessions_by_filter(
 
         sql
     };
+    
+    let results: Vec<AccessionResult>;
+    
+    if !filter.is_empty() {
+        let query = sql_query(base_query)
+            .bind::<Text, _>(&filter_pattern)
+            .bind::<Text, _>(&filter_pattern)         // For MATCH on uniprot_accession_number
+            .bind::<Unsigned<Integer>, _>(filter.parse::<u32>().unwrap_or(0)) // For taxon_id
+            .bind::<BigInt, _>(end as i64 - start as i64) // LIMIT clause
+            .bind::<BigInt, _>(start as i64);           // OFFSET clause
 
-    let query = sql_query(base_query)
-        .bind::<Text, _>(&filter_pattern)
-        .bind::<Text, _>(&filter_pattern)         // For MATCH on uniprot_accession_number
-        .bind::<Unsigned<Integer>, _>(filter.parse::<u32>().unwrap_or(0)) // For taxon_id
-        .bind::<BigInt, _>(end as i64 - start as i64) // LIMIT clause
-        .bind::<BigInt, _>(start as i64);           // OFFSET clause
+        // Execute the query and collect the results
+        results = query.get_results(conn)?;
+    } else {
+        let query = sql_query(base_query)
+            .bind::<BigInt, _>(end as i64 - start as i64) // LIMIT clause
+            .bind::<BigInt, _>(start as i64);           // OFFSET clause
 
-    // Execute the query and collect the results
-    let results: Vec<AccessionResult> = query.get_results(conn)?;
+        // Execute the query and collect the results
+        results = query.get_results(conn)?;
+    }
 
     // Map the results to a vector of accession numbers
     Ok(results

@@ -173,6 +173,7 @@ pub fn get_accessions_count_by_filter(
 /// The filter is applied as a partial match (using SQL LIKE with wildcards),
 /// except for taxon_id which requires an exact match.
 /// Results are paginated based on start/end indices and can be sorted by the specified field.
+#[allow(clippy::needless_late_init)]
 pub fn get_accessions_by_filter(
     conn: &mut MysqlConnection,
     filter: String,

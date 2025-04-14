@@ -26,9 +26,9 @@ async fn handler(
     State(AppState { database, .. }): State<AppState>,
     Parameters { accessions }: Parameters
 ) -> Result<Vec<Protein>, ApiError> {
-    let connection = database.get_conn().await?;
+    let connection = database.get_conn();
 
-    let entries = connection.interact(move |conn| get_accessions(conn, &HashSet::from_iter(accessions.iter().cloned()))).await??;
+    let entries = get_accessions(connection, &HashSet::from_iter(accessions.iter().cloned())).await?;
 
     Ok(entries
         .into_iter()

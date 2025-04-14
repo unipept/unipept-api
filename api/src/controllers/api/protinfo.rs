@@ -62,9 +62,9 @@ async fn handler(
     let input = sanitize_proteins(input);
     let input = HashSet::from_iter(input.into_iter());
 
-    let connection = database.get_conn().await?;
+    let connection = database.get_conn();
 
-    let entries = connection.interact(move |conn| get_accessions(conn, &input)).await??;
+    let entries = get_accessions(connection, &input).await?;
 
     let ec_store = datastore.ec_store();
     let go_store = datastore.go_store();

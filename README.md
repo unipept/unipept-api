@@ -51,6 +51,6 @@ The devcontainer will automatically download the most recent version of the Unip
 Follow these steps in order to easily work on the Unipept API in the devcontainer:
 
 * You first have to build the binaries by running `cargo build --release`.
-* Then, you should start the mariadb server: `sudo service mariadb start`
-* Sometimes the password for the database user has not been initialized properly, open a MySQL shell and execute this command: `alter user 'root'@'localhost' identified by 'root_pass'; flush privileges;` (Note default user is `root`, default password is `root_pass`).
-* Finally, the Unipept API can be started with this command: `./target/release/unipept-api -i "/unipept-index-data" -d "mysql://root:root_pass@localhost:3306/unipept" -p 80`.
+* Then, you should start the OpenSearch server: `/usr/share/opensearch/bin/opensearch`
+* Sometimes, a previous invocation of OpenSearch crashed or didn't shut down properly. If you see errors, try and clear the file locks: `rm /var/lib/opensearch/nodes/0/node.lock /var/lib/opensearch/nodes/0/_state/write.lock`
+* Finally, the Unipept API can be started with this command: `./target/release/unipept-api -i "/unipept-index-data" -d "http://localhost:9200" -p 80`.

@@ -1,43 +1,32 @@
 use std::{collections::HashMap, ops::Deref};
 use std::collections::HashSet;
-use deadpool_diesel::mysql::{Manager, Object, Pool};
-pub use deadpool_diesel::InteractError;
-use deadpool_diesel::ManagerConfig;
-use diesel::{prelude::*, sql_query, MysqlConnection, QueryDsl};
-use diesel::sql_types::{BigInt, Integer, Text, Unsigned};
 pub use errors::DatabaseError;
 use models::UniprotEntry;
 use itertools::Itertools;
+use opensearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
+use opensearch::http::{Url};
+use opensearch::{OpenSearch, SearchParts};
+use serde_json::json;
+use crate::DatabaseError::GeneralError;
 
 mod errors;
 mod models;
-mod schema;
 
 pub struct Database {
-    pool: Pool
+    client: OpenSearch
 }
-
-const COUNT_THRESHOLD: u32 = 1000;
 
 impl Database {
     pub fn try_from_url(url: &str) -> Result<Self, DatabaseError> {
-        let manager = Manager::from_config(url, deadpool_diesel::Runtime::Tokio1, ManagerConfig {
-            recycling_method: deadpool_diesel::RecyclingMethod::Verified
-        });
-        let pool = Pool::builder(manager).build().map_err(|err| DatabaseError::BuildPoolError(err.to_string()))?;
-        Ok(Self { pool })
+        let url = Url::parse(url)?;
+        let conn_pool = SingleNodeConnectionPool::new(url);
+        let transport = TransportBuilder::new(conn_pool).disable_proxy().build()?;
+        let client = OpenSearch::new(transport);
+        Ok(Self { client })
     }
 
-    pub async fn get_conn(&self) -> Result<Object, DatabaseError> {
-        Ok(self.pool.get().await?)
-    }
-}
-
-impl Deref for Database {
-    type Target = Pool;
-
-    fn deref(&self) -> &Self::Target {
-        &self.pool
+    pub fn get_conn(&self) -> &OpenSearch {
+        &self.client
     }
 }
 
@@ -51,24 +40,40 @@ impl Deref for Database {
 /// * Vector of `UniprotEntry` records containing protein info from the database, ordered to match
 ///   the order of accessions in the input set
 /// * `DatabaseError` if the database operation fails
-pub fn get_accessions(
-    conn: &mut MysqlConnection,
+pub async fn get_accessions(
+    client: &OpenSearch,
     accessions: &HashSet<String>,
 ) -> Result<Vec<UniprotEntry>, DatabaseError> {
-    use schema::uniprot_entries::dsl::*;
-
     let mut result: Vec<UniprotEntry> = Vec::new();
-
-    accessions
+    
+    let docs: Vec<_> = accessions
         .iter()
-        .chunks(1000)
-        .into_iter()
-        .for_each(|chunk| {
-            let data = uniprot_entries.filter(uniprot_accession_number.eq_any(chunk)).load(conn);
-            if let Ok(data) = data {
-                result.extend(data);
+        .map(|id| json!({ "_id": id }))
+        .collect();
+
+    let body = json!({ "docs": docs });
+
+    let response = client
+        .mget(opensearch::MgetParts::Index("uniprot_entries"))
+        .body(body)
+        .send()
+        .await?;
+    
+    if response.status_code().is_success() {
+        let response_body: serde_json::Value = response.json().await?;
+        
+        if let Some(docs) = response_body.get("docs").and_then(|docs| docs.as_array()) {
+            for doc in docs {
+                if let Some(source) = doc.get("_source") {
+                    if let Ok(entry) = serde_json::from_value::<UniprotEntry>(source.clone()) {
+                        result.push(entry);
+                    }
+                }
             }
-        });
+        }
+    } else {
+        return Err(GeneralError(response.text().await?));
+    }
 
     Ok(result)
 }
@@ -85,11 +90,12 @@ pub fn get_accessions(
 ///
 /// This function returns the same protein information as `get_accessions()` but organized as a lookup map
 /// instead of a vector, allowing direct access to entries by their accession ID.
-pub fn get_accessions_map(
-    conn: &mut MysqlConnection,
+pub async fn get_accessions_map(
+    client: &OpenSearch,
     accessions: &HashSet<String>,
 ) -> Result<HashMap<String, UniprotEntry>, DatabaseError> {
-    Ok(get_accessions(conn, accessions)?
+    Ok(get_accessions(client, accessions)
+        .await?
         .into_iter()
         .map(|entry| (entry.uniprot_accession_number.clone(), entry))
         .collect())
@@ -114,41 +120,42 @@ pub fn get_accessions_map(
 ///
 /// The filter is applied as a partial match (using SQL LIKE with wildcards),
 /// except for taxon_id which requires an exact match.
-pub fn get_accessions_count_by_filter(
-    conn: &mut MysqlConnection,
+pub async fn get_accessions_count_by_filter(
+    client: &OpenSearch,
     filter: String,
 ) -> Result<u32, DatabaseError> {
-    if filter.is_empty() {
-        return Ok(COUNT_THRESHOLD);
-    }
-
-    let filter_pattern = format!("{}*", filter);
-
-    #[derive(QueryableByName)]
-    struct CountResult {
-        #[diesel(sql_type = diesel::sql_types::BigInt)]
-        total_count: i64,
-    }
-    
-    let query: CountResult = sql_query(
-        "SELECT COUNT(*) AS total_count FROM (
-            SELECT `uniprot_entries`.`uniprot_accession_number`
-            FROM `uniprot_entries`
-            WHERE (
-                MATCH(`uniprot_entries`.`name`) AGAINST (? IN BOOLEAN MODE) 
-                OR MATCH(`uniprot_entries`.`uniprot_accession_number`) AGAINST (? IN BOOLEAN MODE)
-                OR (`uniprot_entries`.`taxon_id` = ?)
-            )
-            LIMIT ?
-        ) AS subquery"
-    )
-        .bind::<Text, _>(filter_pattern.clone())
-        .bind::<Text, _>(filter_pattern.clone())
-        .bind::<Unsigned<Integer>, _>(filter.parse::<u32>().unwrap_or(0)) // Replace "0" with taxon_id logic if needed
-        .bind::<Unsigned<Integer>, _>(COUNT_THRESHOLD) // LIMIT clause value
-        .get_result(conn)?; // Replace `conn` with your MySQL connection handle
-
-    Ok(query.total_count as u32)
+    Ok(20 as u32)
+    // if filter.is_empty() {
+    //     return Ok(COUNT_THRESHOLD);
+    // }
+    // 
+    // let filter_pattern = format!("{}*", filter);
+    // 
+    // #[derive(QueryableByName)]
+    // struct CountResult {
+    //     #[diesel(sql_type = diesel::sql_types::BigInt)]
+    //     total_count: i64,
+    // }
+    // 
+    // let query: CountResult = sql_query(
+    //     "SELECT COUNT(*) AS total_count FROM (
+    //         SELECT `uniprot_entries`.`uniprot_accession_number`
+    //         FROM `uniprot_entries`
+    //         WHERE (
+    //             `uniprot_entries`.`name` LIKE ? 
+    //             `uniprot_entries`.`uniprot_accession_number` LIKE ?
+    //             OR `uniprot_entries`.`taxon_id` = ?)
+    //         )
+    //         LIMIT ?
+    //     ) AS subquery"
+    // )
+    //     .bind::<Text, _>(filter_pattern.clone())
+    //     .bind::<Text, _>(filter_pattern.clone())
+    //     .bind::<Unsigned<Integer>, _>(filter.parse::<u32>().unwrap_or(0)) // Replace "0" with taxon_id logic if needed
+    //     .bind::<Unsigned<Integer>, _>(COUNT_THRESHOLD) // LIMIT clause value
+    //     .get_result(conn)?; // Replace `conn` with your MySQL connection handle
+    // 
+    // Ok(query.total_count as u32)
 }
 
 /// Gets UniProt accession IDs from the database that match the given filter criteria
@@ -174,90 +181,91 @@ pub fn get_accessions_count_by_filter(
 /// except for taxon_id which requires an exact match.
 /// Results are paginated based on start/end indices and can be sorted by the specified field.
 #[allow(clippy::needless_late_init)]
-pub fn get_accessions_by_filter(
-    conn: &mut MysqlConnection,
+pub async fn get_accessions_by_filter(
+    client: &OpenSearch,
     filter: String,
     start: usize,
     end: usize,
     sort_by: String,
     sort_descending: bool,
 ) -> Result<Vec<String>, DatabaseError> {
-    // Define filter pattern with `*` for prefix matching in BOOLEAN MODE
-    let filter_pattern = if filter.is_empty() {
-        String::new()
-    } else {
-        format!("{}*", filter)
-    };
-
-    #[derive(QueryableByName)]
-    struct AccessionResult {
-        #[diesel(sql_type = diesel::sql_types::Text)]
-        uniprot_accession_number: String,
-    }
-
-    let base_query = {
-        let mut sql = String::from(
-            "SELECT `uniprot_entries`.`uniprot_accession_number` \
-            FROM `uniprot_entries` ",
-        );
-
-        // Build conditions for FILTER (MATCH, taxon_id)
-        if !filter.is_empty() {
-            sql.push_str(
-                " WHERE (MATCH(`uniprot_entries`.`name`) AGAINST (? IN BOOLEAN MODE) \
-                OR MATCH(`uniprot_entries`.`uniprot_accession_number`) AGAINST (? IN BOOLEAN MODE) \
-                OR `uniprot_entries`.`taxon_id` = ?) ",
-            );
-        }
-
-        // Append ORDER BY logic
-        match sort_by.as_str() {
-            "name" => sql.push_str(&format!(
-                "ORDER BY `uniprot_entries`.`name` {} ",
-                if sort_descending { "DESC" } else { "ASC" }
-            )),
-            "uniprot_accession_number" => sql.push_str(&format!(
-                "ORDER BY `uniprot_entries`.`uniprot_accession_number` {} ",
-                if sort_descending { "DESC" } else { "ASC" }
-            )),
-            "taxon_id" => sql.push_str(&format!(
-                "ORDER BY `uniprot_entries`.`taxon_id` {} ",
-                if sort_descending { "DESC" } else { "ASC" }
-            )),
-            _ => (), // No ordering
-        }
-
-        // Append LIMIT and OFFSET for pagination
-        sql.push_str("LIMIT ? OFFSET ?");
-
-        sql
-    };
-    
-    let results: Vec<AccessionResult>;
-    
-    if !filter.is_empty() {
-        let query = sql_query(base_query)
-            .bind::<Text, _>(&filter_pattern)
-            .bind::<Text, _>(&filter_pattern)         // For MATCH on uniprot_accession_number
-            .bind::<Unsigned<Integer>, _>(filter.parse::<u32>().unwrap_or(0)) // For taxon_id
-            .bind::<BigInt, _>(end as i64 - start as i64) // LIMIT clause
-            .bind::<BigInt, _>(start as i64);           // OFFSET clause
-
-        // Execute the query and collect the results
-        results = query.get_results(conn)?;
-    } else {
-        let query = sql_query(base_query)
-            .bind::<BigInt, _>(end as i64 - start as i64) // LIMIT clause
-            .bind::<BigInt, _>(start as i64);           // OFFSET clause
-
-        // Execute the query and collect the results
-        results = query.get_results(conn)?;
-    }
-
-    // Map the results to a vector of accession numbers
-    Ok(results
-        .into_iter()
-        .map(|r| r.uniprot_accession_number)
-        .collect())
+    Ok(Vec::new())
+    // // Define filter pattern with `*` for prefix matching in BOOLEAN MODE
+    // let filter_pattern = if filter.is_empty() {
+    //     String::new()
+    // } else {
+    //     format!("{}%", filter)
+    // };
+    // 
+    // #[derive(QueryableByName)]
+    // struct AccessionResult {
+    //     #[diesel(sql_type = diesel::sql_types::Text)]
+    //     uniprot_accession_number: String,
+    // }
+    // 
+    // let base_query = {
+    //     let mut sql = String::from(
+    //         "SELECT `uniprot_entries`.`uniprot_accession_number` \
+    //         FROM `uniprot_entries` ",
+    //     );
+    // 
+    //     // Build conditions for FILTER (MATCH, taxon_id)
+    //     if !filter.is_empty() {
+    //         sql.push_str(
+    //             " WHERE (`uniprot_entries`.`name` LIKE ? \
+    //             OR `uniprot_entries`.`uniprot_accession_number` LIKE ? \
+    //             OR `uniprot_entries`.`taxon_id` = ?) ",
+    //         );
+    //     }
+    // 
+    //     // Append ORDER BY logic
+    //     match sort_by.as_str() {
+    //         "name" => sql.push_str(&format!(
+    //             "ORDER BY `uniprot_entries`.`name` {} ",
+    //             if sort_descending { "DESC" } else { "ASC" }
+    //         )),
+    //         "uniprot_accession_number" => sql.push_str(&format!(
+    //             "ORDER BY `uniprot_entries`.`uniprot_accession_number` {} ",
+    //             if sort_descending { "DESC" } else { "ASC" }
+    //         )),
+    //         "taxon_id" => sql.push_str(&format!(
+    //             "ORDER BY `uniprot_entries`.`taxon_id` {} ",
+    //             if sort_descending { "DESC" } else { "ASC" }
+    //         )),
+    //         _ => (), // No ordering
+    //     }
+    // 
+    //     // Append LIMIT and OFFSET for pagination
+    //     sql.push_str("LIMIT ? OFFSET ?");
+    // 
+    //     sql
+    // };
+    // 
+    // let results: Vec<AccessionResult>;
+    // 
+    // if !filter.is_empty() {
+    //     let query = sql_query(base_query)
+    //         .bind::<Text, _>(&filter_pattern)
+    //         .bind::<Text, _>(&filter_pattern)         // For MATCH on uniprot_accession_number
+    //         .bind::<Unsigned<Integer>, _>(filter.parse::<u32>().unwrap_or(0)) // For taxon_id
+    //         .bind::<BigInt, _>(end as i64 - start as i64) // LIMIT clause
+    //         .bind::<BigInt, _>(start as i64);           // OFFSET clause
+    // 
+    //     // Execute the query and collect the results
+    //     results = query.get_results(conn)?;
+    // } else {
+    //     let query = sql_query(base_query)
+    //         .bind::<BigInt, _>(end as i64 - start as i64) // LIMIT clause
+    //         .bind::<BigInt, _>(start as i64);           // OFFSET clause
+    // 
+    //     // Execute the query and collect the results
+    //     results = query.get_results(conn)?;
+    // }
+    // 
+    // // Map the results to a vector of accession numbers
+    // Ok(results
+    //     .into_iter()
+    //     .map(|r| r.uniprot_accession_number)
+    //     .collect())
 }
 

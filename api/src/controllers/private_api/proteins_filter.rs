@@ -42,16 +42,16 @@ async fn count_handler(
     State(AppState { database, .. }): State<AppState>,
     ProteinCountParameters { filter }:  ProteinCountParameters
 ) -> Result<ProteinCountResult, ApiError> {
-    let connection = database.get_conn().await?;
-    Ok(ProteinCountResult { count: connection.interact(move |conn| get_accessions_count_by_filter(conn, filter)).await?? })
+    let connection = database.get_conn();
+    Ok(ProteinCountResult { count: get_accessions_count_by_filter(connection, filter).await? })
 }
 
 async fn filter_handler(
     State(AppState { database, .. }): State<AppState>,
     ProteinFilterParameters { filter, start, end, sort_by, sort_descending }:  ProteinFilterParameters
 ) -> Result<Vec<String>, ApiError> {
-    let connection = database.get_conn().await?;
-    Ok(connection.interact(move |conn| get_accessions_by_filter(conn, filter, start, end, sort_by, sort_descending)).await??)
+    let connection = database.get_conn();
+    Ok(get_accessions_by_filter(connection, filter, start, end, sort_by, sort_descending).await?)
 }
 
 generate_handlers!(

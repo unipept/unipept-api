@@ -101,8 +101,7 @@ pub async fn get_accessions_map(
         .collect())
 }
 
-/// Counts the number of UniProt entries in the database that match the given filter string. Returns
-/// COUNT_THRESHOLD if the number of matching items is more than this threshold.
+/// Counts the number of UniProt entries in the database that match the given filter string.
 ///
 /// # Arguments
 /// * `conn` - Database connection handle
@@ -113,49 +112,98 @@ pub async fn get_accessions_map(
 /// * `DatabaseError` if the database operation fails
 ///
 /// This function counts UniProt entries where either:
-/// - Entry name contains the filter string (case-sensitive)
-/// - UniProt accession number contains the filter string 
-/// - Database type contains the filter string
-/// - Taxon ID exactly matches filter string if it can be parsed as u32
-///
-/// The filter is applied as a partial match (using SQL LIKE with wildcards),
-/// except for taxon_id which requires an exact match.
+/// - Entry name contains the filter string (case-insensitive)
+/// - UniProt accession number contains the filter string
+/// - Taxon ID contains the filter number (if filter is a valid integer, discarded otherwise)
 pub async fn get_accessions_count_by_filter(
     client: &OpenSearch,
     filter: String,
 ) -> Result<u32, DatabaseError> {
-    Ok(20 as u32)
-    // if filter.is_empty() {
-    //     return Ok(COUNT_THRESHOLD);
-    // }
-    // 
-    // let filter_pattern = format!("{}*", filter);
-    // 
-    // #[derive(QueryableByName)]
-    // struct CountResult {
-    //     #[diesel(sql_type = diesel::sql_types::BigInt)]
-    //     total_count: i64,
-    // }
-    // 
-    // let query: CountResult = sql_query(
-    //     "SELECT COUNT(*) AS total_count FROM (
-    //         SELECT `uniprot_entries`.`uniprot_accession_number`
-    //         FROM `uniprot_entries`
-    //         WHERE (
-    //             `uniprot_entries`.`name` LIKE ? 
-    //             `uniprot_entries`.`uniprot_accession_number` LIKE ?
-    //             OR `uniprot_entries`.`taxon_id` = ?)
-    //         )
-    //         LIMIT ?
-    //     ) AS subquery"
-    // )
-    //     .bind::<Text, _>(filter_pattern.clone())
-    //     .bind::<Text, _>(filter_pattern.clone())
-    //     .bind::<Unsigned<Integer>, _>(filter.parse::<u32>().unwrap_or(0)) // Replace "0" with taxon_id logic if needed
-    //     .bind::<Unsigned<Integer>, _>(COUNT_THRESHOLD) // LIMIT clause value
-    //     .get_result(conn)?; // Replace `conn` with your MySQL connection handle
-    // 
-    // Ok(query.total_count as u32)
+    // If filter is empty, use match_all query to count all documents
+    if filter.is_empty() {
+        let body = json!({
+            "query": {
+                "match_all": {}
+            },
+            "track_total_hits": true
+        });
+
+        let response = client
+            .search(SearchParts::Index(&["uniprot_entries"]))
+            .size(0) // We only need count, no actual documents
+            .body(body)
+            .send()
+            .await?;
+
+        if !response.status_code().is_success() {
+            return Err(GeneralError(response.text().await?));
+        }
+
+        let response_body: serde_json::Value = response.json().await?;
+        return Ok(response_body["hits"]["total"]["value"]
+            .as_u64()
+            .unwrap_or(0) as u32);
+    }
+
+    // Parse filter as integer for taxon_id matching if possible
+    let taxon_filter = filter.parse::<u32>().ok();
+
+    let mut should_conditions = vec![
+        // Name contains filter
+        json!({
+            "wildcard": {
+                "name": {
+                    "value": format!("*{}*", filter),
+                    "case_insensitive": true
+                }
+            }
+        }),
+        // Uniprot accession number contains filter
+        json!({
+            "wildcard": {
+                "uniprot_accession_number": {
+                    "value": format!("*{}*", filter),
+                    "case_insensitive": true
+                }
+            }
+        })
+    ];
+
+    // Add taxon_id term query if filter is a valid integer
+    if let Some(taxon_id) = taxon_filter {
+        should_conditions.push(json!({
+            "term": {
+                "taxon_id": taxon_id
+            }
+        }));
+    }
+
+    let body = json!({
+        "query": {
+            "bool": {
+                "should": should_conditions,
+                "minimum_should_match": 1
+            }
+        },
+        "track_total_hits": true
+    });
+
+    let response = client
+        .search(SearchParts::Index(&["uniprot_entries"]))
+        .size(0) // We only need count, no actual documents
+        .body(body)
+        .send()
+        .await?;
+
+    if !response.status_code().is_success() {
+        return Err(GeneralError(response.text().await?));
+    }
+
+    let response_body: serde_json::Value = response.json().await?;
+    
+    Ok(response_body["hits"]["total"]["value"]
+        .as_u64()
+        .unwrap_or(0) as u32)
 }
 
 /// Gets UniProt accession IDs from the database that match the given filter criteria
@@ -165,7 +213,7 @@ pub async fn get_accessions_count_by_filter(
 /// * `filter` - String to filter entries by. If empty, returns unfiltered results
 /// * `start` - Starting index for pagination
 /// * `end` - Ending index for pagination 
-/// * `sort_by` - Field to sort results by (name, uniprot_accession_number, or taxon_id)
+/// * `sort_by` - Field to sort results by (uniprot_accession_number or taxon_id)
 /// * `sort_descending` - Whether to sort in descending order
 ///
 /// # Returns
@@ -173,13 +221,9 @@ pub async fn get_accessions_count_by_filter(
 /// * `DatabaseError` if the database operation fails
 ///
 /// This function returns UniProt accession IDs where either:
-/// - Entry name contains the filter string (case-sensitive)
+/// - Entry name contains the filter string (case-insensitive)
 /// - UniProt accession number contains the filter string
-/// - Taxon ID exactly matches filter string if it can be parsed as u32
-///
-/// The filter is applied as a partial match (using SQL LIKE with wildcards),
-/// except for taxon_id which requires an exact match.
-/// Results are paginated based on start/end indices and can be sorted by the specified field.
+/// - Taxon ID contains the filter number (if filter is a valid integer, discarded otherwise)
 #[allow(clippy::needless_late_init)]
 pub async fn get_accessions_by_filter(
     client: &OpenSearch,
@@ -189,83 +233,95 @@ pub async fn get_accessions_by_filter(
     sort_by: String,
     sort_descending: bool,
 ) -> Result<Vec<String>, DatabaseError> {
-    Ok(Vec::new())
-    // // Define filter pattern with `*` for prefix matching in BOOLEAN MODE
-    // let filter_pattern = if filter.is_empty() {
-    //     String::new()
-    // } else {
-    //     format!("{}%", filter)
-    // };
-    // 
-    // #[derive(QueryableByName)]
-    // struct AccessionResult {
-    //     #[diesel(sql_type = diesel::sql_types::Text)]
-    //     uniprot_accession_number: String,
-    // }
-    // 
-    // let base_query = {
-    //     let mut sql = String::from(
-    //         "SELECT `uniprot_entries`.`uniprot_accession_number` \
-    //         FROM `uniprot_entries` ",
-    //     );
-    // 
-    //     // Build conditions for FILTER (MATCH, taxon_id)
-    //     if !filter.is_empty() {
-    //         sql.push_str(
-    //             " WHERE (`uniprot_entries`.`name` LIKE ? \
-    //             OR `uniprot_entries`.`uniprot_accession_number` LIKE ? \
-    //             OR `uniprot_entries`.`taxon_id` = ?) ",
-    //         );
-    //     }
-    // 
-    //     // Append ORDER BY logic
-    //     match sort_by.as_str() {
-    //         "name" => sql.push_str(&format!(
-    //             "ORDER BY `uniprot_entries`.`name` {} ",
-    //             if sort_descending { "DESC" } else { "ASC" }
-    //         )),
-    //         "uniprot_accession_number" => sql.push_str(&format!(
-    //             "ORDER BY `uniprot_entries`.`uniprot_accession_number` {} ",
-    //             if sort_descending { "DESC" } else { "ASC" }
-    //         )),
-    //         "taxon_id" => sql.push_str(&format!(
-    //             "ORDER BY `uniprot_entries`.`taxon_id` {} ",
-    //             if sort_descending { "DESC" } else { "ASC" }
-    //         )),
-    //         _ => (), // No ordering
-    //     }
-    // 
-    //     // Append LIMIT and OFFSET for pagination
-    //     sql.push_str("LIMIT ? OFFSET ?");
-    // 
-    //     sql
-    // };
-    // 
-    // let results: Vec<AccessionResult>;
-    // 
-    // if !filter.is_empty() {
-    //     let query = sql_query(base_query)
-    //         .bind::<Text, _>(&filter_pattern)
-    //         .bind::<Text, _>(&filter_pattern)         // For MATCH on uniprot_accession_number
-    //         .bind::<Unsigned<Integer>, _>(filter.parse::<u32>().unwrap_or(0)) // For taxon_id
-    //         .bind::<BigInt, _>(end as i64 - start as i64) // LIMIT clause
-    //         .bind::<BigInt, _>(start as i64);           // OFFSET clause
-    // 
-    //     // Execute the query and collect the results
-    //     results = query.get_results(conn)?;
-    // } else {
-    //     let query = sql_query(base_query)
-    //         .bind::<BigInt, _>(end as i64 - start as i64) // LIMIT clause
-    //         .bind::<BigInt, _>(start as i64);           // OFFSET clause
-    // 
-    //     // Execute the query and collect the results
-    //     results = query.get_results(conn)?;
-    // }
-    // 
-    // // Map the results to a vector of accession numbers
-    // Ok(results
-    //     .into_iter()
-    //     .map(|r| r.uniprot_accession_number)
-    //     .collect())
-}
+    let sort_field = match sort_by.as_str() {
+        "taxon_id" => "taxon_id",
+        _ => "uniprot_accession_number.exact"
+    };
 
+    let body;
+
+    // If filter is empty, use match_all query to count all documents
+    if filter.is_empty() {
+        body = json!({
+            "query": {
+                "match_all": {}
+            },
+            "sort": [{
+                sort_field: {
+                    "order": if sort_descending { "desc" } else { "asc" }
+                }
+            }]
+        });
+    } else {
+        // Parse filter as integer for taxon_id matching if possible
+        let taxon_filter = filter.parse::<u32>().ok();
+
+        let mut should_conditions = vec![
+            // Name contains filter
+            json!({
+                "wildcard": {
+                    "name": {
+                        "value": format!("*{}*", filter),
+                        "case_insensitive": true
+                    }
+                }
+            }),
+            // Uniprot accession number contains filter
+            json!({
+                "wildcard": {
+                    "uniprot_accession_number": {
+                        "value": format!("*{}*", filter),
+                        "case_insensitive": true
+                    }
+                }
+            })
+        ];
+
+        // Add taxon_id term query if filter is a valid integer
+        if let Some(taxon_id) = taxon_filter {
+            should_conditions.push(json!({
+                "term": {
+                    "taxon_id": taxon_id
+                }
+            }));
+        }
+
+        body = json!({
+            "query": {
+                "bool": {
+                    "should": should_conditions,
+                    "minimum_should_match": 1
+                }
+            },
+            "sort": [{
+                sort_field: {
+                    "order": if sort_descending { "desc" } else { "asc" }
+                }
+            }]
+        });
+    }
+
+    let response = client
+        .search(SearchParts::Index(&["uniprot_entries"]))
+        .from(start as i64)
+        .size((end - start) as i64)
+        .body(body)
+        .send()
+        .await?;
+
+    if !response.status_code().is_success() {
+        return Err(GeneralError(response.text().await?));
+    }
+
+    let response_body: serde_json::Value = response.json().await?;
+
+    Ok(response_body["hits"]["hits"]
+        .as_array()
+        .map(|hits| {
+            hits.iter()
+                .filter_map(|hit| hit["_source"]["uniprot_accession_number"].as_str())
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default())
+}

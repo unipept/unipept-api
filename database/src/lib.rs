@@ -1,8 +1,7 @@
-use std::{collections::HashMap, ops::Deref};
+use std::{collections::HashMap};
 use std::collections::HashSet;
 pub use errors::DatabaseError;
 use models::UniprotEntry;
-use itertools::Itertools;
 use opensearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
 use opensearch::http::{Url};
 use opensearch::{OpenSearch, SearchParts};
@@ -160,9 +159,9 @@ pub async fn get_accessions_count_by_filter(
         }),
         // Uniprot accession number contains filter
         json!({
-            "wildcard": {
+            "prefix": {
                 "uniprot_accession_number": {
-                    "value": format!("*{}*", filter),
+                    "value": filter,
                     "case_insensitive": true
                 }
             }
@@ -172,8 +171,10 @@ pub async fn get_accessions_count_by_filter(
     // Add taxon_id term query if filter is a valid integer
     if let Some(taxon_id) = taxon_filter {
         should_conditions.push(json!({
-            "term": {
-                "taxon_id": taxon_id
+            "match": {
+                "taxon_id": {
+                    "query": taxon_id
+                }
             }
         }));
     }
@@ -212,9 +213,7 @@ pub async fn get_accessions_count_by_filter(
 /// * `conn` - Database connection handle
 /// * `filter` - String to filter entries by. If empty, returns unfiltered results
 /// * `start` - Starting index for pagination
-/// * `end` - Ending index for pagination 
-/// * `sort_by` - Field to sort results by (uniprot_accession_number or taxon_id)
-/// * `sort_descending` - Whether to sort in descending order
+/// * `end` - Ending index for pagination
 ///
 /// # Returns
 /// * Vector of UniProt accession IDs that match the filter criteria
@@ -229,15 +228,8 @@ pub async fn get_accessions_by_filter(
     client: &OpenSearch,
     filter: String,
     start: usize,
-    end: usize,
-    sort_by: String,
-    sort_descending: bool,
+    end: usize
 ) -> Result<Vec<String>, DatabaseError> {
-    let sort_field = match sort_by.as_str() {
-        "taxon_id" => "taxon_id",
-        _ => "uniprot_accession_number.exact"
-    };
-
     let body;
 
     // If filter is empty, use match_all query to count all documents
@@ -245,12 +237,7 @@ pub async fn get_accessions_by_filter(
         body = json!({
             "query": {
                 "match_all": {}
-            },
-            "sort": [{
-                sort_field: {
-                    "order": if sort_descending { "desc" } else { "asc" }
-                }
-            }]
+            }
         });
     } else {
         // Parse filter as integer for taxon_id matching if possible
@@ -259,18 +246,18 @@ pub async fn get_accessions_by_filter(
         let mut should_conditions = vec![
             // Name contains filter
             json!({
-                "wildcard": {
-                    "name": {
-                        "value": format!("*{}*", filter),
-                        "case_insensitive": true
-                    }
+            "wildcard": {
+                "name": {
+                    "value": format!("*{}*", filter),
+                    "case_insensitive": true
                 }
+            }
             }),
-            // Uniprot accession number contains filter
-            json!({
-                "wildcard": {
+                // Uniprot accession number contains filter
+                json!({
+                "prefix": {
                     "uniprot_accession_number": {
-                        "value": format!("*{}*", filter),
+                        "value": filter,
                         "case_insensitive": true
                     }
                 }
@@ -292,12 +279,7 @@ pub async fn get_accessions_by_filter(
                     "should": should_conditions,
                     "minimum_should_match": 1
                 }
-            },
-            "sort": [{
-                sort_field: {
-                    "order": if sort_descending { "desc" } else { "asc" }
-                }
-            }]
+            }
         });
     }
 

@@ -4,7 +4,7 @@ version = "2.3.2"
 edition = "2021"
 
 [dependencies]
-sa-compression = { git = "https://github.com/unipept/unipept-index.git", branch = "feature/improve-peak-memory" }
-sa-index = { git = "https://github.com/unipept/unipept-index.git", branch = "feature/improve-peak-memory" }
-sa-mappings = { git = "https://github.com/unipept/unipept-index.git", branch = "feature/improve-peak-memory" }
+sa-compression = { git = "https://github.com/unipept/unipept-index.git" }
+sa-index = { git = "https://github.com/unipept/unipept-index.git" }
+sa-mappings = { git = "https://github.com/unipept/unipept-index.git" }
 thiserror = "1.0"

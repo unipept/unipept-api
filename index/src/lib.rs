@@ -24,13 +24,14 @@ pub struct Index {
 
 impl Index {
     pub fn try_from_files(index_file: &str, proteins_file: &str) -> Result<Self, IndexError> {
-        let suffix_array =
-            load_index_file(index_file).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?;
 
         let proteins = Proteins::try_from_database_file(proteins_file)
             .map_err(|_| LoadIndexError::LoadProteinsErrors(
                 LoadIndexError::FileNotFound(proteins_file.to_string()).to_string(),
             ))?;
+
+        let suffix_array =
+            load_index_file(index_file).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?;
 
         let searcher = SparseSearcher::new(suffix_array, proteins);
 

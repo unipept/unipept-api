@@ -59,7 +59,7 @@ pub struct Taxon {
 /// * `rank` - The rank of the taxon that was passed using the `taxon_id` parameter
 /// * `descendants_rank` - The rank from which the children should be retrieved.
 /// * `lineage_store` - A reference to the LineageStore that can be used to retrieve lineages and
-///     taxonomic information from the database.
+///   taxonomic information from the database.
 fn get_children_at_rank(
     taxon_id: u32,
     rank: LineageRank,

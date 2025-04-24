@@ -55,7 +55,7 @@ async fn count_handler(
         Ok(ReferenceProteomeCountResult {
             count: proteome_store.mapper
                 .iter()
-                .filter(|(key, (taxon_id, _))| {
+                .filter(|(key, (taxon_id, _, _))| {
                     let taxon_name = get_taxon_name_by_id(datastore.taxon_store(), *taxon_id);
 
                     key.to_lowercase().contains(&filter.to_lowercase()) ||
@@ -79,9 +79,9 @@ async fn filter_handler(
 ) -> Result<Vec<String>, ()> {
     let proteome_store = datastore.reference_proteome_store();
 
-    let mut filtered_proteomes: Vec<(&String, &(u32, u32))> = proteome_store.mapper
+    let mut filtered_proteomes: Vec<(&String, &(u32, u32, String))> = proteome_store.mapper
         .iter()
-        .filter(|(key, (taxon_id, _))| {
+        .filter(|(key, (taxon_id, _, _))| {
             let taxon_name = get_taxon_name_by_id(datastore.taxon_store(), *taxon_id);
 
             key.to_lowercase().contains(&filter.to_lowercase()) ||
@@ -104,12 +104,12 @@ async fn filter_handler(
                 }
             };
             
-            filtered_proteomes.sort_by(|(_, &(a_taxon_id, _)), (_, &(b_taxon_id,_))| {
+            filtered_proteomes.sort_by(|(_, &(a_taxon_id, _, _)), (_, &(b_taxon_id,_, _))| {
                 sort_fn(a_taxon_id, b_taxon_id)
             });
         },
         "protein_count" => {
-            filtered_proteomes.sort_by(|(_, &(_, a_protein_count)), (_, &(_, b_protein_count))| {
+            filtered_proteomes.sort_by(|(_, &(_, a_protein_count, _)), (_, &(_, b_protein_count, _))| {
                 if sort_descending {
                     b_protein_count.cmp(&a_protein_count)
                 } else {

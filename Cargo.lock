@@ -278,7 +278,7 @@ dependencies = [
 [[package]]
 name = "bitarray"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fimprove-peak-memory#46f9d269d9649239bb7db72901fa7510e76a41c4"
+source = "git+https://github.com/unipept/unipept-index.git#46f9d269d9649239bb7db72901fa7510e76a41c4"
 
 [[package]]
 name = "bitflags"
@@ -625,7 +625,7 @@ dependencies = [
 [[package]]
 name = "fa-compression"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fimprove-peak-memory#46f9d269d9649239bb7db72901fa7510e76a41c4"
+source = "git+https://github.com/unipept/unipept-index.git#46f9d269d9649239bb7db72901fa7510e76a41c4"
 
 [[package]]
 name = "fastrand"
@@ -1775,7 +1775,7 @@ checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
 [[package]]
 name = "sa-compression"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fimprove-peak-memory#30121ce41057607fe153799ae471a5d769eef584"
+source = "git+https://github.com/unipept/unipept-index.git#46f9d269d9649239bb7db72901fa7510e76a41c4"
 dependencies = [
  "bitarray",
  "sa-index",
@@ -1784,7 +1784,7 @@ dependencies = [
 [[package]]
 name = "sa-index"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fimprove-peak-memory#46f9d269d9649239bb7db72901fa7510e76a41c4"
+source = "git+https://github.com/unipept/unipept-index.git#46f9d269d9649239bb7db72901fa7510e76a41c4"
 dependencies = [
  "bitarray",
  "clap",
@@ -1798,7 +1798,7 @@ dependencies = [
 [[package]]
 name = "sa-mappings"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fimprove-peak-memory#46f9d269d9649239bb7db72901fa7510e76a41c4"
+source = "git+https://github.com/unipept/unipept-index.git#46f9d269d9649239bb7db72901fa7510e76a41c4"
 dependencies = [
  "bitarray",
  "bytelines",
@@ -2096,7 +2096,7 @@ dependencies = [
 [[package]]
 name = "text-compression"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fimprove-peak-memory#46f9d269d9649239bb7db72901fa7510e76a41c4"
+source = "git+https://github.com/unipept/unipept-index.git#46f9d269d9649239bb7db72901fa7510e76a41c4"
 dependencies = [
  "bitarray",
 ]
@@ -2184,9 +2184,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.44.0"
+version = "1.44.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9975ea0f48b5aa3972bf2d888c238182458437cc2a19374b81b25cdf1023fb3a"
+checksum = "e6b88822cbe49de4185e3a4cbf8321dd487cf5fe0c5c65695fef6346371e9c48"
 dependencies = [
  "backtrace",
  "bytes",

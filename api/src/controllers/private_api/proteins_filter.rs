@@ -11,10 +11,6 @@ fn default_filter() -> String {
     String::from("")
 }
 
-fn default_sort_by() -> String { 
-    String::from("uniprot_accession_id") 
-}
-
 #[derive(Deserialize)]
 pub struct ProteinCountParameters {
     #[serde(default = "default_filter")]
@@ -26,11 +22,7 @@ pub struct ProteinFilterParameters {
     #[serde(default = "default_filter")]
     filter: String,
     start: usize,
-    end: usize,
-    #[serde(default = "default_sort_by")]
-    sort_by: String,
-    #[serde(default)]
-    sort_descending: bool
+    end: usize
 }
 
 #[derive(Serialize)]
@@ -42,16 +34,16 @@ async fn count_handler(
     State(AppState { database, .. }): State<AppState>,
     ProteinCountParameters { filter }:  ProteinCountParameters
 ) -> Result<ProteinCountResult, ApiError> {
-    let connection = database.get_conn().await?;
-    Ok(ProteinCountResult { count: connection.interact(move |conn| get_accessions_count_by_filter(conn, filter)).await?? })
+    let connection = database.get_conn();
+    Ok(ProteinCountResult { count: get_accessions_count_by_filter(connection, filter).await? })
 }
 
 async fn filter_handler(
     State(AppState { database, .. }): State<AppState>,
-    ProteinFilterParameters { filter, start, end, sort_by, sort_descending }:  ProteinFilterParameters
+    ProteinFilterParameters { filter, start, end }:  ProteinFilterParameters
 ) -> Result<Vec<String>, ApiError> {
-    let connection = database.get_conn().await?;
-    Ok(connection.interact(move |conn| get_accessions_by_filter(conn, filter, start, end, sort_by, sort_descending)).await??)
+    let connection = database.get_conn();
+    Ok(get_accessions_by_filter(connection, filter, start, end).await?)
 }
 
 generate_handlers!(

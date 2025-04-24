@@ -56,7 +56,7 @@ async fn handler(
 ) -> Result<Vec<ProtInformation>, ApiError> {
     let input = sanitize_peptides(input);
 
-    let connection = database.get_conn().await?;
+    let connection = database.get_conn();
 
     let result = index.analyse(&input, equate_il, tryptic, Some(cutoff));
 
@@ -65,13 +65,8 @@ async fn handler(
         .flat_map(|item| item.proteins.iter().map(|protein| protein.uniprot_accession.clone()))
         .collect();
 
-    let accessions_map = connection
-        .interact(move |conn| get_accessions_map(conn, &accession_numbers))
+    let accessions_map = get_accessions_map(connection, &accession_numbers)
         .await
-        .map_err(|e| {
-            println!("Error occurred: {:?}", e);
-            e
-        })?
         .map_err(|e| {
             println!("Error occurred: {:?}", e);
             e

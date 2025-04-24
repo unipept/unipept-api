@@ -28,7 +28,7 @@ async fn handler(
             .iter()
             .map(|proteome| proteome.trim())
             .filter_map(|proteome| {
-                datastore.reference_proteome_store().get(proteome).map(|(taxon_id, protein_count)| {
+                datastore.reference_proteome_store().get(proteome).map(|(taxon_id, protein_count, _)| {
                     let taxon_name = datastore
                         .taxon_store()
                         .get_name(*taxon_id).cloned() // Clone the &String to String

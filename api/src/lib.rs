@@ -28,7 +28,7 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
     let ec_numbers = format!("{}/datastore/ec_numbers.tsv", index_location);
     let go_terms = format!("{}/datastore/go_terms.tsv", index_location);
     let interpro_entries = format!("{}/datastore/interpro_entries.tsv", index_location);
-    let reference_proteomes = format!("{}/datastore/reference_proteomes.tsv", index_location);
+    let reference_proteomes = format!("{}/datastore/proteomes.tsv", index_location);
     let lineages = format!("{}/datastore/lineages.tsv", index_location);
     let taxons = format!("{}/datastore/taxons.tsv", index_location);
 

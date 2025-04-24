@@ -74,6 +74,7 @@ async fn handler(
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
+    let proteome_store = datastore.reference_proteome_store();
 
     let filter_proteins: Box<dyn UniprotFilter> = match filter {
         Some(Filter::Taxa(taxa)) => {
@@ -84,7 +85,7 @@ async fn handler(
             }
         },
         Some(Filter::Proteomes(proteomes)) => {
-            Box::new(ProteomeFilter::new(proteomes).await.unwrap())
+            Box::new(ProteomeFilter::new(proteomes, proteome_store).await.unwrap())
         },
         Some(Filter::Proteins(proteins)) => {
             Box::new(ProteinFilter::new(proteins))

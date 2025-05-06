@@ -11,7 +11,7 @@ pub use sa_index::peptide_search::SearchResult;
 use sa_index::{
     binary::load_suffix_array,
     peptide_search::{search_all_peptides},
-    sa_searcher::SparseSearcher,
+    sa_searcher::BitVecSearcher,
     SuffixArray
 };
 use sa_mappings::proteins::Proteins;
@@ -19,7 +19,7 @@ use sa_mappings::proteins::Proteins;
 mod errors;
 
 pub struct Index {
-    searcher: SparseSearcher
+    searcher: BitVecSearcher
 }
 
 impl Index {
@@ -33,7 +33,7 @@ impl Index {
         let suffix_array =
             load_index_file(index_file).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?;
 
-        let searcher = SparseSearcher::new(suffix_array, proteins);
+        let searcher = BitVecSearcher::new(suffix_array, proteins);
 
         Ok(Self { searcher })
     }

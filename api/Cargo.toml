@@ -30,7 +30,6 @@ reqwest = { version = "0.12.8", features = [ "json" ] }
 
 [dev-dependencies]
 criterion = "0.5.1"
-rand = "0.8"
 
 [[bench]]
 opt-level = 0
@@ -39,4 +38,3 @@ harness = false
 
 [profile.bench]
 opt-level=3
-debug = true

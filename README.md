@@ -53,4 +53,5 @@ Follow these steps in order to easily work on the Unipept API in the devcontaine
 * You first have to build the binaries by running `cargo build --release`.
 * Then, you should start the OpenSearch server: `/usr/share/opensearch/bin/opensearch`
 * Sometimes, a previous invocation of OpenSearch crashed or didn't shut down properly. If you see errors, try and clear the file locks: `rm /var/lib/opensearch/nodes/0/node.lock /var/lib/opensearch/nodes/0/_state/write.lock`
-* Finally, the Unipept API can be started with this command: `./target/release/unipept-api -i "/unipept-index-data" -d "http://localhost:9200" -p 80`.
+* Make the directory where we can store the logfiles for a running instance of the Unipept API: `mkdir -p /var/log/unipept-api`.
+* Finally, the Unipept API can be started with this command: `./target/release/unipept-api -i "/unipept-index-data" -d "http://localhost:9200" -p 80 > /var/log/unipept-api/api.log 2> /var/log/unipept-api/api_error.log`.

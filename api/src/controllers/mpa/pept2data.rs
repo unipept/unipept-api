@@ -3,7 +3,7 @@ use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 use index::{ProteinInfo, SearchResult};
 use crate::{
-    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic, mpa::default_report_taxa, api::default_cutoff},
+    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic, mpa::default_report_taxa, mpa::default_blacklist_crap, api::default_cutoff},
     helpers::{
         fa_helper::{calculate_fa, FunctionalAggregation},
         lca_helper::calculate_lca,
@@ -11,6 +11,7 @@ use crate::{
     },
     AppState
 };
+use crate::helpers::filters::crap_filter::CrapFilter;
 use crate::helpers::filters::empty_filter::EmptyFilter;
 use crate::helpers::filters::protein_filter::ProteinFilter;
 use crate::helpers::filters::proteome_filter::ProteomeFilter;
@@ -30,6 +31,8 @@ pub struct Parameters {
     cutoff: usize,
     #[serde(default = "default_report_taxa")]
     report_taxa: bool,
+    #[serde(default = "default_blacklist_crap")]
+    blacklist_crap: bool,
     filter: Option<Filter>,
 }
 
@@ -60,7 +63,7 @@ pub struct Data {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { mut peptides, equate_il, tryptic, cutoff, report_taxa, filter }: Parameters
+    Parameters { mut peptides, equate_il, tryptic, cutoff, report_taxa, blacklist_crap, filter }: Parameters
 ) -> Result<Data, ()> {
     if peptides.is_empty() {
         return Ok(Data { peptides: Vec::new() });
@@ -93,6 +96,8 @@ async fn handler(
         None => Box::new(EmptyFilter::new())
     };
 
+    let crap_blacklist = CrapFilter::new();
+
     Ok(Data {
         peptides: result
             .into_iter()
@@ -100,6 +105,7 @@ async fn handler(
                 let filtered_proteins: Vec<ProteinInfo> = proteins
                     .into_iter()
                     .filter(|protein| filter_proteins.filter(protein))
+                    .filter(|protein| !(blacklist_crap && crap_blacklist.filter(protein)))
                     .collect();
 
                 if filtered_proteins.is_empty() {

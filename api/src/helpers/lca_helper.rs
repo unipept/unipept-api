@@ -8,10 +8,13 @@ pub fn calculate_lca(
     taxa: Vec<u32>,
     version: LineageVersion,
     taxon_store: &TaxonStore,
-    lineage_store: &LineageStore
+    lineage_store: &LineageStore,
+    only_valid_taxa: bool
 ) -> i32 {
-    let cleaned_taxa = taxa.into_iter().filter(|&taxon_id| taxon_store.is_valid(taxon_id));
-    
+    let cleaned_taxa = taxa
+        .into_iter()
+        .filter(|&taxon_id| only_valid_taxa && taxon_store.is_valid(taxon_id) || !only_valid_taxa);
+
     let lineages: Vec<Vec<i32>> = cleaned_taxa
         .into_iter()
         .map(|taxon_id| get_lineage_array_numeric(taxon_id, version, lineage_store))
@@ -69,7 +72,7 @@ mod tests {
         let lineage_store: LineageStore = LineageStore::try_from_file("../data/lineages_subset_10000.tsv").expect("Reading the file failed");
 
         assert_eq!(calculate_lca(
-            taxa, version, &taxon_store, &lineage_store), 8287);
+            taxa, version, &taxon_store, &lineage_store, true), 8287);
     }
 
 
@@ -81,6 +84,6 @@ mod tests {
         let lineage_store: LineageStore = LineageStore::try_from_file("../data/lineages_subset_10000.tsv").expect("Reading the file failed");
 
         assert_eq!(calculate_lca(
-            taxa, version, &taxon_store, &lineage_store), 1);
+            taxa, version, &taxon_store, &lineage_store, true), 1);
     }
 }

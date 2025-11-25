@@ -53,3 +53,32 @@ impl CrapFilter {
         crap_accessions.into_iter().map(String::from).collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_protein_in_crap_filter() {
+        let filter = CrapFilter::new();
+        let protein_in_filter = ProteinInfo {
+            taxon: 1,
+            uniprot_accession: "P68082".to_string(),
+            functional_annotations: "GO:0001234;GO:0005678".to_string()
+        };
+
+        assert!(filter.filter(&protein_in_filter));
+    }
+
+    #[test]
+    fn test_protein_not_in_crap_filter() {
+        let filter = CrapFilter::new();
+        let protein_in_filter = ProteinInfo {
+            taxon: 1,
+            uniprot_accession: "PXXXXX".to_string(),
+            functional_annotations: "GO:0001234;GO:0005678".to_string()
+        };
+
+        assert!(!filter.filter(&protein_in_filter));
+    }
+}

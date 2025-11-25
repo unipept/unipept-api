@@ -105,10 +105,14 @@ async fn handler(
                 let filtered_proteins: Vec<ProteinInfo> = proteins
                     .into_iter()
                     .filter(|protein| filter_proteins.filter(protein))
-                    .filter(|protein| !(blacklist_crap && crap_blacklist.filter(protein)))
                     .collect();
 
                 if filtered_proteins.is_empty() {
+                    return None;
+                }
+
+                // Remove all peptide results when any protein is in the crap blacklist
+                if blacklist_crap && filtered_proteins.iter().any(|p| crap_blacklist.filter(p)) {
                     return None;
                 }
 

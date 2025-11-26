@@ -96,7 +96,11 @@ async fn handler(
         None => Box::new(EmptyFilter::new())
     };
 
-    let crap_blacklist = CrapFilter::new();
+    let crap_blacklist = if blacklist_crap {
+        Some(CrapFilter::new())
+    } else {
+        None
+    };
 
     Ok(Data {
         peptides: result
@@ -112,8 +116,10 @@ async fn handler(
                 }
 
                 // Remove all peptide results when any protein is in the crap blacklist
-                if blacklist_crap && filtered_proteins.iter().any(|p| crap_blacklist.filter(p)) {
-                    return None;
+                if let Some(ref filter) = crap_blacklist {
+                    if filtered_proteins.iter().any(|p| filter.filter(p)) {
+                        return None;
+                    }
                 }
 
                 let taxa: Vec<u32> = filtered_proteins.iter().map(|protein| protein.taxon).collect();

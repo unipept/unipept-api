@@ -73,12 +73,12 @@ mod tests {
     #[test]
     fn test_protein_not_in_crap_filter() {
         let filter = CrapFilter::new();
-        let protein_in_filter = ProteinInfo {
+        let protein_not_in_filter = ProteinInfo {
             taxon: 1,
             uniprot_accession: "PXXXXX".to_string(),
             functional_annotations: "GO:0001234;GO:0005678".to_string()
         };
 
-        assert!(!filter.filter(&protein_in_filter));
+        assert!(!filter.filter(&protein_not_in_filter));
     }
 }

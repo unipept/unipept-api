@@ -86,4 +86,14 @@ mod tests {
         assert_eq!(calculate_lca(
             taxa, version, &taxon_store, &lineage_store, true), 1);
     }
+
+    #[test]
+    fn test_calculate_lca_validate() {
+        let version: LineageVersion = LineageVersion::V2;
+        let taxon_store: TaxonStore = TaxonStore::try_from_file("../data/taxons_subset_10000.tsv").expect("Reading the file failed");
+        let lineage_store: LineageStore = LineageStore::try_from_file("../data/lineages_subset_10000.tsv").expect("Reading the file failed");
+
+        assert_eq!(calculate_lca(vec![27], version, &taxon_store, &lineage_store, true), 1);
+        assert_eq!(calculate_lca(vec![27], version, &taxon_store, &lineage_store, false), 27);
+    }
 }

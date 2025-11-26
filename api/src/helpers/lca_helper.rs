@@ -13,7 +13,7 @@ pub fn calculate_lca(
 ) -> i32 {
     let cleaned_taxa = taxa
         .into_iter()
-        .filter(|&taxon_id| only_valid_taxa && taxon_store.is_valid(taxon_id) || !only_valid_taxa);
+        .filter(|&taxon_id| !only_valid_taxa || taxon_store.is_valid(taxon_id));
 
     let lineages: Vec<Vec<i32>> = cleaned_taxa
         .into_iter()

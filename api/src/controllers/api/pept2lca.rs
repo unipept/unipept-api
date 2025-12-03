@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_equate_il, default_extra, default_names},
+        api::{default_equate_il, default_extra, default_names, default_validate_taxa},
         generate_handlers
     },
     helpers::{
@@ -26,7 +26,9 @@ pub struct Parameters {
     #[serde(default = "default_extra")]
     extra: bool,
     #[serde(default = "default_names")]
-    names: bool
+    names: bool,
+    #[serde(default = "default_validate_taxa")]
+    validate_taxa: bool
 }
 
 #[derive(Serialize)]
@@ -47,7 +49,7 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, names }: Parameters,
+    Parameters { input, equate_il, extra, names, validate_taxa }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<LcaInformation>, ()> {
     let input = sanitize_peptides(input);
@@ -63,7 +65,8 @@ async fn handler(
                 item.proteins.iter().map(|protein| protein.taxon).collect(),
                 version,
                 taxon_store,
-                lineage_store
+                lineage_store,
+                validate_taxa
             );
 
             let (name, rank, _) = taxon_store.get(lca as u32)?;

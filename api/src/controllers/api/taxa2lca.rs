@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_extra, default_names},
+        api::{default_extra, default_names, default_validate_taxa},
         generate_handlers
     },
     helpers::{
@@ -24,7 +24,9 @@ pub struct Parameters {
     #[serde(default = "default_extra")]
     extra: bool,
     #[serde(default = "default_names")]
-    names: bool
+    names: bool,
+    #[serde(default = "default_validate_taxa")]
+    validate_taxa: bool
 }
 
 #[derive(Serialize)]
@@ -44,7 +46,7 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
-    Parameters { input, extra, names }: Parameters,
+    Parameters { input, extra, names, validate_taxa }: Parameters,
     version: LineageVersion
 ) -> Result<LcaInformation, ()> {
     let taxon_store = datastore.taxon_store();
@@ -56,7 +58,7 @@ async fn handler(
         .collect();
 
     // Calculate the LCA of all taxa
-    let lca: i32 = calculate_lca(casted_input, version, taxon_store, lineage_store);
+    let lca: i32 = calculate_lca(casted_input, version, taxon_store, lineage_store, validate_taxa);
 
     if let Some((taxon_name, taxon_rank, _)) = taxon_store.get(lca as u32) {
         // Calculate the lineage of the LCA

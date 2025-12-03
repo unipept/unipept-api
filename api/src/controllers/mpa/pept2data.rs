@@ -3,7 +3,7 @@ use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 use index::{ProteinInfo, SearchResult};
 use crate::{
-    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic, mpa::default_report_taxa, mpa::default_blacklist_crap, api::default_cutoff},
+    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic, mpa::default_report_taxa, mpa::default_blacklist_crap, api::default_cutoff, api::default_validate_taxa},
     helpers::{
         fa_helper::{calculate_fa, FunctionalAggregation},
         lca_helper::calculate_lca,
@@ -31,6 +31,8 @@ pub struct Parameters {
     cutoff: usize,
     #[serde(default = "default_report_taxa")]
     report_taxa: bool,
+    #[serde(default = "default_validate_taxa")]
+    validate_taxa: bool,
     #[serde(default = "default_blacklist_crap")]
     blacklist_crap: bool,
     filter: Option<Filter>,
@@ -63,7 +65,7 @@ pub struct Data {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { mut peptides, equate_il, tryptic, cutoff, report_taxa, blacklist_crap, filter }: Parameters
+    Parameters { mut peptides, equate_il, tryptic, cutoff, report_taxa, validate_taxa, blacklist_crap, filter }: Parameters
 ) -> Result<Data, ()> {
     if peptides.is_empty() {
         return Ok(Data { peptides: Vec::new() });
@@ -128,7 +130,8 @@ async fn handler(
                     taxa.clone(),
                     LineageVersion::V2,
                     taxon_store,
-                    lineage_store
+                    lineage_store,
+                    validate_taxa
                 );
                 let lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store);
 

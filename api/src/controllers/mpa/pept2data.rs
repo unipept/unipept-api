@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use axum::{extract::State, Json};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use index::{ProteinInfo, SearchResult};
 use crate::{
@@ -122,7 +123,7 @@ async fn handler(
                     }
                 }
 
-                let taxa: Vec<u32> = filtered_proteins.iter().map(|protein| protein.taxon).collect();
+                let taxa: Vec<u32> = filtered_proteins.iter().map(|protein| protein.taxon).unique().collect();
 
                 let lca = calculate_lca(
                     taxa.clone(),

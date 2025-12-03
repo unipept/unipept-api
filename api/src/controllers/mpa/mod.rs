@@ -11,3 +11,7 @@ pub fn default_tryptic() -> bool { false }
 pub fn default_report_taxa() -> bool {
     false
 }
+
+pub fn default_blacklist_crap() -> bool {
+    false
+}

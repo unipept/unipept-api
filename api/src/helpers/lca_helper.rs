@@ -1,23 +1,20 @@
 use datastore::{LineageStore, TaxonStore};
 
 use super::lineage_helper::{
-    get_amount_of_ranks, get_genus_index, get_lineage_array_numeric, get_species_index, LineageVersion
+    get_amount_of_ranks, get_genus_index, get_species_index, LineageVersion
 };
 
 pub fn calculate_lca(
-    taxa: Vec<u32>,
+    taxa: impl IntoIterator<Item = u32>,
     version: LineageVersion,
     taxon_store: &TaxonStore,
     lineage_store: &LineageStore,
     only_valid_taxa: bool
 ) -> i32 {
-    let cleaned_taxa = taxa
+    let lineages: Vec<&datastore::Lineage> = taxa
         .into_iter()
-        .filter(|&taxon_id| !only_valid_taxa || taxon_store.is_valid(taxon_id));
-
-    let lineages: Vec<Vec<i32>> = cleaned_taxa
-        .into_iter()
-        .map(|taxon_id| get_lineage_array_numeric(taxon_id, version, lineage_store))
+        .filter(|&taxon_id| !only_valid_taxa || taxon_store.is_valid(taxon_id))
+        .filter_map(|taxon_id| lineage_store.get(taxon_id).map(|arc| arc.as_ref()))
         .collect();
     
     let amount_of_ranks = get_amount_of_ranks(version);
@@ -27,7 +24,10 @@ pub fn calculate_lca(
     for rank in (0..amount_of_ranks).rev() {
         let mut iterator = lineages
             .iter()
-            .map(|x| x[rank as usize])
+            .map(|lineage| {
+                let val = lineage.get_rank(rank as usize);
+                val.filter(|&id| id != -1).map(|id| id.abs()).unwrap_or(0)
+            })
             .filter(|&x| if rank == genus_index || rank == species_index { x > 0 } else { x >= 0 });
 
         // Check if all elements in the iterator are the same

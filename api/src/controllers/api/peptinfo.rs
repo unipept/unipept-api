@@ -82,7 +82,7 @@ async fn handler(
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
 
             let lca = calculate_lca(
-                item.proteins.iter().map(|protein| protein.taxon).collect(),
+                item.proteins.iter().map(|protein| protein.taxon),
                 version,
                 taxon_store,
                 lineage_store,

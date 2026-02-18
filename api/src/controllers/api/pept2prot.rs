@@ -65,6 +65,10 @@ async fn handler(
         .flat_map(|item| item.proteins.iter().map(|protein| protein.uniprot_accession.clone()))
         .collect();
 
+    if accession_numbers.is_empty() {
+        return Ok(vec![]);
+    }
+
     let accessions_map = get_accessions_map(connection, &accession_numbers)
         .await
         .map_err(|e| {

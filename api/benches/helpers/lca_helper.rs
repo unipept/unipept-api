@@ -32,7 +32,7 @@ pub fn lca_benchmark(c: &mut criterion::Criterion) {
             generate_arguments,
             |arguments|  {
                 let (taxa, version, taxon_store, lineage_store) = arguments;
-                black_box(calculate_lca(taxa, version, &taxon_store, &lineage_store))
+                black_box(calculate_lca(taxa, version, &taxon_store, &lineage_store, true))
             },
             criterion::BatchSize::SmallInput
         )

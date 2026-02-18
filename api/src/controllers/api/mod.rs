@@ -66,3 +66,7 @@ pub fn default_compact() -> bool {
 pub fn default_cutoff() -> usize {
     10000
 }
+
+pub fn default_validate_taxa() -> bool {
+    true
+}

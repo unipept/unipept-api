@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_domains, default_equate_il, default_extra, default_names},
+        api::{default_domains, default_equate_il, default_extra, default_names, default_validate_taxa},
         generate_handlers
     },
     helpers::{
@@ -32,7 +32,9 @@ pub struct Parameters {
     #[serde(default = "default_domains")]
     domains: bool,
     #[serde(default = "default_names")]
-    names: bool
+    names: bool,
+    #[serde(default = "default_validate_taxa")]
+    validate_taxa: bool
 }
 
 #[derive(Serialize)]
@@ -57,7 +59,7 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, domains, names }: Parameters,
+    Parameters { input, equate_il, extra, domains, names, validate_taxa }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<PeptInformation>, ()> {
     let input = sanitize_peptides(input);
@@ -74,7 +76,8 @@ async fn handler(
         .filter_map(|item| {
             let fa = calculate_fa(&item.proteins);
 
-            let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
+            let total_protein_count = item.proteins.len();
+            // let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
             let gos = go_terms_from_map(&fa.data, go_store, extra, domains);
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
@@ -83,7 +86,8 @@ async fn handler(
                 item.proteins.iter().map(|protein| protein.taxon).collect(),
                 version,
                 taxon_store,
-                lineage_store
+                lineage_store,
+                validate_taxa
             );
             let (name, rank, _) = taxon_store.get(lca as u32)?;
             let lineage = match (extra, names) {

@@ -76,7 +76,8 @@ async fn handler(
         .filter_map(|item| {
             let fa = calculate_fa(&item.proteins);
 
-            let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
+            let total_protein_count = item.proteins.len();
+            // let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
             let gos = go_terms_from_map(&fa.data, go_store, extra, domains);
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);

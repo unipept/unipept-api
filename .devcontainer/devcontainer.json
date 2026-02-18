@@ -12,17 +12,20 @@
     "ghcr.io/devcontainers/features/rust:1": {}
   },
 
-  // Use 'forwardPorts' to make a list of ports inside the container available locally.
+  // Forward port 80 to your host machine
   "forwardPorts": [80],
 
-  // Use 'postCreateCommand' to run commands after the container is created.
-  "postCreateCommand": "apt update && apt install --yes libmysqlclient-dev && rm /var/lib/opensearch/nodes/0/node.lock /var/lib/opensearch/nodes/0/_state/write.lock",
+  // Configure specific attributes for the forwarded port
+  "portsAttributes": {
+    "80": {
+      "label": "Web Server",
+      "onAutoForward": "notify"
+    }
+  },
 
-  // Configure tool-specific properties.
-  // "customizations": {},
+  // Updated to include sudo for permission safety and a check for lock files
+  "postCreateCommand": "sudo apt update && sudo apt install --yes libmysqlclient-dev && sudo rm -f /var/lib/opensearch/nodes/0/node.lock /var/lib/opensearch/nodes/0/_state/write.lock",
 
-  // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
-  // "remoteUser": "root",
   "customizations": {
     "jetbrains": {
       "settings": {

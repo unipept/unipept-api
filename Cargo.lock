@@ -278,7 +278,7 @@ dependencies = [
 [[package]]
 name = "bitarray"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fspeedup-loading-index#6e44f8644123e10339ec6b915d710a290e3ee073"
+source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fspeedup-loading-index#248e4cf5e8d87d37ddb41906310fe80120df1349"
 
 [[package]]
 name = "bitflags"
@@ -643,7 +643,7 @@ dependencies = [
 [[package]]
 name = "fa-compression"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fspeedup-loading-index#6e44f8644123e10339ec6b915d710a290e3ee073"
+source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fspeedup-loading-index#248e4cf5e8d87d37ddb41906310fe80120df1349"
 
 [[package]]
 name = "fastrand"
@@ -1801,7 +1801,7 @@ checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
 [[package]]
 name = "sa-compression"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fspeedup-loading-index#6e44f8644123e10339ec6b915d710a290e3ee073"
+source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fspeedup-loading-index#248e4cf5e8d87d37ddb41906310fe80120df1349"
 dependencies = [
  "bitarray",
  "sa-index",
@@ -1810,7 +1810,7 @@ dependencies = [
 [[package]]
 name = "sa-index"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fspeedup-loading-index#6e44f8644123e10339ec6b915d710a290e3ee073"
+source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fspeedup-loading-index#248e4cf5e8d87d37ddb41906310fe80120df1349"
 dependencies = [
  "bitarray",
  "bitvec",
@@ -1827,18 +1827,18 @@ dependencies = [
 [[package]]
 name = "sa-mappings"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fspeedup-loading-index#6e44f8644123e10339ec6b915d710a290e3ee073"
+source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fspeedup-loading-index#248e4cf5e8d87d37ddb41906310fe80120df1349"
 dependencies = [
- "bitarray",
  "bytelines",
  "fa-compression",
+ "memmap2",
  "text-compression",
 ]
 
 [[package]]
 name = "sa-server"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fspeedup-loading-index#6e44f8644123e10339ec6b915d710a290e3ee073"
+source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fspeedup-loading-index#248e4cf5e8d87d37ddb41906310fe80120df1349"
 dependencies = [
  "axum",
  "clap",
@@ -2154,9 +2154,10 @@ dependencies = [
 [[package]]
 name = "text-compression"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fspeedup-loading-index#6e44f8644123e10339ec6b915d710a290e3ee073"
+source = "git+https://github.com/unipept/unipept-index.git?branch=feature%2Fspeedup-loading-index#248e4cf5e8d87d37ddb41906310fe80120df1349"
 dependencies = [
  "bitarray",
+ "memmap2",
 ]
 
 [[package]]

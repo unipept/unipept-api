@@ -33,7 +33,7 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
     let taxons = format!("{}/datastore/taxons.tsv", index_location);
 
     let sa = format!("{}/sa.bin", index_location);
-    let proteins = format!("{}/proteins.tsv", index_location);
+    let proteins = format!("{}/proteins.bin", index_location);
 
     let database = Database::try_from_url(database_address)?;
 

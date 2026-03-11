@@ -18,7 +18,7 @@ impl Index {
     pub fn try_from_files(index_file: &str, proteins_file: &str) -> Result<Self, IndexError> {
         eprintln!("Loading proteins from file: {}", proteins_file);
         let proteins =
-            load_proteins_file(proteins_file, false).map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
+            load_proteins_file(proteins_file, true).map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
 
         eprintln!("Loading suffix array from file: {}", index_file);
         let suffix_array =

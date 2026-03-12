@@ -1,21 +1,22 @@
 pub use errors::IndexError;
 use errors::LoadIndexError;
-use sa_server::{load_proteins_file, load_suffix_array_file};
+use sa_server::{load_mapping_file, load_proteins_file, load_suffix_array_file};
 pub use sa_index::peptide_search::ProteinInfo;
 pub use sa_index::peptide_search::SearchResult;
 use sa_index::{
     peptide_search::{search_all_peptides},
-    sa_searcher::BitVecSearcher,
 };
+use sa_index::sa_searcher::Searcher;
+use sa_index::suffix_to_protein_index::SuffixToProteinIndex;
 
 mod errors;
 
 pub struct Index {
-    searcher: BitVecSearcher
+    searcher: Searcher
 }
 
 impl Index {
-    pub fn try_from_files(index_file: &str, proteins_file: &str) -> Result<Self, IndexError> {
+    pub fn try_from_files(index_file: &str, proteins_file: &str, mapping_file: &str) -> Result<Self, IndexError> {
         eprintln!("Loading proteins from file: {}", proteins_file);
         let proteins =
             load_proteins_file(proteins_file, true).map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
@@ -25,7 +26,10 @@ impl Index {
             load_suffix_array_file(index_file, true).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?;
 
         eprintln!("Creating searcher");
-        let searcher = BitVecSearcher::new(suffix_array, proteins);
+        let suffix_to_protein_mapping =
+            load_mapping_file(mapping_file, true).map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
+
+        let searcher = Searcher::new(suffix_array, proteins, suffix_to_protein_mapping);
 
         Ok(Self { searcher })
     }

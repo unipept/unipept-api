@@ -16,18 +16,18 @@ pub struct Index {
 }
 
 impl Index {
-    pub fn try_from_files(index_file: &str, proteins_file: &str, mapping_file: &str) -> Result<Self, IndexError> {
+    pub fn try_from_files(index_file: &str, proteins_file: &str, mapping_file: &str, use_mmap: bool) -> Result<Self, IndexError> {
         eprintln!("Loading proteins from file: {}", proteins_file);
         let proteins =
-            load_proteins_file(proteins_file, true).map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
+            load_proteins_file(proteins_file, use_mmap).map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
 
         eprintln!("Loading suffix array from file: {}", index_file);
         let suffix_array =
-            load_suffix_array_file(index_file, true).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?;
+            load_suffix_array_file(index_file, use_mmap).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?;
 
         eprintln!("Creating searcher");
         let suffix_to_protein_mapping =
-            load_mapping_file(mapping_file, true).map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
+            load_mapping_file(mapping_file, use_mmap).map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
 
         let searcher = Searcher::new(suffix_array, proteins, suffix_to_protein_mapping.0);
 

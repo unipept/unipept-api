@@ -21,7 +21,7 @@ pub struct AppState {
     pub database: Arc<Database>,
     pub index: Arc<Index>
 }
-pub async fn start(index_location: &str, database_address: &str, port: u32) -> Result<(), errors::AppError> {
+pub async fn start(index_location: &str, database_address: &str, port: u32, use_mmap: bool) -> Result<(), errors::AppError> {
     let version = format!("{}/.version", index_location);
 
     let sampledata = format!("{}/datastore/sampledata.json", index_location);
@@ -49,7 +49,7 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
         &taxons
     )?;
 
-    let index = Index::try_from_files(&sa, &proteins, &mappings)?;
+    let index = Index::try_from_files(&sa, &proteins, &mappings, use_mmap)?;
 
     let app_state = AppState {
         datastore: Arc::new(datastore),

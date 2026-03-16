@@ -29,7 +29,7 @@ impl Index {
         let suffix_to_protein_mapping =
             load_mapping_file(mapping_file, true).map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
 
-        let searcher = Searcher::new(suffix_array, proteins, suffix_to_protein_mapping);
+        let searcher = Searcher::new(suffix_array, proteins, suffix_to_protein_mapping.0);
 
         Ok(Self { searcher })
     }

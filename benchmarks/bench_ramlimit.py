@@ -93,14 +93,13 @@ def _warmup_cache(
 
     WINDOW = 5          # number of readings to track
     THRESHOLD = 0.01    # 1 % of limit
-    CHECK_EVERY = 10    # batches between RSS readings
+    CHECK_INTERVAL = 45 # seconds between RSS readings
     MIN_CHECKS = 3      # minimum readings before plateau can trigger
 
     rss_history: list[int] = []
     peptide_cycle = itertools.cycle(all_peptides)
-    batch_idx = 0
     start_time = time.monotonic()
-    last_print = start_time
+    last_check = start_time
 
     print(
         f"[ramlimit] Warming up ...  rss=? / {limit_bytes / 1e9:.1f} GB limit  "
@@ -116,47 +115,46 @@ def _warmup_cache(
         except Exception:
             pass  # warmup best-effort; real errors will surface in the benchmark
 
-        batch_idx += 1
+        now = time.monotonic()
+        if now - last_check < CHECK_INTERVAL:
+            continue
+        last_check = now
 
-        if batch_idx % CHECK_EVERY == 0:
-            rss = read_cgroup_memory(str(cgroup_dir))
-            if rss is not None:
-                rss_history.append(rss)
-                if len(rss_history) > WINDOW:
-                    rss_history.pop(0)
+        rss = read_cgroup_memory(str(cgroup_dir))
+        if rss is not None:
+            rss_history.append(rss)
+            if len(rss_history) > WINDOW:
+                rss_history.pop(0)
 
-                now = time.monotonic()
-                if now - last_print >= 60:
-                    elapsed = now - start_time
+            elapsed = now - start_time
+            print(
+                f"[ramlimit] Warming up ...  "
+                f"rss={rss / 1e9:.1f} GB / {limit_bytes / 1e9:.1f} GB limit  "
+                f"(elapsed {_fmt_elapsed(elapsed)})",
+                flush=True,
+            )
+
+            # Fast path: RSS has reached the limit — cache is full.
+            if rss >= limit_bytes * (1 - THRESHOLD):
+                print(
+                    f"[ramlimit] Cache full "
+                    f"(rss={rss / 1e9:.1f} GB ≥ 99 % of limit) — "
+                    f"starting benchmark.",
+                    flush=True,
+                )
+                return
+
+            # Slow path: RSS plateaued below the limit (index fits in RAM).
+            if len(rss_history) >= MIN_CHECKS:
+                delta = max(rss_history) - min(rss_history)
+                if delta < THRESHOLD * limit_bytes:
                     print(
-                        f"[ramlimit] Warming up ...  "
-                        f"rss={rss / 1e9:.1f} GB / {limit_bytes / 1e9:.1f} GB limit  "
-                        f"(elapsed {_fmt_elapsed(elapsed)})",
-                        flush=True,
-                    )
-                    last_print = now
-
-                # Fast path: RSS has reached the limit — cache is full.
-                if rss >= limit_bytes * (1 - THRESHOLD):
-                    print(
-                        f"[ramlimit] Cache full "
-                        f"(rss={rss / 1e9:.1f} GB ≥ 99 % of limit) — "
+                        f"[ramlimit] Cache stable "
+                        f"(delta={delta / 1e6:.0f} MB < 1 % of limit) — "
                         f"starting benchmark.",
                         flush=True,
                     )
                     return
-
-                # Slow path: RSS plateaued below the limit (index fits in RAM).
-                if len(rss_history) >= MIN_CHECKS:
-                    delta = max(rss_history) - min(rss_history)
-                    if delta < THRESHOLD * limit_bytes:
-                        print(
-                            f"[ramlimit] Cache stable "
-                            f"(delta={delta / 1e6:.0f} MB < 1 % of limit) — "
-                            f"starting benchmark.",
-                            flush=True,
-                        )
-                        return
 
 
 def _gb_to_bytes(gb: float) -> int:

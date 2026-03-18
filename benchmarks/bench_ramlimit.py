@@ -42,15 +42,89 @@ from bench_common import (
     load_peptides,
     make_run_id,
     post_pept2lca,
+    read_cgroup_memory,
     read_proc_stat_faults,
     wait_for_api,
     write_record,
 )
+from typing import Optional
 
 CGROUP_DIR = Path("/sys/fs/cgroup/unipept_bench")
 CGROUP_PROCS = CGROUP_DIR / "cgroup.procs"
 MEMORY_MAX = CGROUP_DIR / "memory.max"
 DROP_CACHES = Path("/proc/sys/vm/drop_caches")
+
+
+def _read_memory_limit_bytes(cgroup_dir: Path) -> Optional[int]:
+    text = (cgroup_dir / "memory.max").read_text().strip()
+    return None if text == "max" else int(text)
+
+
+def _warmup_cache(
+    api_url: str,
+    all_peptides: list,
+    batch_size: int,
+    equate_il: bool,
+    cgroup_dir: Path,
+    limit_label: str,
+) -> None:
+    """
+    Run unrecorded query batches until cgroup memory.current plateaus.
+    Plateau = max−min of last WINDOW readings < 1 % of the memory limit.
+    Skipped if no memory limit (unlimited).
+    """
+    limit_bytes = _read_memory_limit_bytes(cgroup_dir)
+    if limit_bytes is None:
+        print(f"[ramlimit] No memory limit — skipping cache warmup.")
+        return
+
+    WINDOW = 5          # number of readings to track
+    THRESHOLD = 0.01    # 1 % of limit
+    CHECK_EVERY = 10    # batches between RSS readings
+    MIN_CHECKS = 3      # minimum readings before plateau can trigger
+
+    rss_history: list[int] = []
+    peptide_cycle = itertools.cycle(all_peptides)
+    batch_idx = 0
+    last_print = time.monotonic() - 10  # force first print immediately
+
+    while True:
+        # Run a batch (discard results)
+        batch = [next(peptide_cycle) for _ in range(batch_size)]
+        try:
+            post_pept2lca(api_url, batch, equate_il=equate_il)
+        except Exception:
+            pass  # warmup best-effort; real errors will surface in the benchmark
+
+        batch_idx += 1
+
+        if batch_idx % CHECK_EVERY == 0:
+            rss = read_cgroup_memory(str(cgroup_dir))
+            if rss is not None:
+                rss_history.append(rss)
+                if len(rss_history) > WINDOW:
+                    rss_history.pop(0)
+
+                now = time.monotonic()
+                if now - last_print >= 10:
+                    print(
+                        f"[ramlimit] Warming up ...  "
+                        f"rss={rss / 1e9:.1f} GB / {limit_bytes / 1e9:.1f} GB limit  "
+                        f"(batch {batch_idx})",
+                        flush=True,
+                    )
+                    last_print = now
+
+                if len(rss_history) >= MIN_CHECKS:
+                    delta = max(rss_history) - min(rss_history)
+                    if delta < THRESHOLD * limit_bytes:
+                        print(
+                            f"[ramlimit] Cache stable "
+                            f"(delta={delta / 1e6:.0f} MB < 1 % of limit) — "
+                            f"starting benchmark.",
+                            flush=True,
+                        )
+                        return
 
 
 def _gb_to_bytes(gb: float) -> int:
@@ -169,6 +243,15 @@ def run_one_limit(
         return
 
     print(f"[ramlimit] API ready.  Running {args.num_batches} batches ...")
+
+    _warmup_cache(
+        api_url=api_url,
+        all_peptides=all_peptides,
+        batch_size=args.batch_size,
+        equate_il=args.equate_il,
+        cgroup_dir=CGROUP_DIR,
+        limit_label=label,
+    )
 
     peptide_cycle = itertools.cycle(all_peptides)
     cumulative = 0

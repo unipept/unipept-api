@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import itertools
 import os
+import random
 import signal
 import subprocess
 import sys
@@ -73,16 +74,23 @@ def _read_memory_limit_bytes(cgroup_dir: Path) -> Optional[int]:
     return None if text == "max" else int(text)
 
 
+_AA = list("ACDEFGHIKLMNPQRSTVWY")
+
+
+def _random_peptide() -> str:
+    return "".join(random.choices(_AA, k=random.randint(5, 50)))
+
+
 def _warmup_cache(
     api_url: str,
-    all_peptides: list,
     batch_size: int,
     equate_il: bool,
     cgroup_dir: Path,
     limit_label: str,
 ) -> None:
     """
-    Run unrecorded query batches until cgroup memory.current plateaus.
+    Run unrecorded query batches of random peptides until cgroup memory.current
+    plateaus. Random peptides ensure every batch touches different index pages.
     Plateau = max−min of last WINDOW readings < 1 % of the memory limit.
     Skipped if no memory limit (unlimited).
     """
@@ -97,7 +105,6 @@ def _warmup_cache(
     MIN_CHECKS = 3      # minimum readings before plateau can trigger
 
     rss_history: list[int] = []
-    peptide_cycle = itertools.cycle(all_peptides)
     start_time = time.monotonic()
     last_check = start_time
 
@@ -109,7 +116,7 @@ def _warmup_cache(
 
     while True:
         # Run a batch (discard results)
-        batch = [next(peptide_cycle) for _ in range(batch_size)]
+        batch = [_random_peptide() for _ in range(batch_size)]
         try:
             post_pept2lca(api_url, batch, equate_il=equate_il)
         except Exception:
@@ -276,7 +283,6 @@ def run_one_limit(
 
     _warmup_cache(
         api_url=api_url,
-        all_peptides=all_peptides,
         batch_size=args.batch_size,
         equate_il=args.equate_il,
         cgroup_dir=CGROUP_DIR,

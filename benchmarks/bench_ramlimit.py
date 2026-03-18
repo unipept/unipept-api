@@ -33,6 +33,7 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -87,11 +88,13 @@ def _start_api(
         "--port", str(port),
         "--mmap", "true" if mmap else "false",
     ]
+    stderr_log = Path(tempfile.mktemp(suffix=".api_stderr.log"))
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
+        stderr=stderr_log.open("w"),
     )
+    proc._stderr_log = stderr_log
     return proc
 
 
@@ -119,7 +122,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--num-batches", type=int, default=200)
     p.add_argument("--batch-size", type=int, default=100)
     p.add_argument("--equate-il", type=lambda x: x.lower() != "false", default=True)
-    p.add_argument("--api-ready-timeout", type=int, default=300,
+    p.add_argument("--api-ready-timeout", type=int, default=3600,
                    help="Seconds to wait for the API to become ready after start")
     p.add_argument("--output-dir", required=True, help="Directory for output .jsonl files")
     return p.parse_args()
@@ -155,8 +158,12 @@ def run_one_limit(
     print(f"[ramlimit] API started (pid={api_pid})")
 
     try:
-        wait_for_api(api_url, timeout_s=args.api_ready_timeout)
+        wait_for_api(api_url, timeout_s=args.api_ready_timeout, proc=proc)
     except TimeoutError as exc:
+        print(f"[ramlimit] {exc} — skipping this limit.", file=sys.stderr)
+        _stop_api(proc)
+        return
+    except RuntimeError as exc:
         print(f"[ramlimit] {exc} — skipping this limit.", file=sys.stderr)
         _stop_api(proc)
         return

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,16 +18,54 @@ import requests
 # HTTP helpers
 # ---------------------------------------------------------------------------
 
-def wait_for_api(api_url: str, timeout_s: int = 120, poll_interval_s: float = 2.0) -> None:
+def wait_for_api(
+    api_url: str,
+    timeout_s: int = 120,
+    poll_interval_s: float = 2.0,
+    proc: Optional[subprocess.Popen] = None,
+) -> None:
     """Block until the API responds to a health probe or timeout is reached."""
     deadline = time.monotonic() + timeout_s
+    start = time.monotonic()
+    last_printed = -10.0  # force a print on the first iteration
+
     while time.monotonic() < deadline:
+        # Check if process has already exited (crash / OOM before binding port).
+        if proc is not None and proc.poll() is not None:
+            stderr_text = ""
+            stderr_log = getattr(proc, "_stderr_log", None)
+            if stderr_log is not None:
+                try:
+                    stderr_text = Path(stderr_log).read_text()
+                except OSError:
+                    pass
+            raise RuntimeError(
+                f"API process (pid={proc.pid}) exited with code {proc.returncode} "
+                f"before becoming ready.\nstderr:\n{stderr_text}"
+            )
+
         try:
-            r = requests.get(f"{api_url}/api/v2/pept2lca", timeout=5)
-            # Any HTTP response (even 4xx) means the server is up.
+            requests.get(f"{api_url}/", timeout=5)
+            # Any HTTP response means the server is up.
             return
         except requests.exceptions.ConnectionError:
-            time.sleep(poll_interval_s)
+            pass
+
+        elapsed = time.monotonic() - start
+        if elapsed - last_printed >= 10.0:
+            rss_str = ""
+            if proc is not None:
+                try:
+                    rss = psutil.Process(proc.pid).memory_info().rss
+                    rss_str = f"  rss={rss / 1e9:.1f} GB"
+                except psutil.NoSuchProcess:
+                    pass
+            print(f"[wait_for_api] waiting for API ... elapsed={int(elapsed)}s{rss_str}",
+                  flush=True)
+            last_printed = elapsed
+
+        time.sleep(poll_interval_s)
+
     raise TimeoutError(f"API at {api_url} did not become ready within {timeout_s}s")
 
 

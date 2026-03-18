@@ -74,11 +74,13 @@ def _read_memory_limit_bytes(cgroup_dir: Path) -> Optional[int]:
     return None if text == "max" else int(text)
 
 
+# UniProt Swiss-Prot amino acid frequencies (approximate %)
 _AA = list("ACDEFGHIKLMNPQRSTVWY")
-
+_AA_WEIGHTS = [8.25, 1.37, 5.45, 6.75, 3.86, 7.07, 2.27, 5.96, 5.84, 9.66,
+               2.42, 4.06, 4.70, 3.93, 5.53, 6.56, 5.34, 1.08, 2.92, 6.87]
 
 def _random_peptide() -> str:
-    return "".join(random.choices(_AA, k=random.randint(5, 50)))
+    return "".join(random.choices(_AA, weights=_AA_WEIGHTS, k=random.randint(7, 25)))
 
 
 def _warmup_cache(

@@ -102,7 +102,7 @@ def _warmup_cache(
     last_check = start_time
 
     print(
-        f"[ramlimit] Warming up ...  rss=? / {limit_bytes / 1e9:.1f} GB limit  "
+        f"[ramlimit] Warming up ...  rss = ? / {limit_bytes / 1e9:.1f} GB limit  "
         f"(elapsed {_fmt_elapsed(0)})",
         flush=True,
     )
@@ -129,7 +129,7 @@ def _warmup_cache(
             elapsed = now - start_time
             print(
                 f"[ramlimit] Warming up ...  "
-                f"rss={rss / 1e9:.1f} GB / {limit_bytes / 1e9:.1f} GB limit  "
+                f"rss = {rss / 1e9:.1f} GB / {limit_bytes / 1e9:.1f} GB limit  "
                 f"(elapsed {_fmt_elapsed(elapsed)})",
                 flush=True,
             )
@@ -138,7 +138,7 @@ def _warmup_cache(
             if rss >= limit_bytes * (1 - THRESHOLD):
                 print(
                     f"[ramlimit] Cache full "
-                    f"(rss={rss / 1e9:.1f} GB ≥ 99 % of limit) — "
+                    f"(rss = {rss / 1e9:.1f} GB ≥ 99 % of limit) — "
                     f"starting benchmark.",
                     flush=True,
                 )
@@ -150,7 +150,7 @@ def _warmup_cache(
                 if delta < THRESHOLD * limit_bytes:
                     print(
                         f"[ramlimit] Cache stable "
-                        f"(delta={delta / 1e6:.0f} MB < 1 % of limit) — "
+                        f"(delta = {delta / 1e6:.0f} MB < 1 % of limit) — "
                         f"starting benchmark.",
                         flush=True,
                     )

@@ -55,6 +55,19 @@ MEMORY_MAX = CGROUP_DIR / "memory.max"
 DROP_CACHES = Path("/proc/sys/vm/drop_caches")
 
 
+def _fmt_elapsed(seconds: float) -> str:
+    s = int(seconds)
+    if s < 60:
+        return f"{s}s"
+    elif s < 3600:
+        m, s = divmod(s, 60)
+        return f"{m}m {s}s"
+    else:
+        h, rem = divmod(s, 3600)
+        m = rem // 60
+        return f"{h}h {m}m"
+
+
 def _read_memory_limit_bytes(cgroup_dir: Path) -> Optional[int]:
     text = (cgroup_dir / "memory.max").read_text().strip()
     return None if text == "max" else int(text)
@@ -86,7 +99,14 @@ def _warmup_cache(
     rss_history: list[int] = []
     peptide_cycle = itertools.cycle(all_peptides)
     batch_idx = 0
-    last_print = time.monotonic() - 10  # force first print immediately
+    start_time = time.monotonic()
+    last_print = start_time
+
+    print(
+        f"[ramlimit] Warming up ...  rss=? / {limit_bytes / 1e9:.1f} GB limit  "
+        f"(elapsed {_fmt_elapsed(0)})",
+        flush=True,
+    )
 
     while True:
         # Run a batch (discard results)
@@ -106,15 +126,27 @@ def _warmup_cache(
                     rss_history.pop(0)
 
                 now = time.monotonic()
-                if now - last_print >= 10:
+                if now - last_print >= 60:
+                    elapsed = now - start_time
                     print(
                         f"[ramlimit] Warming up ...  "
                         f"rss={rss / 1e9:.1f} GB / {limit_bytes / 1e9:.1f} GB limit  "
-                        f"(batch {batch_idx})",
+                        f"(elapsed {_fmt_elapsed(elapsed)})",
                         flush=True,
                     )
                     last_print = now
 
+                # Fast path: RSS has reached the limit — cache is full.
+                if rss >= limit_bytes * (1 - THRESHOLD):
+                    print(
+                        f"[ramlimit] Cache full "
+                        f"(rss={rss / 1e9:.1f} GB ≥ 99 % of limit) — "
+                        f"starting benchmark.",
+                        flush=True,
+                    )
+                    return
+
+                # Slow path: RSS plateaued below the limit (index fits in RAM).
                 if len(rss_history) >= MIN_CHECKS:
                     delta = max(rss_history) - min(rss_history)
                     if delta < THRESHOLD * limit_bytes:

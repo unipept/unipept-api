@@ -86,7 +86,7 @@ def _start_api(
         "--index-location", index_location,
         "--database-address", database_address,
         "--port", str(port),
-        "--mmap", "true" if mmap else "false",
+        "--mmap" if mmap else "",
     ]
     stderr_log = Path(tempfile.mktemp(suffix=".api_stderr.log"))
     proc = subprocess.Popen(

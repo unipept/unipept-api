@@ -89,10 +89,10 @@ def _warmup_cache(
     equate_il: bool,
     cgroup_dir: Path,
     limit_label: str,
+    warmup_peptide_file: Path | None = None,
 ) -> None:
     """
-    Run unrecorded query batches of random peptides until cgroup memory.current
-    plateaus. Random peptides ensure every batch touches different index pages.
+    Run unrecorded query batches of peptides until cgroup memory.current plateaus.
     Plateau = max−min of last WINDOW readings < 1 % of the memory limit.
     Skipped if no memory limit (unlimited).
     """
@@ -116,9 +116,22 @@ def _warmup_cache(
         flush=True,
     )
 
+    fh = open(warmup_peptide_file) if warmup_peptide_file else None
+
     while True:
-        # Run a batch (discard results)
-        batch = [_random_peptide() for _ in range(batch_size)]
+        if fh:
+            batch = []
+            while len(batch) < batch_size:
+                line = fh.readline()
+                if not line:
+                    fh.seek(0)
+                    continue
+                line = line.rstrip("\n")
+                if line:
+                    batch.append(line)
+        else:
+            batch = [_random_peptide() for _ in range(batch_size)]
+
         try:
             post_pept2lca(api_url, batch, equate_il=equate_il)
         except Exception:
@@ -130,40 +143,32 @@ def _warmup_cache(
         last_check = now
 
         rss = read_cgroup_memory(str(cgroup_dir))
-        if rss is not None:
-            rss_history.append(rss)
-            if len(rss_history) > WINDOW:
-                rss_history.pop(0)
+        if rss is None:
+            continue
+        rss_history.append(rss)
+        if len(rss_history) > WINDOW:
+            rss_history.pop(0)
 
-            elapsed = now - start_time
-            print(
-                f"[ramlimit] Warming up ...  "
-                f"rss = {rss / 1e9:.1f} GB / {limit_bytes / 1e9:.1f} GB limit  "
-                f"(elapsed {_fmt_elapsed(elapsed)})",
-                flush=True,
-            )
+        elapsed = now - start_time
+        print(
+            f"[ramlimit] Warming up ...  "
+            f"rss = {rss / 1e9:.1f} GB / {limit_bytes / 1e9:.1f} GB limit  "
+            f"(elapsed {_fmt_elapsed(elapsed)})",
+            flush=True,
+        )
 
-            # Fast path: RSS has reached the limit — cache is full.
-            if rss >= limit_bytes * (1 - THRESHOLD):
-                print(
-                    f"[ramlimit] Cache full "
-                    f"(rss = {rss / 1e9:.1f} GB ≥ 99 % of limit) — "
-                    f"starting benchmark.",
-                    flush=True,
-                )
-                return
+        if rss >= limit_bytes * (1 - THRESHOLD):
+            print(f"[ramlimit] Cache full — starting benchmark.", flush=True)
+            break
 
-            # Slow path: RSS plateaued below the limit (index fits in RAM).
-            if len(rss_history) >= MIN_CHECKS:
-                delta = max(rss_history) - min(rss_history)
-                if delta < THRESHOLD * limit_bytes:
-                    print(
-                        f"[ramlimit] Cache stable "
-                        f"(delta = {delta / 1e6:.0f} MB < 1 % of limit) — "
-                        f"starting benchmark.",
-                        flush=True,
-                    )
-                    return
+        if len(rss_history) >= MIN_CHECKS:
+            delta = max(rss_history) - min(rss_history)
+            if delta < THRESHOLD * limit_bytes:
+                print(f"[ramlimit] Cache stable — starting benchmark.", flush=True)
+                break
+
+    if fh:
+        fh.close()
 
 
 def _gb_to_bytes(gb: float) -> int:
@@ -238,6 +243,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--api-ready-timeout", type=int, default=3600,
                    help="Seconds to wait for the API to become ready after start")
     p.add_argument("--output-dir", required=True, help="Directory for output .jsonl files")
+    p.add_argument("--warmup-peptide-file", default=None,
+                   help="Pre-built warmup peptide file (one peptide per line). "
+                        "If omitted, random peptides are generated instead.")
     return p.parse_args()
 
 
@@ -248,6 +256,7 @@ def run_one_limit(
     all_peptides: list,
     run_id: str,
     output_dir: Path,
+    warmup_peptide_file: Path | None = None,
 ) -> None:
     label = "unlimited" if limit_gb == 0 else f"{int(limit_gb)}gb"
     mmap_label = "mmap" if args.mmap else "nommap"
@@ -289,6 +298,7 @@ def run_one_limit(
         equate_il=args.equate_il,
         cgroup_dir=CGROUP_DIR,
         limit_label=label,
+        warmup_peptide_file=warmup_peptide_file,
     )
 
     peptide_cycle = itertools.cycle(all_peptides)
@@ -362,6 +372,10 @@ def main() -> None:
     all_peptides = load_peptides(args.peptide_file)
     print(f"[ramlimit] Loaded {len(all_peptides)} peptides.  run_id={run_id}")
 
+    warmup_peptide_file = Path(args.warmup_peptide_file) if args.warmup_peptide_file else None
+    if warmup_peptide_file:
+        print(f"[ramlimit] Using warmup peptide file: {warmup_peptide_file}")
+
     for limit_gb in args.ram_limits_gb:
         run_one_limit(
             limit_gb=limit_gb,
@@ -369,6 +383,7 @@ def main() -> None:
             all_peptides=all_peptides,
             run_id=run_id,
             output_dir=output_dir,
+            warmup_peptide_file=warmup_peptide_file,
         )
 
     print("\n[ramlimit] All sweeps complete.")

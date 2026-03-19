@@ -294,7 +294,7 @@ def run_one_limit(
 
     _warmup_cache(
         api_url=api_url,
-        batch_size=args.batch_size,
+        batch_size=25_000,
         equate_il=args.equate_il,
         cgroup_dir=CGROUP_DIR,
         limit_label=label,

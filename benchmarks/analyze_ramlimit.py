@@ -68,22 +68,29 @@ def plot_ramlimit(df: pd.DataFrame, out_path: Path) -> None:
     fault_stats = valid.groupby(["meta.mmap", "meta.ram_limit_gb"])["page_faults_major"].mean().reset_index()
     fault_stats.rename(columns={"page_faults_major": "avg_majflt"}, inplace=True)
 
+    # Build a shared x-axis from all unique RAM limits across both mmap modes
+    all_limits = sorted(stats["meta.ram_limit_gb"].unique())
+    x_labels = [_ram_label(v) for v in all_limits]
+    limit_to_x = {v: i for i, v in enumerate(all_limits)}
+
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
 
     for mmap_val in [True, False]:
         subset = stats[stats["meta.mmap"] == mmap_val].sort_values("meta.ram_limit_gb")
-        x_labels = [_ram_label(v) for v in subset["meta.ram_limit_gb"]]
-        x = range(len(x_labels))
+        x = [limit_to_x[v] for v in subset["meta.ram_limit_gb"]]
         label_prefix = "mmap" if mmap_val else "no-mmap"
 
         ax1.plot(x, subset["median"], marker="o", label=f"{label_prefix} median")
         ax1.plot(x, subset["p95"], marker="s", linestyle="--", label=f"{label_prefix} p95")
 
         fsub = fault_stats[fault_stats["meta.mmap"] == mmap_val].sort_values("meta.ram_limit_gb")
-        ax2.plot(range(len(fsub)), fsub["avg_majflt"], marker="^", label=label_prefix)
+        fx = [limit_to_x[v] for v in fsub["meta.ram_limit_gb"]]
+        ax2.plot(fx, fsub["avg_majflt"], marker="^", label=label_prefix)
 
-    ax1.set_xticks(range(len(x_labels)))
-    ax1.set_xticklabels(x_labels, rotation=30, ha="right")
+    for ax in (ax1, ax2):
+        ax.set_xticks(range(len(x_labels)))
+        ax.set_xticklabels(x_labels, rotation=30, ha="right")
+
     ax1.set_ylabel("Response time (s)")
     ax1.set_title("Response time vs RAM limit")
     ax1.legend()

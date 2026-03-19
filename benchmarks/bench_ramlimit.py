@@ -349,7 +349,7 @@ def run_one_limit(
         write_record(record, out_path)
         prev_minflt, prev_majflt = minflt, majflt
 
-        if (batch_idx + 1) % (args.num_batches // 20) == 0:
+        if (batch_idx + 1) % (int(args.num_batches) // 20) == 0:
             print(f"[ramlimit] {batch_idx + 1}/{args.num_batches} batches  "
                   f"wall={wall_time_s:.3f}s  majflt_delta={record['page_faults_major']}")
 

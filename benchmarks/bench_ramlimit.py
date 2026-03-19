@@ -203,9 +203,10 @@ def _start_api(
         api_binary,
         "--index-location", index_location,
         "--database-address", database_address,
-        "--port", str(port),
-        "--mmap" if mmap else "",
+        "--port", str(port)
     ]
+    if mmap:
+        cmd.append("--mmap")
     stderr_log = Path(tempfile.mktemp(suffix=".api_stderr.log"))
     proc = subprocess.Popen(
         cmd,

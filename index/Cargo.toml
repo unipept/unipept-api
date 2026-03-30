@@ -6,5 +6,4 @@ edition = "2021"
 [dependencies]
 sa-server = { git = "https://github.com/unipept/unipept-index.git", branch = "feature/speedup-loading-index" }
 sa-index = { git = "https://github.com/unipept/unipept-index.git", branch = "feature/speedup-loading-index" }
-sa-mappings = { git = "https://github.com/unipept/unipept-index.git", branch = "feature/speedup-loading-index" }
 thiserror = "1.0"

@@ -18,6 +18,8 @@ pub enum LoadIndexError {
     LoadSuffixArrayError(String),
     #[error("Error while loading proteins: {0}")]
     LoadProteinsErrors(String),
+    #[error("Error while loading mapping: {0}")]
+    LoadMappingError(String),
     #[error("Error while loading taxonomy: {0}")]
     LoadTaxonomyError(String)
 }

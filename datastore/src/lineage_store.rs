@@ -76,6 +76,42 @@ impl Lineage {
             _ => None,
         }
     }
+
+    /// Retrieves the ID of this lineage at a specific rank index. If the provided rank is invalid
+    /// None is returned.
+    pub fn get_rank(&self, rank_index: usize) -> Option<i32> {
+        match rank_index {
+            0 => self.domain,
+            1 => self.realm,
+            2 => self.kingdom,
+            3 => self.subkingdom,
+            4 => self.superphylum,
+            5 => self.phylum,
+            6 => self.subphylum,
+            7 => self.superclass,
+            8 => self.class,
+            9 => self.subclass,
+            10 => self.superorder,
+            11 => self.order,
+            12 => self.suborder,
+            13 => self.infraorder,
+            14 => self.superfamily,
+            15 => self.family,
+            16 => self.subfamily,
+            17 => self.tribe,
+            18 => self.subtribe,
+            19 => self.genus,
+            20 => self.subgenus,
+            21 => self.species_group,
+            22 => self.species_subgroup,
+            23 => self.species,
+            24 => self.subspecies,
+            25 => self.strain,
+            26 => self.varietas,
+            27 => self.forma,
+            _ => None,
+        }
+    }
 }
 
 pub struct LineageStore {

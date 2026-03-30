@@ -25,8 +25,10 @@ pub fn calculate_lca(
         let mut iterator = lineages
             .iter()
             .map(|lineage| {
-                let val = lineage.get_rank(rank as usize);
-                val.filter(|&id| id != -1).map(|id| id.abs()).unwrap_or(0)
+                lineage
+                    .get_rank(rank as usize)
+                    .filter(|&id| id != -1).map(|id| id.abs())
+                    .unwrap_or(0)
             })
             .filter(|&x| if rank == genus_index || rank == species_index { x > 0 } else { x >= 0 });
 

@@ -63,8 +63,6 @@ macro_rules! define_routes {
     }};
 }
 
-pub(crate) use define_routes;
-
 fn create_api_v2_routes() -> Router<AppState> {
     define_routes!(
         "/pept2ec",

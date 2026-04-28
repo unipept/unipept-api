@@ -60,7 +60,7 @@ async fn handler(
     version: LineageVersion
 ) -> Result<Vec<ProtInformation>, ApiError> {
     let input = sanitize_proteins(input);
-    let input = HashSet::from_iter(input.into_iter());
+    let input = HashSet::from_iter(input);
 
     let connection = database.get_conn();
 

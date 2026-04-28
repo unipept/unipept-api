@@ -173,7 +173,7 @@ async fn handler(
                         );
 
                         if let Some(values) = items {
-                            child_vector.extend(values.into_iter())
+                            child_vector.extend(values)
                         }
                     }
 

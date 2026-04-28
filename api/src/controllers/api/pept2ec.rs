@@ -56,7 +56,7 @@ async fn handler(
 
     // Step 6: Duplicate the results according to the original input
     let mut final_results = Vec::new();
-    for (unique_peptide, item) in unique_peptides.iter().zip(result.into_iter()) {
+    for (unique_peptide, item) in unique_peptides.iter().zip(result) {
         if let Some(count) = peptide_counts.get(unique_peptide) {
             let fa = calculate_fa(&item.proteins);
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);

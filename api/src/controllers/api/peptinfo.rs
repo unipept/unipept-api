@@ -19,6 +19,7 @@ use crate::{
     },
     AppState
 };
+use crate::errors::ApiError;
 use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
@@ -61,11 +62,11 @@ async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters { input, equate_il, extra, domains, names, validate_taxa }: Parameters,
     version: LineageVersion
-) -> Result<Vec<PeptInformation>, ()> {
+) -> Result<Vec<PeptInformation>, ApiError> {
     let input = sanitize_peptides(input);
     let result = tokio::task::spawn_blocking(move || {
         index.analyse(&input, equate_il, false, None)
-    }).await.map_err(|_| ())?; // This error could never happen, but just to be safe
+    }).await?;
 
     let ec_store = datastore.ec_store();
     let go_store = datastore.go_store();
@@ -121,7 +122,7 @@ generate_handlers! (
         state => State<AppState>,
         params => Parameters,
         version: LineageVersion
-    ) -> Result<Json<Vec<PeptInformation>>, ()> {
+    ) -> Result<Json<Vec<PeptInformation>>, ApiError> {
         Ok(Json(handler(state, params, version).await?))
     }
 );

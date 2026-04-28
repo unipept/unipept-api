@@ -13,6 +13,7 @@ use crate::{
     },
     AppState
 };
+use crate::errors::ApiError;
 use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
@@ -35,7 +36,7 @@ pub struct EcInformation {
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters { input, equate_il, extra }: Parameters
-) -> Result<Vec<EcInformation>, ()> {
+) -> Result<Vec<EcInformation>, ApiError> {
     let input = sanitize_peptides(input);
 
     let mut peptide_counts: HashMap<String, usize> = HashMap::new();
@@ -49,7 +50,7 @@ async fn handler(
     let (unique_peptides, result) = tokio::task::spawn_blocking(move ||{
         let result = index.analyse(&unique_peptides, equate_il, false, None);
         (unique_peptides, result)
-    }).await.map_err(|_| ())?; // This error could never happen, but just to be safe
+    }).await?;
 
     let ec_store = datastore.ec_store();
 
@@ -79,7 +80,7 @@ generate_handlers!(
     async fn json_handler(
         state => State<AppState>,
         params => Parameters
-    ) -> Result<Json<Vec<EcInformation>>, ()> {
+    ) -> Result<Json<Vec<EcInformation>>, ApiError> {
         Ok(Json(handler(state, params).await?))
     }
 );

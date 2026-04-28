@@ -41,7 +41,7 @@ impl IntoResponse for ApiError {
             ApiError::DatabaseError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
             ApiError::UnknownRankError(message) => (StatusCode::BAD_REQUEST, message),
             ApiError::NotImplementedError(message) => (StatusCode::NOT_IMPLEMENTED, message),
-            ApiError::JoinError(join_error) => (StatusCode::INTERNAL_SERVER_ERROR, join_error.to_string()),
+            ApiError::JoinError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
         };
 
         Response::builder().status(status).body(message.into()).unwrap()

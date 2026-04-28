@@ -12,6 +12,7 @@ use crate::{
     },
     AppState
 };
+use crate::errors::ApiError;
 use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
@@ -36,11 +37,11 @@ pub struct InterproInformation {
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters { input, equate_il, extra, domains }: Parameters
-) -> Result<Vec<InterproInformation>, ()> {
+) -> Result<Vec<InterproInformation>, ApiError> {
     let input = sanitize_peptides(input);
     let result = tokio::task::spawn_blocking(move || {
         index.analyse(&input, equate_il, false, None)
-    }).await.map_err(|_| ())?; // This error could never happen, but just to be safe
+    }).await?;
 
     let interpro_store = datastore.interpro_store();
 
@@ -61,7 +62,7 @@ generate_handlers!(
     async fn json_handler(
         state => State<AppState>,
         params => Parameters
-    ) -> Result<Json<Vec<InterproInformation>>, ()> {
+    ) -> Result<Json<Vec<InterproInformation>>, ApiError> {
         Ok(Json(handler(state, params).await?))
     }
 );

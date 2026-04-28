@@ -44,10 +44,12 @@ async fn handler(
     }
 
     let unique_peptides: Vec<String> = peptide_counts.keys().cloned().collect();
-    let result = tokio::task::spawn_blocking({
-        let unique_peptides = unique_peptides.clone();
-        move || index.analyse(&unique_peptides, equate_il, false, None)
-    }).await.unwrap();
+    // Move unique_peptides into the blocking task and return it alongside the analysis result,
+    // so we can reuse the original vector without cloning
+    let (unique_peptides, result) = tokio::task::spawn_blocking(move ||{
+        let result = index.analyse(&unique_peptides, equate_il, false, None);
+        (unique_peptides, result)
+    }).await.map_err(|_| ())?; // This error could never happen, but just to be safe
 
     let ec_store = datastore.ec_store();
 

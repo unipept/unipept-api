@@ -40,7 +40,7 @@ async fn handler(
     let input = sanitize_peptides(input);
     let result = tokio::task::spawn_blocking(move || {
         index.analyse(&input, equate_il, false, None)
-    }).await.unwrap();
+    }).await.map_err(|_| ())?; // This error could never happen, but just to be safe
 
     let go_store = datastore.go_store();
 

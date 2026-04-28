@@ -28,7 +28,7 @@ use crate::{
     AppState
 };
 
-static REQUEST_TIMEOUT_DURATION: u64 = 150;
+const REQUEST_TIMEOUT_DURATION: u64 = 150;
 
 pub fn create_router(state: AppState) -> Router {
     init_tracing_subscriber();
@@ -41,8 +41,12 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/private_api", create_private_api_routes())
         .layer(
             ServiceBuilder::new()
-                .layer(HandleErrorLayer::new(|_err: BoxError| async move {
-                    StatusCode::REQUEST_TIMEOUT
+                .layer(HandleErrorLayer::new(|err: BoxError| async move {
+                    if err.is::<tower::timeout::error::Elapsed>() {
+                        StatusCode::REQUEST_TIMEOUT
+                    } else {
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    }
                 }))
                 .layer(TimeoutLayer::new(Duration::from_secs(REQUEST_TIMEOUT_DURATION)))
                 // Set max request size to 50MiB (default is 2MiB)

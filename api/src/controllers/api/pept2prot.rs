@@ -60,7 +60,7 @@ async fn handler(
 
     let result = tokio::task::spawn_blocking(move || {
         index.analyse(&input, equate_il, tryptic, Some(cutoff))
-    }).await.unwrap();
+    }).await?;
 
     let accession_numbers: HashSet<String> = result
         .iter()

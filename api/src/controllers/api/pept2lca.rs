@@ -55,7 +55,7 @@ async fn handler(
     let input = sanitize_peptides(input);
     let result = tokio::task::spawn_blocking(move || {
         index.analyse(&input, equate_il, false, None)
-    }).await.unwrap();
+    }).await.map_err(|_| ())?; // This error could never happen, but just to be safe
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();

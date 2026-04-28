@@ -12,7 +12,7 @@ use crate::DatabaseError::GeneralError;
 mod errors;
 mod models;
 
-static OPENSEARCH_TIMEOUT_DURATION: u64 = 120;
+const OPENSEARCH_TIMEOUT_DURATION: u64 = 120;
 
 pub struct Database {
     client: OpenSearch

@@ -58,7 +58,9 @@ async fn handler(
 
     let connection = database.get_conn();
 
-    let result = index.analyse(&input, equate_il, tryptic, Some(cutoff));
+    let result = tokio::task::spawn_blocking(move || {
+        index.analyse(&input, equate_il, tryptic, Some(cutoff))
+    }).await.unwrap();
 
     let accession_numbers: HashSet<String> = result
         .iter()

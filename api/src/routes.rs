@@ -1,9 +1,14 @@
+use std::time::Duration;
 use axum::{
-    extract::{DefaultBodyLimit},
+    BoxError,
+    error_handling::HandleErrorLayer,
+    extract::DefaultBodyLimit,
+    http::StatusCode,
     routing::get,
     Router
 };
 use tower::{ServiceBuilder};
+use tower::timeout::TimeoutLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 
 use crate::{
@@ -34,6 +39,10 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/private_api", create_private_api_routes())
         .layer(
             ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(|_err: BoxError| async move {
+                    StatusCode::REQUEST_TIMEOUT
+                }))
+                .layer(TimeoutLayer::new(Duration::from_secs(60)))
                 // Set max request size to 50MiB (default is 2MiB)
                 .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
                 .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024))

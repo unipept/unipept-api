@@ -76,7 +76,9 @@ async fn handler(
     peptides.dedup();
 
     let peptides = sanitize_peptides(peptides);
-    let result = index.analyse(&peptides, equate_il, tryptic, Some(cutoff));
+    let result = tokio::task::spawn_blocking(move || {
+        index.analyse(&peptides, equate_il, tryptic, Some(cutoff))
+    }).await.unwrap();
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();

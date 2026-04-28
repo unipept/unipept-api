@@ -68,7 +68,9 @@ async fn handler(
     version: LineageVersion
 ) -> Result<Vec<TaxaInformation>, ()> {
     let input = sanitize_peptides(input);
-    let result = index.analyse(&input, equate_il, tryptic, None);
+    let result = tokio::task::spawn_blocking(move || {
+        index.analyse(&input, equate_il, tryptic, None)
+    }).await.unwrap();
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();

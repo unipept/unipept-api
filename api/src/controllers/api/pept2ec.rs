@@ -44,7 +44,10 @@ async fn handler(
     }
 
     let unique_peptides: Vec<String> = peptide_counts.keys().cloned().collect();
-    let result = index.analyse(&unique_peptides, equate_il, false, None);
+    let result = tokio::task::spawn_blocking({
+        let unique_peptides = unique_peptides.clone();
+        move || index.analyse(&unique_peptides, equate_il, false, None)
+    }).await.unwrap();
 
     let ec_store = datastore.ec_store();
 

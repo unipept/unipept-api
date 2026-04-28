@@ -19,6 +19,7 @@ use crate::{
     },
     AppState
 };
+use crate::errors::ApiError;
 use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
@@ -61,9 +62,11 @@ async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters { input, equate_il, extra, domains, names, validate_taxa }: Parameters,
     version: LineageVersion
-) -> Result<Vec<PeptInformation>, ()> {
+) -> Result<Vec<PeptInformation>, ApiError> {
     let input = sanitize_peptides(input);
-    let result = index.analyse(&input, equate_il, false, None);
+    let result = tokio::task::spawn_blocking(move || {
+        index.analyse(&input, equate_il, false, None)
+    }).await?;
 
     let ec_store = datastore.ec_store();
     let go_store = datastore.go_store();
@@ -76,7 +79,8 @@ async fn handler(
         .filter_map(|item| {
             let fa = calculate_fa(&item.proteins);
 
-            let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
+            let total_protein_count = item.proteins.len();
+            // let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
             let gos = go_terms_from_map(&fa.data, go_store, extra, domains);
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
@@ -118,7 +122,7 @@ generate_handlers! (
         state => State<AppState>,
         params => Parameters,
         version: LineageVersion
-    ) -> Result<Json<Vec<PeptInformation>>, ()> {
+    ) -> Result<Json<Vec<PeptInformation>>, ApiError> {
         Ok(Json(handler(state, params, version).await?))
     }
 );

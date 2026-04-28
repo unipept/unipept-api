@@ -13,6 +13,7 @@ use crate::{
     },
     AppState
 };
+use crate::errors::ApiError;
 use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
@@ -35,7 +36,7 @@ pub struct EcInformation {
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters { input, equate_il, extra }: Parameters
-) -> Result<Vec<EcInformation>, ()> {
+) -> Result<Vec<EcInformation>, ApiError> {
     let input = sanitize_peptides(input);
 
     let mut peptide_counts: HashMap<String, usize> = HashMap::new();
@@ -44,13 +45,18 @@ async fn handler(
     }
 
     let unique_peptides: Vec<String> = peptide_counts.keys().cloned().collect();
-    let result = index.analyse(&unique_peptides, equate_il, false, None);
+    // Move unique_peptides into the blocking task and return it alongside the analysis result,
+    // so we can reuse the original vector without cloning
+    let (unique_peptides, result) = tokio::task::spawn_blocking(move ||{
+        let result = index.analyse(&unique_peptides, equate_il, false, None);
+        (unique_peptides, result)
+    }).await?;
 
     let ec_store = datastore.ec_store();
 
     // Step 6: Duplicate the results according to the original input
     let mut final_results = Vec::new();
-    for (unique_peptide, item) in unique_peptides.iter().zip(result.into_iter()) {
+    for (unique_peptide, item) in unique_peptides.iter().zip(result) {
         if let Some(count) = peptide_counts.get(unique_peptide) {
             let fa = calculate_fa(&item.proteins);
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
@@ -74,7 +80,7 @@ generate_handlers!(
     async fn json_handler(
         state => State<AppState>,
         params => Parameters
-    ) -> Result<Json<Vec<EcInformation>>, ()> {
+    ) -> Result<Json<Vec<EcInformation>>, ApiError> {
         Ok(Json(handler(state, params).await?))
     }
 );

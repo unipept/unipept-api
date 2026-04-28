@@ -58,12 +58,18 @@ async fn handler(
 
     let connection = database.get_conn();
 
-    let result = index.analyse(&input, equate_il, tryptic, Some(cutoff));
+    let result = tokio::task::spawn_blocking(move || {
+        index.analyse(&input, equate_il, tryptic, Some(cutoff))
+    }).await?;
 
     let accession_numbers: HashSet<String> = result
         .iter()
         .flat_map(|item| item.proteins.iter().map(|protein| protein.uniprot_accession.clone()))
         .collect();
+
+    if accession_numbers.is_empty() {
+        return Ok(vec![]);
+    }
 
     let accessions_map = get_accessions_map(connection, &accession_numbers)
         .await

@@ -49,6 +49,10 @@ pub async fn get_accessions(
     client: &OpenSearch,
     accessions: &HashSet<String>,
 ) -> Result<Vec<UniprotEntry>, DatabaseError> {
+    if accessions.is_empty() {
+        return Ok(vec![]);
+    }
+
     let mut result: Vec<UniprotEntry> = Vec::new();
     
     let docs: Vec<_> = accessions

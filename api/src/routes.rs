@@ -28,6 +28,8 @@ use crate::{
     AppState
 };
 
+static REQUEST_TIMEOUT_DURATION: u64 = 150;
+
 pub fn create_router(state: AppState) -> Router {
     init_tracing_subscriber();
 
@@ -42,7 +44,7 @@ pub fn create_router(state: AppState) -> Router {
                 .layer(HandleErrorLayer::new(|_err: BoxError| async move {
                     StatusCode::REQUEST_TIMEOUT
                 }))
-                .layer(TimeoutLayer::new(Duration::from_secs(60)))
+                .layer(TimeoutLayer::new(Duration::from_secs(REQUEST_TIMEOUT_DURATION)))
                 // Set max request size to 50MiB (default is 2MiB)
                 .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
                 .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024))

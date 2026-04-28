@@ -12,6 +12,8 @@ use crate::DatabaseError::GeneralError;
 mod errors;
 mod models;
 
+static OPENSEARCH_TIMEOUT_DURATION: u64 = 120;
+
 pub struct Database {
     client: OpenSearch
 }
@@ -21,7 +23,7 @@ impl Database {
         let url = Url::parse(url)?;
         let conn_pool = SingleNodeConnectionPool::new(url);
         let transport = TransportBuilder::new(conn_pool)
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(OPENSEARCH_TIMEOUT_DURATION))
             .disable_proxy()
             .build()?;
         let client = OpenSearch::new(transport);

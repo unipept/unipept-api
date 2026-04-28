@@ -12,6 +12,7 @@ use crate::{
     },
     AppState
 };
+use crate::errors::ApiError;
 use crate::helpers::filters::crap_filter::CrapFilter;
 use crate::helpers::filters::empty_filter::EmptyFilter;
 use crate::helpers::filters::protein_filter::ProteinFilter;
@@ -67,7 +68,7 @@ pub struct Data {
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters { mut peptides, equate_il, tryptic, cutoff, report_taxa, validate_taxa, blacklist_crap, filter }: Parameters
-) -> Result<Data, ()> {
+) -> Result<Data, ApiError> {
     if peptides.is_empty() {
         return Ok(Data { peptides: Vec::new() });
     }
@@ -76,7 +77,9 @@ async fn handler(
     peptides.dedup();
 
     let peptides = sanitize_peptides(peptides);
-    let result = index.analyse(&peptides, equate_il, tryptic, Some(cutoff));
+    let result = tokio::task::spawn_blocking(move || {
+        index.analyse(&peptides, equate_il, tryptic, Some(cutoff))
+    }).await?;
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
@@ -152,7 +155,7 @@ generate_handlers!(
     async fn json_handler(
         state=> State<AppState>,
         params => Parameters
-    ) -> Result<Json<Data>, ()> {
+    ) -> Result<Json<Data>, ApiError> {
         Ok(Json(handler(state, params).await?))
     }
 );

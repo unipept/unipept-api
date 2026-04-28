@@ -14,6 +14,7 @@ use crate::{
     },
     AppState
 };
+use crate::errors::ApiError;
 use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
@@ -66,9 +67,11 @@ async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters { input, equate_il, extra, names, tryptic, compact }: Parameters,
     version: LineageVersion
-) -> Result<Vec<TaxaInformation>, ()> {
+) -> Result<Vec<TaxaInformation>, ApiError> {
     let input = sanitize_peptides(input);
-    let result = index.analyse(&input, equate_il, tryptic, None);
+    let result = tokio::task::spawn_blocking(move || {
+        index.analyse(&input, equate_il, tryptic, None)
+    }).await?;
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
@@ -125,7 +128,7 @@ generate_handlers! (
         state => State<AppState>,
         params => Parameters,
         version: LineageVersion
-    ) -> Result<Json<Vec<TaxaInformation>>, ()> {
+    ) -> Result<Json<Vec<TaxaInformation>>, ApiError> {
         Ok(Json(handler(state, params, version).await?))
     }
 );

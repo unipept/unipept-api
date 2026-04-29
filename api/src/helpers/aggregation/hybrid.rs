@@ -1,7 +1,16 @@
 use std::collections::HashMap;
 use datastore::{LineageStore, TaxonStore};
 
+use crate::helpers::aggregation::TaxaAggregation;
 use crate::helpers::lineage_helper::{get_amount_of_ranks, get_lineage_array_numeric, LineageVersion};
+
+pub struct Hybrid { pub threshold: f64 }
+
+impl TaxaAggregation for Hybrid {
+    fn aggregate(&self, taxa: Vec<u32>, version: LineageVersion, taxon_store: &TaxonStore, lineage_store: &LineageStore, only_valid_taxa: bool) -> i32 {
+        calculate_hybrid(taxa, version, taxon_store, lineage_store, only_valid_taxa, self.threshold)
+    }
+}
 
 pub fn calculate_hybrid(
     taxa: Vec<u32>,

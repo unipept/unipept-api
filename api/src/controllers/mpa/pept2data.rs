@@ -4,10 +4,10 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use index::{ProteinInfo, SearchResult};
 use crate::{
-    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic, mpa::default_report_taxa, mpa::default_blacklist_crap, api::default_cutoff, api::default_validate_taxa},
+    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic, mpa::default_report_taxa, mpa::default_blacklist_crap, api::default_cutoff, api::default_validate_taxa, api::default_aggregation},
     helpers::{
+        aggregation::parse_aggregation,
         fa_helper::{calculate_fa, FunctionalAggregation},
-        lca_helper::calculate_lca,
         lineage_helper::{get_lineage_array, LineageVersion}
     },
     AppState
@@ -37,6 +37,8 @@ pub struct Parameters {
     validate_taxa: bool,
     #[serde(default = "default_blacklist_crap")]
     blacklist_crap: bool,
+    #[serde(default = "default_aggregation")]
+    aggregation: String,
     filter: Option<Filter>,
 }
 
@@ -67,11 +69,13 @@ pub struct Data {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { mut peptides, equate_il, tryptic, cutoff, report_taxa, validate_taxa, blacklist_crap, filter }: Parameters
+    Parameters { mut peptides, equate_il, tryptic, cutoff, report_taxa, validate_taxa, blacklist_crap, aggregation, filter }: Parameters
 ) -> Result<Data, ApiError> {
     if peptides.is_empty() {
         return Ok(Data { peptides: Vec::new() });
     }
+
+    let aggregator = parse_aggregation(&aggregation)?;
 
     peptides.sort();
     peptides.dedup();
@@ -130,7 +134,7 @@ async fn handler(
 
                 let taxa: Vec<u32> = filtered_proteins.iter().map(|protein| protein.taxon).unique().collect();
 
-                let lca = calculate_lca(
+                let lca = aggregator.aggregate(
                     taxa.clone(),
                     LineageVersion::V2,
                     taxon_store,

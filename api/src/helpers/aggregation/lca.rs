@@ -1,8 +1,17 @@
 use datastore::{LineageStore, TaxonStore};
 
+use crate::helpers::aggregation::TaxaAggregation;
 use crate::helpers::lineage_helper::{
     get_amount_of_ranks, get_genus_index, get_lineage_array_numeric, get_species_index, LineageVersion
 };
+
+pub struct Lca;
+
+impl TaxaAggregation for Lca {
+    fn aggregate(&self, taxa: Vec<u32>, version: LineageVersion, taxon_store: &TaxonStore, lineage_store: &LineageStore, only_valid_taxa: bool) -> i32 {
+        calculate_lca(taxa, version, taxon_store, lineage_store, only_valid_taxa)
+    }
+}
 
 pub fn calculate_lca(
     taxa: Vec<u32>,

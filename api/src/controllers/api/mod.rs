@@ -70,3 +70,7 @@ pub fn default_cutoff() -> usize {
 pub fn default_validate_taxa() -> bool {
     true
 }
+
+pub fn default_aggregation() -> String {
+    "lca".to_string()
+}

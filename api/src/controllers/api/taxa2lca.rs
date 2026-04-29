@@ -3,11 +3,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_extra, default_names, default_validate_taxa},
+        api::{default_aggregation, default_extra, default_names, default_validate_taxa},
         generate_handlers
     },
     helpers::{
-        lca_helper::calculate_lca,
+        aggregation::parse_aggregation,
         lineage_helper::{
             get_lineage, get_lineage_with_names, Lineage,
             LineageVersion::{self, *}
@@ -16,6 +16,7 @@ use crate::{
     AppState
 };
 use crate::controllers::api::Either;
+use crate::errors::ApiError;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -26,7 +27,9 @@ pub struct Parameters {
     #[serde(default = "default_names")]
     names: bool,
     #[serde(default = "default_validate_taxa")]
-    validate_taxa: bool
+    validate_taxa: bool,
+    #[serde(default = "default_aggregation")]
+    aggregation: String
 }
 
 #[derive(Serialize)]
@@ -46,22 +49,22 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
-    Parameters { input, extra, names, validate_taxa }: Parameters,
+    Parameters { input, extra, names, validate_taxa, aggregation }: Parameters,
     version: LineageVersion
-) -> Result<LcaInformation, ()> {
+) -> Result<LcaInformation, ApiError> {
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
+
+    let aggregator = parse_aggregation(&aggregation)?;
 
     let casted_input: Vec<u32> = input
         .iter()
         .map(|v| v.into())
         .collect();
 
-    // Calculate the LCA of all taxa
-    let lca: i32 = calculate_lca(casted_input, version, taxon_store, lineage_store, validate_taxa);
+    let lca: i32 = aggregator.aggregate(casted_input, version, taxon_store, lineage_store, validate_taxa);
 
     if let Some((taxon_name, taxon_rank, _)) = taxon_store.get(lca as u32) {
-        // Calculate the lineage of the LCA
         let lineage = match (extra, names) {
             (true, true) => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
             (true, false) => get_lineage(lca as u32, version, lineage_store),
@@ -87,7 +90,7 @@ generate_handlers! (
         state => State<AppState>,
         params => Parameters,
         version: LineageVersion
-    ) -> Result<Json<LcaInformation>, ()> {
+    ) -> Result<Json<LcaInformation>, ApiError> {
         Ok(Json(handler(state, params, version).await?))
     }
 );

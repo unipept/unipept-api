@@ -4,6 +4,8 @@ use axum::{
 };
 use thiserror::Error;
 
+use crate::helpers::aggregation::AggregationError;
+
 #[derive(Error, Debug)]
 #[allow(clippy::enum_variant_names)]
 pub enum AppError {
@@ -28,7 +30,9 @@ pub enum ApiError {
     #[error("Join error")]
     JoinError(#[from] tokio::task::JoinError),
     #[error("Not implemented: {0}")]
-    NotImplementedError(String)
+    NotImplementedError(String),
+    #[error(transparent)]
+    AggregationError(#[from] AggregationError)
 }
 
 impl IntoResponse for ApiError {
@@ -42,6 +46,7 @@ impl IntoResponse for ApiError {
             ApiError::UnknownRankError(message) => (StatusCode::BAD_REQUEST, message),
             ApiError::NotImplementedError(message) => (StatusCode::NOT_IMPLEMENTED, message),
             ApiError::JoinError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
+            ApiError::AggregationError(e) => (StatusCode::BAD_REQUEST, e.to_string()),
         };
 
         Response::builder().status(status).body(message.into()).unwrap()

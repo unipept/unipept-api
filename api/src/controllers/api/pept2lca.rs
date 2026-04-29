@@ -3,11 +3,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_equate_il, default_extra, default_names, default_validate_taxa},
+        api::{default_aggregation, default_equate_il, default_extra, default_names, default_validate_taxa},
         generate_handlers
     },
     helpers::{
-        lca_helper::calculate_lca,
+        aggregation::parse_aggregation,
         lineage_helper::{
             get_lineage, get_lineage_with_names, Lineage,
             LineageVersion::{self, *}
@@ -29,7 +29,9 @@ pub struct Parameters {
     #[serde(default = "default_names")]
     names: bool,
     #[serde(default = "default_validate_taxa")]
-    validate_taxa: bool
+    validate_taxa: bool,
+    #[serde(default = "default_aggregation")]
+    aggregation: String
 }
 
 #[derive(Serialize)]
@@ -50,9 +52,11 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, names, validate_taxa }: Parameters,
+    Parameters { input, equate_il, extra, names, validate_taxa, aggregation }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<LcaInformation>, ApiError> {
+    let aggregator = parse_aggregation(&aggregation)?;
+
     let input = sanitize_peptides(input);
     let result = tokio::task::spawn_blocking(move || {
         index.analyse(&input, equate_il, false, None)
@@ -64,7 +68,7 @@ async fn handler(
     Ok(result
         .into_iter()
         .filter_map(|item| {
-            let lca = calculate_lca(
+            let lca = aggregator.aggregate(
                 item.proteins.iter().map(|protein| protein.taxon).collect(),
                 version,
                 taxon_store,

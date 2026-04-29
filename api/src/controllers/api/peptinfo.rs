@@ -3,15 +3,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_domains, default_equate_il, default_extra, default_names, default_validate_taxa},
+        api::{default_aggregation, default_domains, default_equate_il, default_extra, default_names, default_validate_taxa},
         generate_handlers
     },
     helpers::{
+        aggregation::parse_aggregation,
         ec_helper::{ec_numbers_from_map, EcNumber},
         fa_helper::calculate_fa,
         go_helper::{go_terms_from_map, GoTerms},
         interpro_helper::{interpro_entries_from_map, InterproEntries},
-        lca_helper::calculate_lca,
         lineage_helper::{
             get_lineage, get_lineage_with_names, Lineage,
             LineageVersion::{self, *}
@@ -35,7 +35,9 @@ pub struct Parameters {
     #[serde(default = "default_names")]
     names: bool,
     #[serde(default = "default_validate_taxa")]
-    validate_taxa: bool
+    validate_taxa: bool,
+    #[serde(default = "default_aggregation")]
+    aggregation: String
 }
 
 #[derive(Serialize)]
@@ -60,9 +62,11 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, domains, names, validate_taxa }: Parameters,
+    Parameters { input, equate_il, extra, domains, names, validate_taxa, aggregation }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<PeptInformation>, ApiError> {
+    let aggregator = parse_aggregation(&aggregation)?;
+
     let input = sanitize_peptides(input);
     let result = tokio::task::spawn_blocking(move || {
         index.analyse(&input, equate_il, false, None)
@@ -85,7 +89,7 @@ async fn handler(
             let gos = go_terms_from_map(&fa.data, go_store, extra, domains);
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
 
-            let lca = calculate_lca(
+            let lca = aggregator.aggregate(
                 item.proteins.iter().map(|protein| protein.taxon).collect(),
                 version,
                 taxon_store,

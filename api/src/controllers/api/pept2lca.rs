@@ -3,11 +3,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_taxa_aggregation_method, default_equate_il, default_extra, default_names, default_validate_taxa},
+        api::{default_taxa_aggregation_method, default_taxa_aggregation_threshold, default_equate_il, default_extra, default_names, default_validate_taxa},
         generate_handlers
     },
     helpers::{
-        aggregation::parse_aggregation,
+        aggregation::{parse_aggregation, TaxaAggregation},
         lineage_helper::{
             get_lineage, get_lineage_with_names, Lineage,
             LineageVersion::{self, *}
@@ -31,7 +31,9 @@ pub struct Parameters {
     #[serde(default = "default_validate_taxa")]
     validate_taxa: bool,
     #[serde(default = "default_taxa_aggregation_method")]
-    taxa_aggregation_method: String
+    taxa_aggregation_method: String,
+    #[serde(default = "default_taxa_aggregation_threshold")]
+    taxa_aggregation_threshold: Option<u32>
 }
 
 #[derive(Serialize)]
@@ -52,10 +54,10 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, names, validate_taxa, taxa_aggregation_method }: Parameters,
+    Parameters { input, equate_il, extra, names, validate_taxa, taxa_aggregation_method, taxa_aggregation_threshold }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<LcaInformation>, ApiError> {
-    let aggregator = parse_aggregation(&taxa_aggregation_method)?;
+    let aggregator = parse_aggregation(&taxa_aggregation_method, taxa_aggregation_threshold)?;
 
     let input = sanitize_peptides(input);
     let result = tokio::task::spawn_blocking(move || {

@@ -2,16 +2,7 @@ use std::collections::HashSet;
 use datastore::{LineageStore, TaxonStore};
 
 use crate::helpers::aggregation::lca::calculate_lca;
-use crate::helpers::aggregation::TaxaAggregation;
 use crate::helpers::lineage_helper::{get_lineage_array_numeric, LineageVersion};
-
-pub struct LcaStar;
-
-impl TaxaAggregation for LcaStar {
-    fn aggregate(&self, taxa: Vec<u32>, version: LineageVersion, taxon_store: &TaxonStore, lineage_store: &LineageStore, only_valid_taxa: bool) -> i32 {
-        calculate_lca_star(taxa, version, taxon_store, lineage_store, only_valid_taxa)
-    }
-}
 
 pub fn calculate_lca_star(
     taxa: Vec<u32>,
@@ -45,6 +36,7 @@ pub fn calculate_lca_star(
         .filter(|&id| !ancestors_to_remove.contains(&(id as i32)))
         .collect();
 
+    // Taxa were already filtered above; passing true here would re-filter a clean list.
     calculate_lca(pruned, version, taxon_store, lineage_store, false)
 }
 

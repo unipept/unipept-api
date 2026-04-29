@@ -1,16 +1,7 @@
 use std::collections::HashMap;
 use datastore::{LineageStore, TaxonStore};
 
-use crate::helpers::aggregation::TaxaAggregation;
 use crate::helpers::lineage_helper::{get_amount_of_ranks, get_lineage_array_numeric, LineageVersion};
-
-pub struct Hybrid { pub threshold: f64 }
-
-impl TaxaAggregation for Hybrid {
-    fn aggregate(&self, taxa: Vec<u32>, version: LineageVersion, taxon_store: &TaxonStore, lineage_store: &LineageStore, only_valid_taxa: bool) -> i32 {
-        calculate_hybrid(taxa, version, taxon_store, lineage_store, only_valid_taxa, self.threshold)
-    }
-}
 
 pub fn calculate_hybrid(
     taxa: Vec<u32>,
@@ -18,7 +9,7 @@ pub fn calculate_hybrid(
     taxon_store: &TaxonStore,
     lineage_store: &LineageStore,
     only_valid_taxa: bool,
-    f: f64,
+    threshold: f64,
 ) -> i32 {
     let mut lineages: Vec<Vec<i32>> = taxa
         .into_iter()
@@ -48,7 +39,7 @@ pub fn calculate_hybrid(
         }
         let (&best_value, &best_count) = counts.iter().max_by_key(|(_, &c)| c).unwrap();
 
-        if best_count as f64 / lineages.len() as f64 >= f {
+        if best_count as f64 / lineages.len() as f64 >= threshold {
             result = best_value;
             lineages.retain(|l| l[rank] == best_value);
         } else {

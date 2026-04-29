@@ -74,3 +74,7 @@ pub fn default_validate_taxa() -> bool {
 pub fn default_taxa_aggregation_method() -> String {
     "lca".to_string()
 }
+
+pub fn default_taxa_aggregation_threshold() -> Option<u32> {
+    None
+}

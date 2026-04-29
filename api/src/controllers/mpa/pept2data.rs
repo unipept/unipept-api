@@ -4,9 +4,9 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use index::{ProteinInfo, SearchResult};
 use crate::{
-    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic, mpa::default_report_taxa, mpa::default_blacklist_crap, api::default_cutoff, api::default_validate_taxa, api::default_taxa_aggregation_method},
+    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic, mpa::default_report_taxa, mpa::default_blacklist_crap, api::default_cutoff, api::default_validate_taxa, api::default_taxa_aggregation_method, api::default_taxa_aggregation_threshold},
     helpers::{
-        aggregation::parse_aggregation,
+        aggregation::{parse_aggregation, TaxaAggregation},
         fa_helper::{calculate_fa, FunctionalAggregation},
         lineage_helper::{get_lineage_array, LineageVersion}
     },
@@ -39,6 +39,8 @@ pub struct Parameters {
     blacklist_crap: bool,
     #[serde(default = "default_taxa_aggregation_method")]
     taxa_aggregation_method: String,
+    #[serde(default = "default_taxa_aggregation_threshold")]
+    taxa_aggregation_threshold: Option<u32>,
     filter: Option<Filter>,
 }
 
@@ -56,6 +58,7 @@ pub enum Filter {
 pub struct DataItem {
     sequence: String,
     lca: Option<u32>,
+    aggregated_taxon: Option<u32>,
     lineage: Vec<Option<i32>>,
     fa: FunctionalAggregation,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -69,13 +72,13 @@ pub struct Data {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { mut peptides, equate_il, tryptic, cutoff, report_taxa, validate_taxa, blacklist_crap, taxa_aggregation_method, filter }: Parameters
+    Parameters { mut peptides, equate_il, tryptic, cutoff, report_taxa, validate_taxa, blacklist_crap, taxa_aggregation_method, taxa_aggregation_threshold, filter }: Parameters
 ) -> Result<Data, ApiError> {
+    let aggregator = parse_aggregation(&taxa_aggregation_method, taxa_aggregation_threshold)?;
+
     if peptides.is_empty() {
         return Ok(Data { peptides: Vec::new() });
     }
-
-    let aggregator = parse_aggregation(&taxa_aggregation_method)?;
 
     peptides.sort();
     peptides.dedup();
@@ -146,6 +149,7 @@ async fn handler(
                 Some(DataItem {
                     sequence,
                     lca: Some(lca as u32),
+                    aggregated_taxon: Some(lca as u32),
                     lineage,
                     fa: calculate_fa(&filtered_proteins),
                     taxa: if report_taxa { Some(taxa) } else { None }

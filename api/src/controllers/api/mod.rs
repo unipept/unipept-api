@@ -71,6 +71,6 @@ pub fn default_validate_taxa() -> bool {
     true
 }
 
-pub fn default_aggregation() -> String {
+pub fn default_taxa_aggregation_method() -> String {
     "lca".to_string()
 }

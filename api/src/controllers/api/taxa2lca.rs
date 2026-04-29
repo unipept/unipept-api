@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_aggregation, default_extra, default_names, default_validate_taxa},
+        api::{default_taxa_aggregation_method, default_extra, default_names, default_validate_taxa},
         generate_handlers
     },
     helpers::{
@@ -28,8 +28,8 @@ pub struct Parameters {
     names: bool,
     #[serde(default = "default_validate_taxa")]
     validate_taxa: bool,
-    #[serde(default = "default_aggregation")]
-    aggregation: String
+    #[serde(default = "default_taxa_aggregation_method")]
+    taxa_aggregation_method: String
 }
 
 #[derive(Serialize)]
@@ -49,13 +49,13 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
-    Parameters { input, extra, names, validate_taxa, aggregation }: Parameters,
+    Parameters { input, extra, names, validate_taxa, taxa_aggregation_method }: Parameters,
     version: LineageVersion
 ) -> Result<LcaInformation, ApiError> {
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
-    let aggregator = parse_aggregation(&aggregation)?;
+    let aggregator = parse_aggregation(&taxa_aggregation_method)?;
 
     let casted_input: Vec<u32> = input
         .iter()

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_aggregation, default_domains, default_equate_il, default_extra, default_names, default_validate_taxa},
+        api::{default_taxa_aggregation_method, default_domains, default_equate_il, default_extra, default_names, default_validate_taxa},
         generate_handlers
     },
     helpers::{
@@ -36,8 +36,8 @@ pub struct Parameters {
     names: bool,
     #[serde(default = "default_validate_taxa")]
     validate_taxa: bool,
-    #[serde(default = "default_aggregation")]
-    aggregation: String
+    #[serde(default = "default_taxa_aggregation_method")]
+    taxa_aggregation_method: String
 }
 
 #[derive(Serialize)]
@@ -62,10 +62,10 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, domains, names, validate_taxa, aggregation }: Parameters,
+    Parameters { input, equate_il, extra, domains, names, validate_taxa, taxa_aggregation_method }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<PeptInformation>, ApiError> {
-    let aggregator = parse_aggregation(&aggregation)?;
+    let aggregator = parse_aggregation(&taxa_aggregation_method)?;
 
     let input = sanitize_peptides(input);
     let result = tokio::task::spawn_blocking(move || {

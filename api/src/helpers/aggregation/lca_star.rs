@@ -36,7 +36,6 @@ pub fn calculate_lca_star(
         .filter(|&id| !ancestors_to_remove.contains(&(id as i32)))
         .collect();
 
-    // Taxa were already filtered above; passing true here would re-filter a clean list.
     calculate_lca(pruned, version, taxon_store, lineage_store, false)
 }
 

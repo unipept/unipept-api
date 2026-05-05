@@ -29,6 +29,7 @@ pub struct Parameters {
 #[derive(Serialize)]
 pub struct EcInformation {
     peptide: String,
+    cutoff_used: bool,
     total_protein_count: usize,
     ec: Vec<EcNumber>
 }
@@ -60,12 +61,14 @@ async fn handler(
         if let Some(count) = peptide_counts.get(unique_peptide) {
             let fa = calculate_fa(&item.proteins);
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
+            let cutoff_used = item.cutoff_used;
 
             for _ in 0..*count {
                 let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
 
                 final_results.push(EcInformation {
                     peptide: item.sequence.clone(),
+                    cutoff_used,
                     total_protein_count,
                     ec: ecs,
                 });

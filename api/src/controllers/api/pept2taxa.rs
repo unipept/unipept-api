@@ -44,6 +44,7 @@ pub enum TaxaInformation {
 #[derive(Serialize)]
 pub struct DenseTaxaInformation {
     peptide: String,
+    cutoff_used: bool,
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
@@ -53,6 +54,7 @@ pub struct DenseTaxaInformation {
 #[derive(Serialize)]
 pub struct CompactTaxaInformation {
     peptide: String,
+    cutoff_used: bool,
     taxa: Vec<u32>
 }
 
@@ -88,6 +90,7 @@ async fn handler(
 
                 Some(TaxaInformation::Compact(CompactTaxaInformation {
                     peptide: item.sequence,
+                    cutoff_used: item.cutoff_used,
                     taxa: item_taxa,
                 }))
             })
@@ -98,6 +101,7 @@ async fn handler(
     Ok(result
         .into_iter()
         .flat_map(|item| {
+            let cutoff_used = item.cutoff_used;
             item.proteins.iter().map(|protein| protein.taxon).collect::<HashSet<u32>>().into_iter().filter_map(
                 move |taxon| {
                     let (name, rank, _) = taxon_store.get(taxon)?;
@@ -109,6 +113,7 @@ async fn handler(
 
                     Some(TaxaInformation::Dense(DenseTaxaInformation {
                         peptide: item.sequence.clone(),
+                        cutoff_used,
                         taxon: Taxon {
                             taxon_id: taxon,
                             taxon_name: name.to_string(),

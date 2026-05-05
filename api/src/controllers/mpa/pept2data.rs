@@ -53,6 +53,7 @@ pub enum Filter {
 #[derive(Serialize)]
 pub struct DataItem {
     sequence: String,
+    cutoff_used: bool,
     lca: Option<u32>,
     lineage: Vec<Option<i32>>,
     fa: FunctionalAggregation,
@@ -111,7 +112,7 @@ async fn handler(
     Ok(Data {
         peptides: result
             .into_iter()
-            .filter_map(|SearchResult { proteins, sequence, .. }| {
+            .filter_map(|SearchResult { proteins, sequence, cutoff_used }| {
                 let filtered_proteins: Vec<ProteinInfo> = proteins
                     .into_iter()
                     .filter(|protein| filter_proteins.filter(protein))
@@ -141,6 +142,7 @@ async fn handler(
 
                 Some(DataItem {
                     sequence,
+                    cutoff_used,
                     lca: Some(lca as u32),
                     lineage,
                     fa: calculate_fa(&filtered_proteins),

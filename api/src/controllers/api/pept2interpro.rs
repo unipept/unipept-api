@@ -30,6 +30,7 @@ pub struct Parameters {
 #[derive(Serialize)]
 pub struct InterproInformation {
     peptide: String,
+    cutoff_used: bool,
     total_protein_count: usize,
     ipr: InterproEntries
 }
@@ -53,7 +54,7 @@ async fn handler(
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
 
-            InterproInformation { peptide: item.sequence, total_protein_count, ipr: iprs }
+            InterproInformation { peptide: item.sequence, cutoff_used: item.cutoff_used, total_protein_count, ipr: iprs }
         })
         .collect())
 }

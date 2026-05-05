@@ -35,6 +35,7 @@ pub struct Parameters {
 #[derive(Serialize)]
 pub struct LcaInformation {
     peptide: String,
+    cutoff_used: bool,
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
@@ -81,6 +82,7 @@ async fn handler(
 
             Some(LcaInformation {
                 peptide: item.sequence,
+                cutoff_used: item.cutoff_used,
                 taxon: Taxon {
                     taxon_id: lca as u32,
                     taxon_name: name.to_string(),

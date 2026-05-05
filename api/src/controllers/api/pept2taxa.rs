@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_equate_il, default_extra, default_names, default_compact, default_tryptic},
+        api::{default_cutoff, default_equate_il, default_extra, default_names, default_compact, default_tryptic},
         generate_handlers
     },
     helpers::lineage_helper::{
@@ -30,7 +30,9 @@ pub struct Parameters {
     #[serde(default = "default_tryptic")]
     tryptic: bool,
     #[serde(default = "default_compact")]
-    compact: bool
+    compact: bool,
+    #[serde(default = "default_cutoff")]
+    cutoff: usize
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -65,12 +67,12 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, names, tryptic, compact }: Parameters,
+    Parameters { input, equate_il, extra, names, tryptic, compact, cutoff }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<TaxaInformation>, ApiError> {
     let input = sanitize_peptides(input);
     let result = tokio::task::spawn_blocking(move || {
-        index.analyse(&input, equate_il, tryptic, None)
+        index.analyse(&input, equate_il, tryptic, Some(cutoff))
     }).await?;
 
     let taxon_store = datastore.taxon_store();

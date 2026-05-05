@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_equate_il, default_extra, default_names, default_validate_taxa},
+        api::{default_cutoff, default_equate_il, default_extra, default_names, default_validate_taxa},
         generate_handlers
     },
     helpers::{
@@ -29,7 +29,9 @@ pub struct Parameters {
     #[serde(default = "default_names")]
     names: bool,
     #[serde(default = "default_validate_taxa")]
-    validate_taxa: bool
+    validate_taxa: bool,
+    #[serde(default = "default_cutoff")]
+    cutoff: usize
 }
 
 #[derive(Serialize)]
@@ -50,12 +52,12 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, names, validate_taxa }: Parameters,
+    Parameters { input, equate_il, extra, names, validate_taxa, cutoff }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<LcaInformation>, ApiError> {
     let input = sanitize_peptides(input);
     let result = tokio::task::spawn_blocking(move || {
-        index.analyse(&input, equate_il, false, None)
+        index.analyse(&input, equate_il, false, Some(cutoff))
     }).await?;
 
     let taxon_store = datastore.taxon_store();

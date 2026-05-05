@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_domains, default_equate_il, default_extra},
+        api::{default_cutoff, default_domains, default_equate_il, default_extra},
         generate_handlers
     },
     helpers::{
@@ -26,7 +26,9 @@ pub struct Parameters {
     #[serde(default = "default_extra")]
     extra: bool,
     #[serde(default = "default_domains")]
-    domains: bool
+    domains: bool,
+    #[serde(default = "default_cutoff")]
+    cutoff: usize
 }
 
 #[derive(Serialize)]
@@ -40,11 +42,11 @@ pub struct FunctInformation {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, domains }: Parameters
+    Parameters { input, equate_il, extra, domains, cutoff }: Parameters
 ) -> Result<Vec<FunctInformation>, ApiError> {
     let input = sanitize_peptides(input);
     let result = tokio::task::spawn_blocking(move || {
-        index.analyse(&input, equate_il, false, None)
+        index.analyse(&input, equate_il, false, Some(cutoff))
     }).await?;
 
     let ec_store = datastore.ec_store();

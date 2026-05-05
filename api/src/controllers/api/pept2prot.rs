@@ -88,7 +88,7 @@ async fn handler(
             let cutoff_used = item.cutoff_used;
             item.proteins
                 .into_iter()
-                .filter_map(move |protein| {
+                .filter_map(|protein| {
                     let uniprot_entry = accessions_map.get(&protein.uniprot_accession)?;
 
                     if extra {

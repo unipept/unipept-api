@@ -32,6 +32,7 @@ pub struct Parameters {
 pub enum ProtInformation {
     Default {
         peptide: String,
+        cutoff_used: bool,
         uniprot_id: String,
         protein_name: String,
         taxon_id: u32,
@@ -39,6 +40,7 @@ pub enum ProtInformation {
     },
     Extra {
         peptide: String,
+        cutoff_used: bool,
         uniprot_id: String,
         protein_name: String,
         taxon_id: u32,
@@ -83,9 +85,10 @@ async fn handler(
     Ok(result
         .into_iter()
         .flat_map(|item| {
+            let cutoff_used = item.cutoff_used;
             item.proteins
                 .into_iter()
-                .filter_map(|protein| {
+                .filter_map(move |protein| {
                     let uniprot_entry = accessions_map.get(&protein.uniprot_accession)?;
 
                     if extra {
@@ -113,6 +116,7 @@ async fn handler(
 
                         Some(ProtInformation::Extra {
                             peptide: item.sequence.clone(),
+                            cutoff_used,
                             uniprot_id: protein.uniprot_accession.clone(),
                             protein_name: uniprot_entry.name.clone(),
                             taxon_id: uniprot_entry.taxon_id,
@@ -125,6 +129,7 @@ async fn handler(
                     } else {
                         Some(ProtInformation::Default {
                             peptide: item.sequence.clone(),
+                            cutoff_used,
                             uniprot_id: protein.uniprot_accession.clone(),
                             protein_name: uniprot_entry.name.clone(),
                             taxon_id: uniprot_entry.taxon_id,

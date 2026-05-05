@@ -30,6 +30,7 @@ pub struct Parameters {
 #[derive(Serialize)]
 pub struct GoInformation {
     peptide: String,
+    cutoff_used: bool,
     total_protein_count: usize,
     go: GoTerms
 }
@@ -53,7 +54,7 @@ async fn handler(
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let gos = go_terms_from_map(&fa.data, go_store, extra, domains);
 
-            GoInformation { peptide: item.sequence, total_protein_count, go: gos }
+            GoInformation { peptide: item.sequence, cutoff_used: item.cutoff_used, total_protein_count, go: gos }
         })
         .collect())
 }

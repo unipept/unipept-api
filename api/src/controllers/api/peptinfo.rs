@@ -41,6 +41,7 @@ pub struct Parameters {
 #[derive(Serialize)]
 pub struct PeptInformation {
     peptide: String,
+    cutoff_used: bool,
     total_protein_count: usize,
     ec: Vec<EcNumber>,
     go: GoTerms,
@@ -101,6 +102,7 @@ async fn handler(
 
             Some(PeptInformation {
                 peptide: item.sequence,
+                cutoff_used: item.cutoff_used,
                 total_protein_count,
                 ec: ecs,
                 go: gos,

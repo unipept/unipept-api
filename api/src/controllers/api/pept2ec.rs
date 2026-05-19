@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_equate_il, default_extra},
+        api::{default_cutoff, default_equate_il, default_extra},
         generate_handlers
     },
     helpers::{
@@ -23,7 +23,9 @@ pub struct Parameters {
     #[serde(default = "default_equate_il")]
     equate_il: bool,
     #[serde(default = "default_extra")]
-    extra: bool
+    extra: bool,
+    #[serde(default = "default_cutoff")]
+    cutoff: usize
 }
 
 #[derive(Serialize)]
@@ -36,7 +38,7 @@ pub struct EcInformation {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra }: Parameters
+    Parameters { input, equate_il, extra, cutoff }: Parameters
 ) -> Result<Vec<EcInformation>, ApiError> {
     let input = sanitize_peptides(input);
 
@@ -49,7 +51,7 @@ async fn handler(
     // Move unique_peptides into the blocking task and return it alongside the analysis result,
     // so we can reuse the original vector without cloning
     let (unique_peptides, result) = tokio::task::spawn_blocking(move ||{
-        let result = index.analyse(&unique_peptides, equate_il, false, None);
+        let result = index.analyse(&unique_peptides, equate_il, false, Some(cutoff));
         (unique_peptides, result)
     }).await?;
 

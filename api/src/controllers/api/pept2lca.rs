@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_equate_il, default_extra, default_names, default_validate_taxa},
+        api::{default_cutoff, default_equate_il, default_extra, default_names, default_validate_taxa},
         generate_handlers
     },
     helpers::{
@@ -15,6 +15,7 @@ use crate::{
     },
     AppState
 };
+use crate::errors::ApiError;
 use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
@@ -28,12 +29,15 @@ pub struct Parameters {
     #[serde(default = "default_names")]
     names: bool,
     #[serde(default = "default_validate_taxa")]
-    validate_taxa: bool
+    validate_taxa: bool,
+    #[serde(default = "default_cutoff")]
+    cutoff: usize
 }
 
 #[derive(Serialize)]
 pub struct LcaInformation {
     peptide: String,
+    cutoff_used: bool,
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
@@ -49,11 +53,13 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, names, validate_taxa }: Parameters,
+    Parameters { input, equate_il, extra, names, validate_taxa, cutoff }: Parameters,
     version: LineageVersion
-) -> Result<Vec<LcaInformation>, ()> {
+) -> Result<Vec<LcaInformation>, ApiError> {
     let input = sanitize_peptides(input);
-    let result = index.analyse(&input, equate_il, false, None);
+    let result = tokio::task::spawn_blocking(move || {
+        index.analyse(&input, equate_il, false, Some(cutoff))
+    }).await?;
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
@@ -78,6 +84,7 @@ async fn handler(
 
             Some(LcaInformation {
                 peptide: item.sequence,
+                cutoff_used: item.cutoff_used,
                 taxon: Taxon {
                     taxon_id: lca as u32,
                     taxon_name: name.to_string(),
@@ -95,7 +102,7 @@ generate_handlers! (
         state => State<AppState>,
         params => Parameters,
         version: LineageVersion
-    ) -> Result<Json<Vec<LcaInformation>>, ()> {
+    ) -> Result<Json<Vec<LcaInformation>>, ApiError> {
         Ok(Json(handler(state, params, version).await?))
     }
 );

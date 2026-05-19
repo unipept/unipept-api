@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_equate_il, default_extra, default_names, default_compact, default_tryptic},
+        api::{default_cutoff, default_equate_il, default_extra, default_names, default_compact, default_tryptic},
         generate_handlers
     },
     helpers::lineage_helper::{
@@ -14,6 +14,7 @@ use crate::{
     },
     AppState
 };
+use crate::errors::ApiError;
 use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
@@ -29,7 +30,9 @@ pub struct Parameters {
     #[serde(default = "default_tryptic")]
     tryptic: bool,
     #[serde(default = "default_compact")]
-    compact: bool
+    compact: bool,
+    #[serde(default = "default_cutoff")]
+    cutoff: usize
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -43,6 +46,7 @@ pub enum TaxaInformation {
 #[derive(Serialize)]
 pub struct DenseTaxaInformation {
     peptide: String,
+    cutoff_used: bool,
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
@@ -52,6 +56,7 @@ pub struct DenseTaxaInformation {
 #[derive(Serialize)]
 pub struct CompactTaxaInformation {
     peptide: String,
+    cutoff_used: bool,
     taxa: Vec<u32>
 }
 
@@ -64,11 +69,13 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, names, tryptic, compact }: Parameters,
+    Parameters { input, equate_il, extra, names, tryptic, compact, cutoff }: Parameters,
     version: LineageVersion
-) -> Result<Vec<TaxaInformation>, ()> {
+) -> Result<Vec<TaxaInformation>, ApiError> {
     let input = sanitize_peptides(input);
-    let result = index.analyse(&input, equate_il, tryptic, None);
+    let result = tokio::task::spawn_blocking(move || {
+        index.analyse(&input, equate_il, tryptic, Some(cutoff))
+    }).await?;
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
@@ -85,6 +92,7 @@ async fn handler(
 
                 Some(TaxaInformation::Compact(CompactTaxaInformation {
                     peptide: item.sequence,
+                    cutoff_used: item.cutoff_used,
                     taxa: item_taxa,
                 }))
             })
@@ -95,6 +103,7 @@ async fn handler(
     Ok(result
         .into_iter()
         .flat_map(|item| {
+            let cutoff_used = item.cutoff_used;
             item.proteins.iter().map(|protein| protein.taxon).collect::<HashSet<u32>>().into_iter().filter_map(
                 move |taxon| {
                     let (name, rank, _) = taxon_store.get(taxon)?;
@@ -106,6 +115,7 @@ async fn handler(
 
                     Some(TaxaInformation::Dense(DenseTaxaInformation {
                         peptide: item.sequence.clone(),
+                        cutoff_used,
                         taxon: Taxon {
                             taxon_id: taxon,
                             taxon_name: name.to_string(),
@@ -125,7 +135,7 @@ generate_handlers! (
         state => State<AppState>,
         params => Parameters,
         version: LineageVersion
-    ) -> Result<Json<Vec<TaxaInformation>>, ()> {
+    ) -> Result<Json<Vec<TaxaInformation>>, ApiError> {
         Ok(Json(handler(state, params, version).await?))
     }
 );

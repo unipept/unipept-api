@@ -25,6 +25,8 @@ pub enum ApiError {
     DatabaseError(#[from] database::DatabaseError),
     #[error("Unknown rank error")]
     UnknownRankError(String),
+    #[error("Join error")]
+    JoinError(#[from] tokio::task::JoinError),
     #[error("Not implemented: {0}")]
     NotImplementedError(String)
 }
@@ -39,6 +41,7 @@ impl IntoResponse for ApiError {
             ApiError::DatabaseError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
             ApiError::UnknownRankError(message) => (StatusCode::BAD_REQUEST, message),
             ApiError::NotImplementedError(message) => (StatusCode::NOT_IMPLEMENTED, message),
+            ApiError::JoinError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
         };
 
         Response::builder().status(status).body(message.into()).unwrap()

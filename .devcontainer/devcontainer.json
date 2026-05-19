@@ -12,16 +12,8 @@
     "ghcr.io/devcontainers/features/rust:1": {}
   },
 
-  // Forward port 80 to your host machine
-  "forwardPorts": [80],
-
-  // Configure specific attributes for the forwarded port
-  "portsAttributes": {
-    "80": {
-      "label": "Web Server",
-      "onAutoForward": "notify"
-    }
-  },
+  // Bind port 80 at the Docker level so it is accessible from the host
+  "appPort": [80],
 
   // Updated to include sudo for permission safety and a check for lock files
   "postCreateCommand": "sudo apt update && sudo apt install --yes libmysqlclient-dev && sudo rm -f /var/lib/opensearch/nodes/0/node.lock /var/lib/opensearch/nodes/0/_state/write.lock",

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_domains, default_equate_il, default_extra, default_names, default_validate_taxa},
+        api::{default_cutoff, default_domains, default_equate_il, default_extra, default_names, default_validate_taxa},
         generate_handlers
     },
     helpers::{
@@ -19,6 +19,7 @@ use crate::{
     },
     AppState
 };
+use crate::errors::ApiError;
 use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
@@ -34,12 +35,15 @@ pub struct Parameters {
     #[serde(default = "default_names")]
     names: bool,
     #[serde(default = "default_validate_taxa")]
-    validate_taxa: bool
+    validate_taxa: bool,
+    #[serde(default = "default_cutoff")]
+    cutoff: usize
 }
 
 #[derive(Serialize)]
 pub struct PeptInformation {
     peptide: String,
+    cutoff_used: bool,
     total_protein_count: usize,
     ec: Vec<EcNumber>,
     go: GoTerms,
@@ -59,11 +63,13 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, domains, names, validate_taxa }: Parameters,
+    Parameters { input, equate_il, extra, domains, names, validate_taxa, cutoff }: Parameters,
     version: LineageVersion
-) -> Result<Vec<PeptInformation>, ()> {
+) -> Result<Vec<PeptInformation>, ApiError> {
     let input = sanitize_peptides(input);
-    let result = index.analyse(&input, equate_il, false, None);
+    let result = tokio::task::spawn_blocking(move || {
+        index.analyse(&input, equate_il, false, Some(cutoff))
+    }).await?;
 
     let ec_store = datastore.ec_store();
     let go_store = datastore.go_store();
@@ -98,6 +104,7 @@ async fn handler(
 
             Some(PeptInformation {
                 peptide: item.sequence,
+                cutoff_used: item.cutoff_used,
                 total_protein_count,
                 ec: ecs,
                 go: gos,
@@ -119,7 +126,7 @@ generate_handlers! (
         state => State<AppState>,
         params => Parameters,
         version: LineageVersion
-    ) -> Result<Json<Vec<PeptInformation>>, ()> {
+    ) -> Result<Json<Vec<PeptInformation>>, ApiError> {
         Ok(Json(handler(state, params, version).await?))
     }
 );

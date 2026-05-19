@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     controllers::{
-        api::{default_domains, default_equate_il, default_extra},
+        api::{default_cutoff, default_domains, default_equate_il, default_extra},
         generate_handlers
     },
     helpers::{
@@ -12,6 +12,7 @@ use crate::{
     },
     AppState
 };
+use crate::errors::ApiError;
 use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
@@ -23,22 +24,27 @@ pub struct Parameters {
     #[serde(default = "default_extra")]
     extra: bool,
     #[serde(default = "default_domains")]
-    domains: bool
+    domains: bool,
+    #[serde(default = "default_cutoff")]
+    cutoff: usize
 }
 
 #[derive(Serialize)]
 pub struct InterproInformation {
     peptide: String,
+    cutoff_used: bool,
     total_protein_count: usize,
     ipr: InterproEntries
 }
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, domains }: Parameters
-) -> Result<Vec<InterproInformation>, ()> {
+    Parameters { input, equate_il, extra, domains, cutoff }: Parameters
+) -> Result<Vec<InterproInformation>, ApiError> {
     let input = sanitize_peptides(input);
-    let result = index.analyse(&input, equate_il, false, None);
+    let result = tokio::task::spawn_blocking(move || {
+        index.analyse(&input, equate_il, false, Some(cutoff))
+    }).await?;
 
     let interpro_store = datastore.interpro_store();
 
@@ -50,7 +56,7 @@ async fn handler(
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
 
-            InterproInformation { peptide: item.sequence, total_protein_count, ipr: iprs }
+            InterproInformation { peptide: item.sequence, cutoff_used: item.cutoff_used, total_protein_count, ipr: iprs }
         })
         .collect())
 }
@@ -59,7 +65,7 @@ generate_handlers!(
     async fn json_handler(
         state => State<AppState>,
         params => Parameters
-    ) -> Result<Json<Vec<InterproInformation>>, ()> {
+    ) -> Result<Json<Vec<InterproInformation>>, ApiError> {
         Ok(Json(handler(state, params).await?))
     }
 );

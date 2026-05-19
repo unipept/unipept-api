@@ -1,5 +1,6 @@
 use std::{collections::HashMap};
 use std::collections::HashSet;
+use std::time::Duration;
 pub use errors::DatabaseError;
 use models::UniprotEntry;
 use opensearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
@@ -11,6 +12,8 @@ use crate::DatabaseError::GeneralError;
 mod errors;
 mod models;
 
+const OPENSEARCH_TIMEOUT_DURATION: u64 = 120;
+
 pub struct Database {
     client: OpenSearch
 }
@@ -19,7 +22,10 @@ impl Database {
     pub fn try_from_url(url: &str) -> Result<Self, DatabaseError> {
         let url = Url::parse(url)?;
         let conn_pool = SingleNodeConnectionPool::new(url);
-        let transport = TransportBuilder::new(conn_pool).disable_proxy().build()?;
+        let transport = TransportBuilder::new(conn_pool)
+            .timeout(Duration::from_secs(OPENSEARCH_TIMEOUT_DURATION))
+            .disable_proxy()
+            .build()?;
         let client = OpenSearch::new(transport);
         Ok(Self { client })
     }
@@ -43,6 +49,10 @@ pub async fn get_accessions(
     client: &OpenSearch,
     accessions: &HashSet<String>,
 ) -> Result<Vec<UniprotEntry>, DatabaseError> {
+    if accessions.is_empty() {
+        return Ok(vec![]);
+    }
+
     let mut result: Vec<UniprotEntry> = Vec::new();
     
     let docs: Vec<_> = accessions

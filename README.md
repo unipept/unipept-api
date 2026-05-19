@@ -25,7 +25,7 @@ This is an exhaustive list of all endpoints that are exposed by this API
 * `/api/v2/pept2taxa`
 * `/api/v2/pept2lca`
 * `/api/v2/taxa2lca`
-* `/api/v2/pept2prot`
+* `/api/v2/pept2prot`x
 * `/api/v2/pept2funct`
 * `/api/v2/pept2ec`
 * `/api/v2/pept2go`

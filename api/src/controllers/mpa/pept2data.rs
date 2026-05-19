@@ -4,7 +4,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use index::{ProteinInfo, SearchResult};
 use crate::{
-    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic, mpa::default_report_taxa, mpa::default_blacklist_crap, api::default_cutoff, api::default_validate_taxa},
+    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic, mpa::default_report_taxa, api::default_cutoff, api::default_validate_taxa},
     helpers::{
         fa_helper::{calculate_fa, FunctionalAggregation},
         lca_helper::calculate_lca,
@@ -35,8 +35,6 @@ pub struct Parameters {
     report_taxa: bool,
     #[serde(default = "default_validate_taxa")]
     validate_taxa: bool,
-    #[serde(default = "default_blacklist_crap")]
-    blacklist_crap: bool,
     filter: Option<Filter>,
 }
 
@@ -58,7 +56,8 @@ pub struct DataItem {
     lineage: Vec<Option<i32>>,
     fa: FunctionalAggregation,
     #[serde(skip_serializing_if = "Option::is_none")]
-    taxa: Option<Vec<u32>>
+    taxa: Option<Vec<u32>>,
+    crap_filtered: bool,
 }
 
 #[derive(Serialize)]
@@ -68,7 +67,7 @@ pub struct Data {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { mut peptides, equate_il, tryptic, cutoff, report_taxa, validate_taxa, blacklist_crap, filter }: Parameters
+    Parameters { mut peptides, equate_il, tryptic, cutoff, report_taxa, validate_taxa, filter }: Parameters
 ) -> Result<Data, ApiError> {
     if peptides.is_empty() {
         return Ok(Data { peptides: Vec::new() });
@@ -103,11 +102,7 @@ async fn handler(
         None => Box::new(EmptyFilter::new())
     };
 
-    let crap_blacklist = if blacklist_crap {
-        Some(CrapFilter::new())
-    } else {
-        None
-    };
+    let crap_filter = CrapFilter::new();
 
     Ok(Data {
         peptides: result
@@ -122,12 +117,7 @@ async fn handler(
                     return None;
                 }
 
-                // Remove all peptide results when any protein is in the crap blacklist
-                if let Some(ref filter) = crap_blacklist {
-                    if filtered_proteins.iter().any(|p| filter.filter(p)) {
-                        return None;
-                    }
-                }
+                let crap_filtered = filtered_proteins.iter().any(|p| crap_filter.filter(p));
 
                 let taxa: Vec<u32> = filtered_proteins.iter().map(|protein| protein.taxon).unique().collect();
 
@@ -146,7 +136,8 @@ async fn handler(
                     lca: Some(lca as u32),
                     lineage,
                     fa: calculate_fa(&filtered_proteins),
-                    taxa: if report_taxa { Some(taxa) } else { None }
+                    taxa: if report_taxa { Some(taxa) } else { None },
+                    crap_filtered,
                 })
             })
             .collect()

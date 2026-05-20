@@ -3,6 +3,7 @@ use axum::{extract::State, Json};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use index::{ProteinInfo, SearchResult};
+use datastore::LineageStore;
 use crate::{
     controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic, mpa::default_report_taxa, api::default_cutoff, api::default_validate_taxa},
     helpers::{
@@ -33,6 +34,8 @@ pub struct Parameters {
     cutoff: usize,
     #[serde(default = "default_report_taxa")]
     report_taxa: bool,
+    #[serde(default)]
+    taxa_rank: Option<String>,
     #[serde(default = "default_validate_taxa")]
     validate_taxa: bool,
     filter: Option<Filter>,
@@ -67,7 +70,7 @@ pub struct Data {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { mut peptides, equate_il, tryptic, cutoff, report_taxa, validate_taxa, filter }: Parameters
+    Parameters { mut peptides, equate_il, tryptic, cutoff, report_taxa, taxa_rank, validate_taxa, filter }: Parameters
 ) -> Result<Data, ApiError> {
     if peptides.is_empty() {
         return Ok(Data { peptides: Vec::new() });
@@ -103,6 +106,7 @@ async fn handler(
     };
 
     let crap_filter = CrapFilter::new();
+    let taxa_rank_idx = taxa_rank.as_ref().and_then(|rank| LineageStore::rank_to_idx(rank.to_lowercase().as_str()));
 
     Ok(Data {
         peptides: result
@@ -121,6 +125,26 @@ async fn handler(
 
                 let taxa: Vec<u32> = filtered_proteins.iter().map(|protein| protein.taxon).unique().collect();
 
+                let taxa_at_rank: Option<Vec<u32>> = if report_taxa {
+                    match taxa_rank_idx {
+                        Some(idx) => Some(taxa
+                            .iter()
+                            .filter_map(|taxon_id| {
+                                let lineage = get_lineage_array(*taxon_id, LineageVersion::V2, lineage_store);
+                                lineage.get(idx).and_then(|taxon| *taxon).map(|taxon_id| taxon_id as u32)
+                            })
+                            .unique()
+                            .collect()),
+                        None => Some(taxa.clone())
+                    }
+                } else {
+                    None
+                };
+
+                println!("taxa_rank_idx: {:?}", taxa_rank_idx);
+                println!("taxa: {:?}", taxa);
+                println!("taxa_at_rank: {:?}", taxa_at_rank);
+
                 let lca = calculate_lca(
                     taxa.clone(),
                     LineageVersion::V2,
@@ -136,7 +160,7 @@ async fn handler(
                     lca: Some(lca as u32),
                     lineage,
                     fa: calculate_fa(&filtered_proteins),
-                    taxa: if report_taxa { Some(taxa) } else { None },
+                    taxa: taxa_at_rank,
                     crap_filtered,
                 })
             })

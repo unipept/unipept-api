@@ -1,68 +1,38 @@
-use std::{
-    fs::File,
-    io::{BufReader, Read}
-};
-
 pub use errors::IndexError;
 use errors::LoadIndexError;
-use sa_compression::load_compressed_suffix_array;
+use sa_server::{load_mapping_file, load_proteins_file, load_suffix_array_file};
 pub use sa_index::peptide_search::ProteinInfo;
 pub use sa_index::peptide_search::SearchResult;
 use sa_index::{
-    binary::load_suffix_array,
     peptide_search::{search_all_peptides},
-    sa_searcher::BitVecSearcher,
-    SuffixArray
 };
-use sa_mappings::proteins::Proteins;
+use sa_index::sa_searcher::Searcher;
+use sa_index::suffix_to_protein_index::SuffixToProteinMapping;
 
 mod errors;
 
 pub struct Index {
-    searcher: BitVecSearcher
+    searcher: Searcher
 }
 
 impl Index {
-    pub fn try_from_files(index_file: &str, proteins_file: &str) -> Result<Self, IndexError> {
+    pub fn try_from_files(index_file: &str, proteins_file: &str, mapping_file: &str, use_mmap: bool) -> Result<Self, IndexError> {
+        eprintln!("Loading proteins from file: {}", proteins_file);
+        let proteins =
+            load_proteins_file(proteins_file, use_mmap).map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
 
-        let proteins = Proteins::try_from_database_file(proteins_file)
-            .map_err(|_| LoadIndexError::LoadProteinsErrors(
-                LoadIndexError::FileNotFound(proteins_file.to_string()).to_string(),
-            ))?;
-
+        eprintln!("Loading suffix array from file: {}", index_file);
         let suffix_array =
-            load_index_file(index_file).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?;
+            load_suffix_array_file(index_file, use_mmap).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?;
 
-        let searcher = BitVecSearcher::new(suffix_array, proteins);
+        eprintln!("Loading searcher from file: {}", mapping_file);
+        let SuffixToProteinMapping(suffix_to_protein_index) =
+            load_mapping_file(mapping_file, use_mmap).map_err(|err| LoadIndexError::LoadMappingError(err.to_string()))?;
 
-        Ok(Self { searcher })
+        Ok(Self { searcher: Searcher::new(suffix_array, proteins, suffix_to_protein_index) })
     }
 
     pub fn analyse(&self, peptides: &Vec<String>, equate_il: bool, tryptic: bool, cutoff: Option<usize>) -> Vec<SearchResult> {
         search_all_peptides(&self.searcher, peptides, cutoff.unwrap_or(10_000), equate_il, tryptic)
-    }
-}
-
-fn load_index_file(index_file: &str) -> Result<SuffixArray, LoadIndexError> {
-    // Open the suffix array file
-    let mut sa_file = File::open(index_file).map_err(
-        |_| LoadIndexError::FileNotFound(index_file.to_string())
-    )?;
-
-    // Create a buffer reader for the file
-    let mut reader = BufReader::new(&mut sa_file);
-
-    // Read the bits per value from the binary file (1 byte)
-    let mut bits_per_value_buffer = [0_u8; 1];
-    reader.read_exact(&mut bits_per_value_buffer).map_err(|_| {
-        LoadIndexError::LoadSuffixArrayError("Could not read the flags from the binary file".to_string())
-    })?;
-    let bits_per_value = bits_per_value_buffer[0];
-
-    if bits_per_value == 64 {
-        Ok(load_suffix_array(&mut reader).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?)
-    } else {
-        Ok(load_compressed_suffix_array(&mut reader, bits_per_value as usize)
-            .map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?)
     }
 }

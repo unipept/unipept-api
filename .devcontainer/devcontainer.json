@@ -6,7 +6,7 @@
 
   // Features to add to the dev container. More info: https://containers.dev/features.
   "features": {
-    "https://github.com/unipept/unipept-devcontainers/releases/download/v1.1.0/devcontainer-feature-unipept-index.tgz": {
+    "https://github.com/unipept/unipept-devcontainers/releases/download/v1.2.0/devcontainer-feature-unipept-index.tgz": {
       "version": "latest"
     },
     "ghcr.io/devcontainers/features/rust:1": {}
@@ -16,7 +16,7 @@
   "appPort": [80],
 
   // Updated to include sudo for permission safety and a check for lock files
-  "postCreateCommand": "sudo apt update && sudo apt install --yes libmysqlclient-dev && sudo rm -f /var/lib/opensearch/nodes/0/node.lock /var/lib/opensearch/nodes/0/_state/write.lock",
+  "postStartCommand": "unipept-start-services.sh",
 
   "customizations": {
     "jetbrains": {

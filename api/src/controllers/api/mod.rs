@@ -10,6 +10,7 @@ pub mod pept2taxa;
 pub mod peptinfo;
 pub mod protinfo;
 pub mod taxa2lca;
+pub mod taxa2rank;
 pub mod taxa2tree;
 pub mod taxonomy;
 

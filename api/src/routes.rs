@@ -15,7 +15,7 @@ use crate::{
     controllers::{
         api::{
             pept2ec, pept2funct, pept2go, pept2interpro, pept2lca, pept2prot, pept2taxa, peptinfo, protinfo, taxa2lca,
-            taxa2tree, taxonomy
+               taxa2rank, taxa2tree, taxonomy
         },
         datasets::sampledata,
         mpa::{pept2data},
@@ -103,7 +103,9 @@ fn create_api_v2_routes() -> Router<AppState> {
         "/taxa2tree",
         get(taxa2tree::get_json_handler_v2).post(taxa2tree::post_json_handler_v2),
         "/taxonomy",
-        get(taxonomy::get_json_handler_v2).post(taxonomy::post_json_handler_v2)
+        get(taxonomy::get_json_handler_v2).post(taxonomy::post_json_handler_v2),
+       "/taxa2rank",
+       get(taxa2rank::get_json_handler).post(taxa2rank::post_json_handler)
     )
     .route("/taxa2tree.html", get(taxa2tree::get_html_handler_v2).post(taxa2tree::post_html_handler_v2))
 }

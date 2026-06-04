@@ -121,12 +121,6 @@ async fn handler(
 
                 let taxa: Vec<u32> = filtered_proteins.iter().map(|protein| protein.taxon).unique().collect();
 
-                let taxa_to_return: Option<Vec<u32>> = if report_taxa {
-                    Some(taxa.clone())
-                } else {
-                    None
-                };
-
                 let lca = calculate_lca(
                     taxa.clone(),
                     LineageVersion::V2,
@@ -142,7 +136,7 @@ async fn handler(
                     lca: Some(lca as u32),
                     lineage,
                     fa: calculate_fa(&filtered_proteins),
-                    taxa: taxa_to_return,
+                    taxa: if report_taxa { Some(taxa) } else { None },
                     crap_filtered,
                 })
             })

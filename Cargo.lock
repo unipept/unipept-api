@@ -251,6 +251,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "bit-set"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
+dependencies = [
+ "bit-vec",
+]
+
+[[package]]
+name = "bit-vec"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
+
+[[package]]
 name = "bitarray"
 version = "0.1.0"
 source = "git+https://github.com/unipept/unipept-index.git#2ff35f06ab808a44f1542ddf4ff86e94f6c70f91"
@@ -633,6 +648,17 @@ dependencies = [
 name = "fa-compression"
 version = "0.1.0"
 source = "git+https://github.com/unipept/unipept-index.git#2ff35f06ab808a44f1542ddf4ff86e94f6c70f91"
+
+[[package]]
+name = "fancy-regex"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e24cb5a94bcae1e5408b0effca5cd7172ea3c5755049c5f3af4cd283a165298"
+dependencies = [
+ "bit-set",
+ "regex-automata",
+ "regex-syntax",
+]
 
 [[package]]
 name = "fastrand"
@@ -2540,6 +2566,7 @@ dependencies = [
  "criterion",
  "database",
  "datastore",
+ "fancy-regex",
  "http",
  "http-body-util",
  "index",

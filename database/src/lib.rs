@@ -217,6 +217,81 @@ pub async fn get_accessions_count_by_filter(
         .unwrap_or(0) as u32)
 }
 
+/// Retrieves all proteins from the database that belong to the given taxon ID
+///
+/// # Arguments
+/// * `client` - OpenSearch connection handle
+/// * `taxon_id` - NCBI taxon ID to retrieve proteins for
+///
+/// # Returns
+/// * Vector of `UniprotEntry` records for all proteins associated with the taxon
+/// * `DatabaseError` if the database operation fails
+///
+/// Uses `search_after` pagination to handle taxa with more than 10,000 proteins.
+pub async fn get_proteins_for_taxon(
+    client: &OpenSearch,
+    taxon_id: u32,
+) -> Result<Vec<UniprotEntry>, DatabaseError> {
+    const PAGE_SIZE: usize = 1000;
+    let mut all_proteins: Vec<UniprotEntry> = Vec::new();
+    let mut search_after: Option<String> = None;
+
+    loop {
+        let body = if let Some(ref last_accession) = search_after {
+            json!({
+                "query": { "term": { "taxon_id": taxon_id } },
+                "size": PAGE_SIZE,
+                "sort": [{ "uniprot_accession_number": "asc" }],
+                "search_after": [last_accession]
+            })
+        } else {
+            json!({
+                "query": { "term": { "taxon_id": taxon_id } },
+                "size": PAGE_SIZE,
+                "sort": [{ "uniprot_accession_number": "asc" }]
+            })
+        };
+
+        let response = client
+            .search(SearchParts::Index(&["uniprot_entries"]))
+            .body(body)
+            .send()
+            .await?;
+
+        if !response.status_code().is_success() {
+            return Err(GeneralError(response.text().await?));
+        }
+
+        let response_body: serde_json::Value = response.json().await?;
+
+        let hits = match response_body["hits"]["hits"].as_array() {
+            Some(h) => h,
+            None => break,
+        };
+
+        let hit_count = hits.len();
+
+        for hit in hits {
+            if let Ok(entry) = serde_json::from_value::<UniprotEntry>(hit["_source"].clone()) {
+                all_proteins.push(entry);
+            }
+        }
+
+        if hit_count < PAGE_SIZE {
+            break;
+        }
+
+        if let Some(last_hit) = hits.last() {
+            match last_hit["sort"][0].as_str() {
+                Some(sort_val) => search_after = Some(sort_val.to_string()),
+                None => break,
+            }
+        }
+    }
+
+    Ok(all_proteins)
+}
+
 /// Gets UniProt accession IDs from the database that match the given filter criteria
 ///
 /// # Arguments

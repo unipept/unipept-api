@@ -85,6 +85,10 @@ impl TaxonStore {
         self.mapper.get(&key).map(|(name, _, _)| name)
     }
 
+    pub fn get_rank(&self, key: u32) -> Option<&LineageRank> {
+        self.mapper.get(&key).map(|(_, rank, _)| rank)
+    }
+
     pub fn is_valid(&self, key: u32) -> bool {
         self.mapper.contains_key(&key) && self.mapper[&key].2
     }

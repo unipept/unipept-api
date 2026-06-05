@@ -34,6 +34,22 @@ pub struct UniquePeptidesResult {
     total_unique_peptides: usize,
 }
 
+fn cleave_sequence(sequence: &str, re: &Regex) -> Vec<String> {
+    let mut fragments = Vec::new();
+    let mut start = 0;
+    for m in re.find_iter(sequence).flatten() {
+        let end = m.end();
+        if end > start {
+            fragments.push(sequence[start..end].to_string());
+        }
+        start = end;
+    }
+    if start < sequence.len() {
+        fragments.push(sequence[start..].to_string());
+    }
+    fragments
+}
+
 async fn handler(
     State(AppState { index, datastore, database, .. }): State<AppState>,
     Parameters { taxon_id, cleavage_regex, min_length }: Parameters,
@@ -41,10 +57,9 @@ async fn handler(
     let re = Regex::new(&cleavage_regex)
         .map_err(|e| ApiError::UnknownRankError(format!("Invalid cleavage_regex: {}", e)))?;
 
-    let taxon_info = datastore.taxon_store().get(taxon_id)
+    let rank = datastore.taxon_store().get_rank(taxon_id)
         .ok_or_else(|| ApiError::UnknownRankError(format!("Taxon {} not found", taxon_id)))?;
 
-    let rank = &taxon_info.1;
     if *rank != LineageRank::Species && *rank != LineageRank::Strain {
         return Err(ApiError::UnknownRankError(format!(
             "Taxon {} is at rank '{}', but must be at species or strain level",
@@ -54,25 +69,12 @@ async fn handler(
 
     let proteins = get_proteins_for_taxon(database.get_conn(), taxon_id).await?;
 
-    let mut peptides: Vec<String> = proteins.iter().flat_map(|protein| {
-        let sequence = &protein.protein;
-        let mut fragments = Vec::new();
-        let mut start = 0;
-        for m in re.find_iter(sequence).flatten() {
-            let end = m.end();
-            if end > start {
-                fragments.push(sequence[start..end].to_string());
-            }
-            start = end;
-        }
-        if start < sequence.len() {
-            fragments.push(sequence[start..].to_string());
-        }
-        fragments
-    }).collect();
+    let mut peptides: Vec<String> = proteins.iter()
+        .flat_map(|protein| cleave_sequence(&protein.protein, &re))
+        .filter(|f| f.len() >= min_length)
+        .collect();
 
-    peptides.retain(|p| p.len() >= min_length);
-    peptides.sort();
+    peptides.sort_unstable();
     peptides.dedup();
 
     let total_peptides = peptides.len();
@@ -83,16 +85,12 @@ async fn handler(
     }).await?;
 
     let unique_peptides: Vec<String> = peptides.into_iter()
-        .zip(results.into_iter())
+        .zip(results)
         .filter_map(|(peptide, result)| {
-            if result.cutoff_used || result.proteins.is_empty() {
-                return None;
-            }
-            if result.proteins.iter().all(|p| p.taxon == taxon_id) {
-                Some(peptide)
-            } else {
-                None
-            }
+            (!result.cutoff_used
+                && !result.proteins.is_empty()
+                && result.proteins.iter().all(|p| p.taxon == taxon_id))
+            .then_some(peptide)
         })
         .collect();
 
@@ -116,34 +114,20 @@ generate_handlers!(
 
 #[cfg(test)]
 mod tests {
+    use super::cleave_sequence;
     use fancy_regex::Regex;
-
-    fn cleave(sequence: &str, pattern: &str) -> Vec<String> {
-        let re = Regex::new(pattern).unwrap();
-        let mut fragments = Vec::new();
-        let mut start = 0;
-        for m in re.find_iter(sequence).flatten() {
-            let end = m.end();
-            if end > start {
-                fragments.push(sequence[start..end].to_string());
-            }
-            start = end;
-        }
-        if start < sequence.len() {
-            fragments.push(sequence[start..].to_string());
-        }
-        fragments
-    }
 
     #[test]
     fn tryptic_cleavage_splits_after_k_and_r_not_before_p() {
+        let re = Regex::new("[KR](?!P)").unwrap();
         // K at pos 1 not followed by P → split after K; R at end of string → split after R
-        assert_eq!(cleave("MKVTLPGAR", "[KR](?!P)"), vec!["MK", "VTLPGAR"]);
+        assert_eq!(cleave_sequence("MKVTLPGAR", &re), vec!["MK", "VTLPGAR"]);
     }
 
     #[test]
     fn tryptic_cleavage_skips_k_before_p() {
+        let re = Regex::new("[KR](?!P)").unwrap();
         // K at pos 3 is followed by P → no split; R at end of string → split after R
-        assert_eq!(cleave("ACTKPDEFR", "[KR](?!P)"), vec!["ACTKPDEFR"]);
+        assert_eq!(cleave_sequence("ACTKPDEFR", &re), vec!["ACTKPDEFR"]);
     }
 }

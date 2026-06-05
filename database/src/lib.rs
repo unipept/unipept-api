@@ -233,24 +233,18 @@ pub async fn get_proteins_for_taxon(
     taxon_id: u32,
 ) -> Result<Vec<UniprotEntry>, DatabaseError> {
     const PAGE_SIZE: usize = 1000;
-    let mut all_proteins: Vec<UniprotEntry> = Vec::new();
+    let mut all_proteins: Vec<UniprotEntry> = Vec::with_capacity(PAGE_SIZE);
     let mut search_after: Option<String> = None;
 
     loop {
-        let body = if let Some(ref last_accession) = search_after {
-            json!({
-                "query": { "term": { "taxon_id": taxon_id } },
-                "size": PAGE_SIZE,
-                "sort": [{ "uniprot_accession_number": "asc" }],
-                "search_after": [last_accession]
-            })
-        } else {
-            json!({
-                "query": { "term": { "taxon_id": taxon_id } },
-                "size": PAGE_SIZE,
-                "sort": [{ "uniprot_accession_number": "asc" }]
-            })
-        };
+        let mut body = json!({
+            "query": { "term": { "taxon_id": taxon_id } },
+            "size": PAGE_SIZE,
+            "sort": [{ "uniprot_accession_number": "asc" }]
+        });
+        if let Some(ref last_accession) = search_after {
+            body["search_after"] = json!([last_accession]);
+        }
 
         let response = client
             .search(SearchParts::Index(&["uniprot_entries"]))

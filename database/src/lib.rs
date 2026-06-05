@@ -217,6 +217,84 @@ pub async fn get_accessions_count_by_filter(
         .unwrap_or(0) as u32)
 }
 
+/// Counts proteins per taxon ID for a given list of taxon IDs.
+///
+/// # Arguments
+/// * `client` - OpenSearch client handle
+/// * `taxon_ids` - Slice of taxon IDs to count proteins for
+///
+/// # Returns
+/// * HashMap mapping each taxon ID to its protein count. Taxon IDs with no proteins are absent
+///   from the map (i.e., their count is implicitly 0).
+/// * `DatabaseError` if the query fails
+// OpenSearch enforces a hard limit on the number of terms in a single Terms Query.
+const OPENSEARCH_MAX_TERMS: usize = 65_000;
+
+pub async fn get_protein_counts_by_taxon_ids(
+    client: &OpenSearch,
+    taxon_ids: &[i32],
+) -> Result<HashMap<u32, u32>, DatabaseError> {
+    if taxon_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let taxon_ids_positive: Vec<i32> = taxon_ids.iter().copied().filter(|&id| id > 0).collect();
+
+    if taxon_ids_positive.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let mut merged: HashMap<u32, u32> = HashMap::new();
+
+    for chunk in taxon_ids_positive.chunks(OPENSEARCH_MAX_TERMS) {
+        let taxon_ids_json: Vec<serde_json::Value> = chunk.iter().map(|&id| json!(id)).collect();
+        let size = taxon_ids_json.len();
+
+        let body = json!({
+            "query": {
+                "terms": {
+                    "taxon_id": taxon_ids_json
+                }
+            },
+            "aggs": {
+                "proteins_per_taxon": {
+                    "terms": {
+                        "field": "taxon_id",
+                        "size": size
+                    }
+                }
+            },
+            "size": 0,
+            "track_total_hits": false
+        });
+
+        let response = client
+            .search(SearchParts::Index(&["uniprot_entries"]))
+            .body(body)
+            .send()
+            .await?;
+
+        if !response.status_code().is_success() {
+            return Err(GeneralError(response.text().await?));
+        }
+
+        let response_body: serde_json::Value = response.json().await?;
+
+        if let Some(buckets) = response_body["aggregations"]["proteins_per_taxon"]["buckets"].as_array() {
+            for bucket in buckets {
+                if let (Some(taxon_id), Some(count)) = (
+                    bucket["key"].as_u64().map(|v| v as u32),
+                    bucket["doc_count"].as_u64().map(|v| v as u32),
+                ) {
+                    *merged.entry(taxon_id).or_insert(0) += count;
+                }
+            }
+        }
+    }
+
+    Ok(merged)
+}
+
 /// Gets UniProt accession IDs from the database that match the given filter criteria
 ///
 /// # Arguments

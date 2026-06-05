@@ -25,6 +25,8 @@ pub enum ApiError {
     DatabaseError(#[from] database::DatabaseError),
     #[error("Unknown rank error")]
     UnknownRankError(String),
+    #[error("Invalid regex: {0}")]
+    InvalidRegexError(String),
     #[error("Join error")]
     JoinError(#[from] tokio::task::JoinError),
     #[error("Not implemented: {0}")]
@@ -40,6 +42,7 @@ impl IntoResponse for ApiError {
             ApiError::JsonError(_) => (StatusCode::BAD_REQUEST, "Invalid JSON".to_string()),
             ApiError::DatabaseError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
             ApiError::UnknownRankError(message) => (StatusCode::BAD_REQUEST, message),
+            ApiError::InvalidRegexError(message) => (StatusCode::BAD_REQUEST, message),
             ApiError::NotImplementedError(message) => (StatusCode::NOT_IMPLEMENTED, message),
             ApiError::JoinError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
         };

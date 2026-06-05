@@ -233,7 +233,7 @@ pub async fn get_proteins_for_taxon(
     taxon_id: u32,
 ) -> Result<Vec<UniprotEntry>, DatabaseError> {
     const PAGE_SIZE: usize = 1000;
-    let mut all_proteins: Vec<UniprotEntry> = Vec::with_capacity(PAGE_SIZE);
+    let mut all_proteins: Vec<UniprotEntry> = Vec::new();
     let mut search_after: Option<String> = None;
 
     loop {
@@ -264,6 +264,7 @@ pub async fn get_proteins_for_taxon(
         };
 
         let hit_count = hits.len();
+        all_proteins.reserve(hit_count);
 
         for hit in hits {
             if let Ok(entry) = serde_json::from_value::<UniprotEntry>(hit["_source"].clone()) {

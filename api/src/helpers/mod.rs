@@ -1,3 +1,4 @@
+pub mod digestion;
 pub mod ec_helper;
 pub mod fa_helper;
 pub mod go_helper;

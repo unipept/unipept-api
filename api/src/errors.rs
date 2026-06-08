@@ -30,7 +30,9 @@ pub enum ApiError {
     #[error("Join error")]
     JoinError(#[from] tokio::task::JoinError),
     #[error("Not implemented: {0}")]
-    NotImplementedError(String)
+    NotImplementedError(String),
+    #[error("Invalid parameter: {0}")]
+    InvalidParameterError(String)
 }
 
 impl IntoResponse for ApiError {
@@ -44,6 +46,7 @@ impl IntoResponse for ApiError {
             ApiError::UnknownRankError(message) => (StatusCode::BAD_REQUEST, message),
             ApiError::InvalidRegexError(message) => (StatusCode::BAD_REQUEST, message),
             ApiError::NotImplementedError(message) => (StatusCode::NOT_IMPLEMENTED, message),
+            ApiError::InvalidParameterError(message) => (StatusCode::BAD_REQUEST, message),
             ApiError::JoinError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
         };
 

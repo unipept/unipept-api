@@ -124,6 +124,18 @@ pub fn get_lineage_array(taxon_id: u32, version: LineageVersion, lineage_store: 
     }
 }
 
+/// Returns `true` if `ancestor_id` appears anywhere in the lineage of `taxon_id`.
+///
+/// Negative placeholder entries in the lineage are compared via `unsigned_abs()`, matching the
+/// convention used throughout the codebase (e.g. `TaxaFilter`). The taxon's own ID is not part
+/// of its lineage array, so `ancestor_id == taxon_id` returns `false`.
+pub fn is_ancestor(ancestor_id: u32, taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore) -> bool {
+    get_lineage_array(taxon_id, version, lineage_store)
+        .iter()
+        .flatten()
+        .any(|a| a.unsigned_abs() == ancestor_id)
+}
+
 pub fn get_lineage_array_numeric(taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore) -> Vec<i32> {
     match version {
         LineageVersion::V2 => v2::get_lineage_array_numeric(taxon_id, lineage_store)

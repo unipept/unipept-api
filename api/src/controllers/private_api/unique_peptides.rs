@@ -77,6 +77,8 @@
 //! anywhere in the LCA's own lineage array (meaning the parent is an ancestor of the LCA, so the
 //! LCA is a descendant of the parent).
 
+use std::time::Instant;
+
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
@@ -90,7 +92,7 @@ use crate::{
     },
     AppState,
 };
-use database::get_proteins_for_taxon;
+use database::get_protein_sequences_for_taxon;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -145,10 +147,14 @@ async fn handler(
         }
     }
 
-    let proteins = get_proteins_for_taxon(database.get_conn(), taxon_id).await?;
+    let t_start = Instant::now();
 
-    let mut peptides: Vec<String> = proteins.iter()
-        .flat_map(|protein| cleave_sequence(&protein.protein, &re))
+    let sequences = get_protein_sequences_for_taxon(database.get_conn(), taxon_id).await?;
+    tracing::info!(taxon_id, proteins = sequences.len(), elapsed_ms = t_start.elapsed().as_millis(), "protein fetch complete");
+
+    let t_digest = Instant::now();
+    let mut peptides: Vec<String> = sequences.iter()
+        .flat_map(|sequence| cleave_sequence(sequence, &re))
         .filter(|f| f.len() >= min_length)
         .collect();
 
@@ -156,15 +162,19 @@ async fn handler(
     peptides.dedup();
 
     let total_peptides = peptides.len();
+    tracing::info!(taxon_id, peptides = total_peptides, elapsed_ms = t_digest.elapsed().as_millis(), "digestion and dedup complete");
 
+    let t_index = Instant::now();
     let (peptides, results) = tokio::task::spawn_blocking(move || {
         let results = index.analyse(&peptides, false, false, Some(10_000));
         (peptides, results)
     }).await?;
+    tracing::info!(taxon_id, elapsed_ms = t_index.elapsed().as_millis(), "suffix array search complete");
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
+    let t_classify = Instant::now();
     let mut unique_peptides: Vec<String> = Vec::new();
     let mut unique_to_parent: Vec<String> = Vec::new();
 
@@ -197,6 +207,8 @@ async fn handler(
             }
         }
     }
+    tracing::info!(taxon_id, elapsed_ms = t_classify.elapsed().as_millis(), "classification complete");
+    tracing::info!(taxon_id, total_elapsed_ms = t_start.elapsed().as_millis(), "unique_peptides request complete");
 
     let total_unique_peptides = unique_peptides.len();
 

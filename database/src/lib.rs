@@ -6,6 +6,7 @@ use models::UniprotEntry;
 use opensearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
 use opensearch::http::{Url};
 use opensearch::{OpenSearch, SearchParts};
+use serde::Deserialize;
 use serde_json::json;
 use crate::DatabaseError::GeneralError;
 
@@ -364,6 +365,75 @@ pub async fn get_proteins_for_taxon(
     }
 
     Ok(all_proteins)
+}
+
+/// Retrieves only the protein sequences (amino acid strings) for all UniProt entries associated
+/// with a given taxon. Equivalent to `get_proteins_for_taxon` but fetches only the `sequence`
+/// field from OpenSearch, reducing payload size and deserialization cost for callers that do not
+/// need the full `UniprotEntry`.
+pub async fn get_protein_sequences_for_taxon(
+    client: &OpenSearch,
+    taxon_id: u32,
+) -> Result<Vec<String>, DatabaseError> {
+    #[derive(Deserialize)]
+    struct SeqDoc {
+        sequence: String,
+    }
+
+    const PAGE_SIZE: usize = 1000;
+    let mut sequences: Vec<String> = Vec::new();
+    let mut search_after: Option<String> = None;
+
+    loop {
+        let mut body = json!({
+            "query": { "term": { "taxon_id": taxon_id } },
+            "_source": ["sequence"],
+            "size": PAGE_SIZE,
+            "sort": [{ "uniprot_accession_number": "asc" }]
+        });
+        if let Some(ref last_accession) = search_after {
+            body["search_after"] = json!([last_accession]);
+        }
+
+        let response = client
+            .search(SearchParts::Index(&["uniprot_entries"]))
+            .body(body)
+            .send()
+            .await?;
+
+        if !response.status_code().is_success() {
+            return Err(GeneralError(response.text().await?));
+        }
+
+        let response_body: serde_json::Value = response.json().await?;
+
+        let hits = match response_body["hits"]["hits"].as_array() {
+            Some(h) => h,
+            None => break,
+        };
+
+        let hit_count = hits.len();
+        sequences.reserve(hit_count);
+
+        for hit in hits {
+            if let Ok(doc) = serde_json::from_value::<SeqDoc>(hit["_source"].clone()) {
+                sequences.push(doc.sequence);
+            }
+        }
+
+        if hit_count < PAGE_SIZE {
+            break;
+        }
+
+        if let Some(last_hit) = hits.last() {
+            match last_hit["sort"][0].as_str() {
+                Some(sort_val) => search_after = Some(sort_val.to_string()),
+                None => break,
+            }
+        }
+    }
+
+    Ok(sequences)
 }
 
 /// Gets UniProt accession IDs from the database that match the given filter criteria

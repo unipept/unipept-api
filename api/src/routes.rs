@@ -28,7 +28,7 @@ use crate::{
     AppState
 };
 
-const REQUEST_TIMEOUT_DURATION: u64 = 150;
+const REQUEST_TIMEOUT_DURATION: u64 = 900;
 
 pub fn create_router(state: AppState) -> Router {
     init_tracing_subscriber();

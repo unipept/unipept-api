@@ -3,8 +3,9 @@ use errors::LoadIndexError;
 use sa_server::{load_mapping_file, load_proteins_file, load_suffix_array_file};
 pub use sa_index::peptide_search::ProteinInfo;
 pub use sa_index::peptide_search::SearchResult;
+pub use sa_index::peptide_search::TaxaSearchResult;
 use sa_index::{
-    peptide_search::{search_all_peptides},
+    peptide_search::{search_all_peptides, search_all_taxa},
 };
 use sa_index::sa_searcher::Searcher;
 use sa_index::suffix_to_protein_index::SuffixToProteinMapping;
@@ -34,5 +35,9 @@ impl Index {
 
     pub fn analyse(&self, peptides: &Vec<String>, equate_il: bool, tryptic: bool, cutoff: Option<usize>) -> Vec<SearchResult> {
         search_all_peptides(&self.searcher, peptides, cutoff.unwrap_or(10_000), equate_il, tryptic)
+    }
+
+    pub fn analyse_taxa(&self, peptides: &[String], equate_il: bool, tryptic: bool, cutoff: Option<usize>) -> Vec<TaxaSearchResult> {
+        search_all_taxa(&self.searcher, peptides, cutoff.unwrap_or(10_000), equate_il, tryptic)
     }
 }

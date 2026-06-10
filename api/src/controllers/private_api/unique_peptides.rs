@@ -77,7 +77,7 @@
 //! anywhere in the LCA's own lineage array (meaning the parent is an ancestor of the LCA, so the
 //! LCA is a descendant of the parent).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::time::Instant;
 
 use axum::{extract::State, Json};
@@ -166,7 +166,7 @@ async fn handler(
 
     let t_index = Instant::now();
     let (peptides, results) = tokio::task::spawn_blocking(move || {
-        let results = index.analyse(&peptides, false, false, Some(10_000));
+        let results = index.analyse_taxa(&peptides, false, false, Some(10_000));
         (peptides, results)
     }).await?;
     tracing::info!(taxon_id, elapsed_ms = t_index.elapsed().as_millis(), "suffix array search complete");
@@ -208,45 +208,27 @@ async fn handler(
     let mut unique_peptides: Vec<String> = Vec::new();
     let mut unique_to_parent: Vec<String> = Vec::new();
 
-    // Per-peptide taxon cache: maps protein taxon → membership result.
-    // Cleared (not reallocated) between peptides so each distinct taxon within a peptide's
-    // protein list is looked up in descendant_set / parent_set exactly once, regardless of
-    // how many individual proteins share that taxon.
-    let mut taxon_cache: HashMap<u32, bool> = HashMap::new();
     let mut total_proteins_iterated: u64 = 0;
 
     for (peptide, result) in peptides.into_iter().zip(results) {
-        // Skip peptides where the match set is unreliable: the cutoff was hit (too many proteins
-        // matched, taxon membership cannot be determined) or no proteins were found at all.
-        if result.cutoff_used || result.proteins.is_empty() {
+        if result.cutoff_used || result.taxa.is_empty() {
             continue;
         }
 
-        total_proteins_iterated += result.proteins.len() as u64;
+        // result.taxa is already sorted and deduplicated by search_all_taxa, so each taxon
+        // appears at most once — no per-peptide cache is needed.
+        total_proteins_iterated += result.taxa.len() as u64;
 
-        taxon_cache.clear();
-
-        //For each protein matching this peptide: have I seen this protein's taxon before this
-        // peptide? If yes, reuse the answer. If no, check whether the taxon is in descendant_set
-        // and remember the result. Return true only if every protein's taxon is confirmed to be
-        // in the subtree.
-        if result.proteins.iter().all(|p| {
-            *taxon_cache.entry(p.taxon).or_insert_with(|| descendant_set.contains(&p.taxon))
-        }) {
+        if result.taxa.iter().all(|&t| descendant_set.contains(&t)) {
             unique_peptides.push(peptide);
         } else if let Some(ref parent_set) = parent_descendant_set {
-            // "LCA of valid taxa is within the parent subtree" is equivalent to
-            // "every valid-taxon protein is within the parent subtree", which avoids
-            // the LCA computation entirely.
-            taxon_cache.clear();
             let mut has_valid = false;
-            let all_in_parent = result.proteins.iter()
-                .filter(|p| taxon_store.is_valid(p.taxon))
-                .all(|p| {
+            let all_in_parent = result.taxa.iter()
+                .filter(|&&t| taxon_store.is_valid(t))
+                .all(|&t| {
                     has_valid = true;
-                    *taxon_cache.entry(p.taxon).or_insert_with(|| parent_set.contains(&p.taxon))
+                    parent_set.contains(&t)
                 });
-
             if has_valid && all_in_parent {
                 unique_to_parent.push(peptide);
             }

@@ -91,7 +91,7 @@ impl Lineage {
             self.subspecies, self.strain, self.varietas, self.forma,
         ]
         .iter()
-        .any(|v| v.map_or(false, |id| id.unsigned_abs() == ancestor_id))
+        .any(|v| v.is_some_and(|id| id.unsigned_abs() == ancestor_id))
     }
 }
 

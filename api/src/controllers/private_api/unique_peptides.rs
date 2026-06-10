@@ -71,12 +71,10 @@
 //!
 //! ## Response fields
 //!
-//! | Field                             | Always present   | Description |
-//! |-----------------------------------|------------------|-------------|
-//! | `unique_peptides`                 | yes              | Peptide sequences that occur exclusively in `taxon_id` across all of UniProt. |
-//! | `total_unique_peptides`           | yes              | Length of `unique_peptides` for this batch. |
-//! | `unique_to_parent`                | only with parent | Peptide sequences that are not fully unique to `taxon_id` but whose LCA (over all UniProt proteins containing the peptide) is equal to `parent_id` or is a descendant of it. |
-//! | `total_unique_to_parent_peptides` | only with parent | Length of `unique_to_parent` for this batch. |
+//! | Field             | Always present   | Description |
+//! |-------------------|------------------|-------------|
+//! | `unique_peptides` | yes              | Peptide sequences that occur exclusively in `taxon_id` across all of UniProt. |
+//! | `unique_to_parent`| only with parent | Peptide sequences that are not fully unique to `taxon_id` but whose LCA (over all UniProt proteins containing the peptide) is equal to `parent_id` or is a descendant of it. |
 //!
 //! `unique_peptides` and `unique_to_parent` are always disjoint: a peptide appears in at most one
 //! of the two lists.
@@ -148,15 +146,10 @@ pub struct UniquePeptidesResult {
     /// Peptides whose every matching UniProt protein belongs to `taxon_id` or a descendant of it
     /// (e.g. a strain under a species). No protein containing the peptide falls outside the subtree.
     unique_peptides: Vec<String>,
-    /// Number of entries in `unique_peptides` for this batch.
-    total_unique_peptides: usize,
     /// Non-unique peptides whose LCA of all matching UniProt proteins falls within the subtree of
     /// `parent_id`. Absent when `parent_id` was not supplied. Disjoint from `unique_peptides`.
     #[serde(skip_serializing_if = "Option::is_none")]
     unique_to_parent: Option<Vec<String>>,
-    /// Number of entries in `unique_to_parent` for this batch. Absent when `parent_id` was not supplied.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    total_unique_to_parent_peptides: Option<usize>,
 }
 
 async fn count_handler(
@@ -274,20 +267,15 @@ async fn handler(
     );
     tracing::info!(taxon_id, total_elapsed_ms = t_start.elapsed().as_millis(), "unique_peptides request complete");
 
-    let total_unique_peptides = unique_peptides.len();
-
-    let (unique_to_parent_field, total_unique_to_parent_field) = if parent_id.is_some() {
-        let count = unique_to_parent.len();
-        (Some(unique_to_parent), Some(count))
+    let unique_to_parent_field = if parent_id.is_some() {
+        Some(unique_to_parent)
     } else {
-        (None, None)
+        None
     };
 
     Ok(UniquePeptidesResult {
         unique_peptides,
-        total_unique_peptides,
         unique_to_parent: unique_to_parent_field,
-        total_unique_to_parent_peptides: total_unique_to_parent_field,
     })
 }
 

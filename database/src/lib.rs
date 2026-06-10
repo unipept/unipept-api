@@ -297,143 +297,97 @@ pub async fn get_protein_counts_by_taxon_ids(
 }
 
 
-/// Retrieves all proteins from the database that belong to the given taxon ID
-///
-/// # Arguments
-/// * `client` - OpenSearch connection handle
-/// * `taxon_id` - NCBI taxon ID to retrieve proteins for
-///
-/// # Returns
-/// * Vector of `UniprotEntry` records for all proteins associated with the taxon
-/// * `DatabaseError` if the database operation fails
-///
+/// Pages through all `uniprot_entries` documents for `taxon_id` using `search_after` and returns
+/// the raw `_source` JSON value for each hit. Pass `source_filter` to restrict which fields
+/// OpenSearch includes in each document (e.g. `Some(&["sequence"])`); `None` fetches all fields.
+async fn fetch_taxon_sources(
+    client: &OpenSearch,
+    taxon_id: u32,
+    source_filter: Option<&[&str]>,
+) -> Result<Vec<serde_json::Value>, DatabaseError> {
+    const PAGE_SIZE: usize = 1000;
+    let mut all_sources: Vec<serde_json::Value> = Vec::new();
+    let mut search_after: Option<String> = None;
+
+    loop {
+        let mut body = json!({
+            "query": { "term": { "taxon_id": taxon_id } },
+            "size": PAGE_SIZE,
+            "sort": [{ "uniprot_accession_number": "asc" }]
+        });
+        if let Some(fields) = source_filter {
+            body["_source"] = json!(fields);
+        }
+        if let Some(ref cursor) = search_after {
+            body["search_after"] = json!([cursor]);
+        }
+
+        let response = client
+            .search(SearchParts::Index(&["uniprot_entries"]))
+            .body(body)
+            .send()
+            .await?;
+
+        if !response.status_code().is_success() {
+            return Err(GeneralError(response.text().await?));
+        }
+
+        let response_body: serde_json::Value = response.json().await?;
+        let hits = match response_body["hits"]["hits"].as_array() {
+            Some(h) => h,
+            None => break,
+        };
+
+        let hit_count = hits.len();
+        all_sources.reserve(hit_count);
+        for hit in hits {
+            all_sources.push(hit["_source"].clone());
+        }
+
+        if hit_count < PAGE_SIZE {
+            break;
+        }
+
+        if let Some(last_hit) = hits.last() {
+            match last_hit["sort"][0].as_str() {
+                Some(sort_val) => search_after = Some(sort_val.to_string()),
+                None => break,
+            }
+        }
+    }
+
+    Ok(all_sources)
+}
+
+/// Retrieves all proteins from the database that belong to the given taxon ID.
 /// Uses `search_after` pagination to handle taxa with more than 10,000 proteins.
 pub async fn get_proteins_for_taxon(
     client: &OpenSearch,
     taxon_id: u32,
 ) -> Result<Vec<UniprotEntry>, DatabaseError> {
-    const PAGE_SIZE: usize = 1000;
-    let mut all_proteins: Vec<UniprotEntry> = Vec::new();
-    let mut search_after: Option<String> = None;
-
-    loop {
-        let mut body = json!({
-            "query": { "term": { "taxon_id": taxon_id } },
-            "size": PAGE_SIZE,
-            "sort": [{ "uniprot_accession_number": "asc" }]
-        });
-        if let Some(ref last_accession) = search_after {
-            body["search_after"] = json!([last_accession]);
-        }
-
-        let response = client
-            .search(SearchParts::Index(&["uniprot_entries"]))
-            .body(body)
-            .send()
-            .await?;
-
-        if !response.status_code().is_success() {
-            return Err(GeneralError(response.text().await?));
-        }
-
-        let response_body: serde_json::Value = response.json().await?;
-
-        let hits = match response_body["hits"]["hits"].as_array() {
-            Some(h) => h,
-            None => break,
-        };
-
-        let hit_count = hits.len();
-        all_proteins.reserve(hit_count);
-
-        for hit in hits {
-            if let Ok(entry) = serde_json::from_value::<UniprotEntry>(hit["_source"].clone()) {
-                all_proteins.push(entry);
-            }
-        }
-
-        if hit_count < PAGE_SIZE {
-            break;
-        }
-
-        if let Some(last_hit) = hits.last() {
-            match last_hit["sort"][0].as_str() {
-                Some(sort_val) => search_after = Some(sort_val.to_string()),
-                None => break,
-            }
-        }
-    }
-
-    Ok(all_proteins)
+    Ok(fetch_taxon_sources(client, taxon_id, None)
+        .await?
+        .into_iter()
+        .filter_map(|src| serde_json::from_value(src).ok())
+        .collect())
 }
 
-/// Retrieves only the protein sequences (amino acid strings) for all UniProt entries associated
-/// with a given taxon. Equivalent to `get_proteins_for_taxon` but fetches only the `sequence`
-/// field from OpenSearch, reducing payload size and deserialization cost for callers that do not
-/// need the full `UniprotEntry`.
+/// Retrieves only the amino acid sequences for all UniProt entries associated with `taxon_id`.
+/// Fetches only the `sequence` field from OpenSearch, reducing payload size compared to
+/// `get_proteins_for_taxon` for callers that do not need the full `UniprotEntry`.
 pub async fn get_protein_sequences_for_taxon(
     client: &OpenSearch,
     taxon_id: u32,
 ) -> Result<Vec<String>, DatabaseError> {
     #[derive(Deserialize)]
-    struct SeqDoc {
-        sequence: String,
-    }
+    struct SeqDoc { sequence: String }
 
-    const PAGE_SIZE: usize = 1000;
-    let mut sequences: Vec<String> = Vec::new();
-    let mut search_after: Option<String> = None;
-
-    loop {
-        let mut body = json!({
-            "query": { "term": { "taxon_id": taxon_id } },
-            "_source": ["sequence"],
-            "size": PAGE_SIZE,
-            "sort": [{ "uniprot_accession_number": "asc" }]
-        });
-        if let Some(ref last_accession) = search_after {
-            body["search_after"] = json!([last_accession]);
-        }
-
-        let response = client
-            .search(SearchParts::Index(&["uniprot_entries"]))
-            .body(body)
-            .send()
-            .await?;
-
-        if !response.status_code().is_success() {
-            return Err(GeneralError(response.text().await?));
-        }
-
-        let response_body: serde_json::Value = response.json().await?;
-
-        let hits = match response_body["hits"]["hits"].as_array() {
-            Some(h) => h,
-            None => break,
-        };
-
-        let hit_count = hits.len();
-        sequences.reserve(hit_count);
-
-        for hit in hits {
-            if let Ok(doc) = serde_json::from_value::<SeqDoc>(hit["_source"].clone()) {
-                sequences.push(doc.sequence);
-            }
-        }
-
-        if hit_count < PAGE_SIZE {
-            break;
-        }
-
-        if let Some(last_hit) = hits.last() {
-            match last_hit["sort"][0].as_str() {
-                Some(sort_val) => search_after = Some(sort_val.to_string()),
-                None => break,
-            }
-        }
-    }
-
-    Ok(sequences)
+    Ok(fetch_taxon_sources(client, taxon_id, Some(&["sequence"]))
+        .await?
+        .into_iter()
+        .filter_map(|src| serde_json::from_value::<SeqDoc>(src).ok())
+        .map(|d| d.sequence)
+        .collect())
 }
 
 /// Gets UniProt accession IDs from the database that match the given filter criteria

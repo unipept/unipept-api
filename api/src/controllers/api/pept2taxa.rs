@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
@@ -74,7 +72,7 @@ async fn handler(
 ) -> Result<Vec<TaxaInformation>, ApiError> {
     let input = sanitize_peptides(input);
     let result = tokio::task::spawn_blocking(move || {
-        index.analyse(&input, equate_il, tryptic, Some(cutoff))
+        index.analyse_taxa(&input, equate_il, tryptic, Some(cutoff))
     }).await?;
 
     let taxon_store = datastore.taxon_store();
@@ -84,7 +82,7 @@ async fn handler(
         return Ok(result
             .into_iter()
             .filter_map(|item| {
-                let item_taxa: Vec<u32> = item.proteins.iter().map(|protein| protein.taxon).filter(|&taxon_id| taxon_store.is_valid(taxon_id)).collect();
+                let item_taxa: Vec<u32> = item.taxa.iter().copied().filter(|&t| taxon_store.is_valid(t)).collect();
 
                 if item_taxa.is_empty() {
                     return None;
@@ -104,7 +102,8 @@ async fn handler(
         .into_iter()
         .flat_map(|item| {
             let cutoff_used = item.cutoff_used;
-            item.proteins.iter().map(|protein| protein.taxon).collect::<HashSet<u32>>().into_iter().filter_map(
+            let sequence = item.sequence;
+            item.taxa.into_iter().filter_map(
                 move |taxon| {
                     let (name, rank, _) = taxon_store.get(taxon)?;
                     let lineage = match (extra, names) {
@@ -114,7 +113,7 @@ async fn handler(
                     };
 
                     Some(TaxaInformation::Dense(DenseTaxaInformation {
-                        peptide: item.sequence.clone(),
+                        peptide: sequence.clone(),
                         cutoff_used,
                         taxon: Taxon {
                             taxon_id: taxon,

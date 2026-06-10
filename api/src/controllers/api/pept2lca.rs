@@ -58,7 +58,7 @@ async fn handler(
 ) -> Result<Vec<LcaInformation>, ApiError> {
     let input = sanitize_peptides(input);
     let result = tokio::task::spawn_blocking(move || {
-        index.analyse(&input, equate_il, false, Some(cutoff))
+        index.analyse_taxa(&input, equate_il, false, Some(cutoff))
     }).await?;
 
     let taxon_store = datastore.taxon_store();
@@ -68,7 +68,7 @@ async fn handler(
         .into_iter()
         .filter_map(|item| {
             let lca = calculate_lca(
-                item.proteins.iter().map(|protein| protein.taxon).collect(),
+                item.taxa,
                 version,
                 taxon_store,
                 lineage_store,

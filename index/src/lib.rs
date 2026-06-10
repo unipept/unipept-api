@@ -33,10 +33,12 @@ impl Index {
         Ok(Self { searcher: Searcher::new(suffix_array, proteins, suffix_to_protein_index) })
     }
 
-    pub fn analyse(&self, peptides: &Vec<String>, equate_il: bool, tryptic: bool, cutoff: Option<usize>) -> Vec<SearchResult> {
+    pub fn analyse(&self, peptides: &[String], equate_il: bool, tryptic: bool, cutoff: Option<usize>) -> Vec<SearchResult> {
         search_all_peptides(&self.searcher, peptides, cutoff.unwrap_or(10_000), equate_il, tryptic)
     }
 
+    /// Like `analyse`, but returns only deduplicated taxon IDs per peptide — no accession or
+    /// annotation strings are allocated. The `taxa` list in each result is sorted and deduplicated.
     pub fn analyse_taxa(&self, peptides: &[String], equate_il: bool, tryptic: bool, cutoff: Option<usize>) -> Vec<TaxaSearchResult> {
         search_all_taxa(&self.searcher, peptides, cutoff.unwrap_or(10_000), equate_il, tryptic)
     }

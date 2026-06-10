@@ -67,15 +67,13 @@
 //! `unique_peptides` and `unique_to_parent` are always disjoint: a peptide appears in at most one
 //! of the two lists.
 //!
-//! ## LCA computation for `unique_to_parent`
+//! ## Classification for `unique_to_parent`
 //!
-//! For each non-unique peptide (i.e. one whose proteins are not all from `taxon_id`), the LCA is
-//! computed over the set of NCBI taxon IDs of all matching proteins via `calculate_lca`. Only valid
-//! taxa are considered (`only_valid_taxa = true`). The LCA is then checked for membership in the
-//! parent subtree using the same lineage-array approach as `TaxaFilter`: the LCA is considered
-//! "within the parent subtree" when `lca_id == parent_taxon_id` or when `parent_taxon_id` appears
-//! anywhere in the LCA's own lineage array (meaning the parent is an ancestor of the LCA, so the
-//! LCA is a descendant of the parent).
+//! For each non-unique peptide, the endpoint checks whether every valid-taxon protein hit falls
+//! within the subtree of `parent_taxon_id`. The subtree is precomputed as a `HashSet<u32>` by
+//! scanning the lineage store once: any taxon whose lineage contains `parent_taxon_id` (via
+//! `Lineage::contains_ancestor`) is a member. Membership checks during classification are then O(1)
+//! per taxon, with no LCA computation needed.
 
 use std::collections::HashSet;
 use std::time::Instant;
@@ -176,20 +174,14 @@ async fn handler(
 
     let t_classify = Instant::now();
 
-    // Build the subtree set for taxon_id once. Since taxon_id is validated to be at species or
-    // strain rank, every descendant will have taxon_id in exactly the species or strain field of
-    // its lineage. Scanning the entire lineage store once is far cheaper than doing per-protein
-    // is_ancestor calls (with or without memoisation) across potentially millions of protein hits.
+    // Precompute descendant sets by scanning the lineage store once per set. Each set includes the
+    // root taxon itself plus every taxon whose lineage contains it as an ancestor.
     let descendant_set: HashSet<u32> = std::iter::once(taxon_id)
         .chain(lineage_store.mapper.iter().filter_map(|(tid, lin)| {
-            let in_subtree = lin.species.map_or(false, |v| v.unsigned_abs() == taxon_id)
-                || lin.strain.map_or(false, |v| v.unsigned_abs() == taxon_id);
-            if in_subtree { Some(*tid) } else { None }
+            if lin.contains_ancestor(taxon_id) { Some(*tid) } else { None }
         }))
         .collect();
 
-    // If parent_taxon_id is set, build its subtree set the same way. The parent may be at any
-    // rank, so we check all lineage fields via contains_ancestor.
     let parent_descendant_set: Option<HashSet<u32>> = parent_taxon_id.map(|parent| {
         std::iter::once(parent)
             .chain(lineage_store.mapper.iter().filter_map(|(tid, lin)| {
@@ -215,8 +207,6 @@ async fn handler(
             continue;
         }
 
-        // result.taxa is already sorted and deduplicated by search_all_taxa, so each taxon
-        // appears at most once — no per-peptide cache is needed.
         total_proteins_iterated += result.taxa.len() as u64;
 
         if result.taxa.iter().all(|&t| descendant_set.contains(&t)) {

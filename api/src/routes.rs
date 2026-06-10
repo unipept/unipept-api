@@ -147,6 +147,8 @@ fn create_private_api_routes() -> Router<AppState> {
         get(taxa_filter::get_json_count_handler).post(taxa_filter::post_json_count_handler),
         "/taxa/filter",
         get(taxa_filter::get_json_filter_handler).post(taxa_filter::post_json_filter_handler),
+        "/taxa/unique_peptides/count",
+        get(unique_peptides::get_json_count_handler).post(unique_peptides::post_json_count_handler),
         "/taxa/unique_peptides",
         get(unique_peptides::get_json_handler).post(unique_peptides::post_json_handler),
         "/taxa/shared_peptides",

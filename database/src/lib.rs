@@ -297,27 +297,68 @@ pub async fn get_protein_counts_by_taxon_ids(
 }
 
 
-/// Pages through all `uniprot_entries` documents for `taxon_id` using `search_after` and returns
-/// the raw `_source` JSON value for each hit. Pass `source_filter` to restrict which fields
-/// OpenSearch includes in each document (e.g. `Some(&["sequence"])`); `None` fetches all fields.
+/// Pages through `uniprot_entries` documents for `taxon_id` using `search_after` and returns
+/// the raw `_source` JSON value for each hit.
+///
+/// * `source_filter` — restrict which fields OpenSearch includes (e.g. `Some(&["sequence"])`);
+///   `None` fetches all fields.
+/// * `range` — when `Some((start, end))`, only the half-open slice `[start, end)` of the
+///   stable `uniprot_accession_number`-ordered result set is collected. Pages entirely before
+///   `start` are fetched with `_source: false` to minimise transferred payload (the cursor value
+///   comes from `hit["sort"]`, not `_source`). Pages are not fetched beyond the first page that
+///   reaches index `end`. When `None`, all documents are returned (existing behaviour).
+///
+/// Returns an empty `Vec` immediately when `range` is `Some((start, end))` with `start >= end`.
 async fn fetch_taxon_sources(
     client: &OpenSearch,
     taxon_id: u32,
     source_filter: Option<&[&str]>,
+    range: Option<(usize, usize)>,
 ) -> Result<Vec<serde_json::Value>, DatabaseError> {
+    // Guard: empty range.
+    if let Some((start, end)) = range {
+        if start >= end {
+            return Ok(Vec::new());
+        }
+    }
+
     const PAGE_SIZE: usize = 1000;
     let mut all_sources: Vec<serde_json::Value> = Vec::new();
     let mut search_after: Option<String> = None;
+    // Running count of documents seen across all pages so far.
+    let mut global_index: usize = 0;
 
     loop {
+        let (range_start, range_end) = match range {
+            Some(r) => r,
+            // No range filter — fetch everything as before.
+            None => (0, usize::MAX),
+        };
+
+        // For pages that fall entirely before range_start, suppress _source to reduce
+        // payload; the cursor we need lives in hit["sort"], not _source.
+        let page_start = global_index;
+        let page_end = global_index + PAGE_SIZE; // upper bound, may overshoot
+        let page_entirely_before_range = range.is_some() && page_end <= range_start;
+        let page_entirely_after_range = range.is_some() && page_start >= range_end;
+
+        if page_entirely_after_range {
+            break;
+        }
+
         let mut body = json!({
             "query": { "term": { "taxon_id": taxon_id } },
             "size": PAGE_SIZE,
             "sort": [{ "uniprot_accession_number": "asc" }]
         });
-        if let Some(fields) = source_filter {
+
+        if page_entirely_before_range {
+            // Suppress _source; we only need the sort cursor from these docs.
+            body["_source"] = json!(false);
+        } else if let Some(fields) = source_filter {
             body["_source"] = json!(fields);
         }
+
         if let Some(ref cursor) = search_after {
             body["search_after"] = json!([cursor]);
         }
@@ -339,10 +380,18 @@ async fn fetch_taxon_sources(
         };
 
         let hit_count = hits.len();
-        all_sources.reserve(hit_count);
-        for hit in hits {
-            all_sources.push(hit["_source"].clone());
+
+        if !page_entirely_before_range {
+            all_sources.reserve(hit_count.min(range_end.saturating_sub(range_start)));
+            for (i, hit) in hits.iter().enumerate() {
+                let doc_index = global_index + i;
+                if doc_index >= range_start && doc_index < range_end {
+                    all_sources.push(hit["_source"].clone());
+                }
+            }
         }
+
+        global_index += hit_count;
 
         if hit_count < PAGE_SIZE {
             break;
@@ -365,7 +414,7 @@ pub async fn get_proteins_for_taxon(
     client: &OpenSearch,
     taxon_id: u32,
 ) -> Result<Vec<UniprotEntry>, DatabaseError> {
-    Ok(fetch_taxon_sources(client, taxon_id, None)
+    Ok(fetch_taxon_sources(client, taxon_id, None, None)
         .await?
         .into_iter()
         .filter_map(|src| serde_json::from_value(src).ok())
@@ -382,7 +431,30 @@ pub async fn get_protein_sequences_for_taxon(
     #[derive(Deserialize)]
     struct SeqDoc { sequence: String }
 
-    Ok(fetch_taxon_sources(client, taxon_id, Some(&["sequence"]))
+    Ok(fetch_taxon_sources(client, taxon_id, Some(&["sequence"]), None)
+        .await?
+        .into_iter()
+        .filter_map(|src| serde_json::from_value::<SeqDoc>(src).ok())
+        .map(|d| d.sequence)
+        .collect())
+}
+
+/// Retrieves the amino acid sequences for the half-open protein slice `[start, end)` belonging
+/// to `taxon_id`, ordered by `uniprot_accession_number` (ascending).
+///
+/// Proteins are indexed by their position in the stable `uniprot_accession_number` sort order.
+/// Uses `search_after` pagination, so the slice is not constrained by OpenSearch's default
+/// 10,000-document `max_result_window`. An empty `Vec` is returned when `start >= end`.
+pub async fn get_protein_sequences_for_taxon_range(
+    client: &OpenSearch,
+    taxon_id: u32,
+    start: usize,
+    end: usize,
+) -> Result<Vec<String>, DatabaseError> {
+    #[derive(Deserialize)]
+    struct SeqDoc { sequence: String }
+
+    Ok(fetch_taxon_sources(client, taxon_id, Some(&["sequence"]), Some((start, end)))
         .await?
         .into_iter()
         .filter_map(|src| serde_json::from_value::<SeqDoc>(src).ok())

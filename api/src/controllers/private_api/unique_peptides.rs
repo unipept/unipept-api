@@ -5,10 +5,11 @@
 //!
 //! ## Overview
 //!
-//! Given a taxon ID at species or strain rank, the endpoint:
+//! Given a taxon ID at species or strain rank and a half-open protein range `[start, end)`, the
+//! endpoint:
 //!
-//! 1. Fetches all UniProt protein sequences associated with `taxon_id` from the OpenSearch
-//!    database.
+//! 1. Fetches the UniProt protein sequences at positions `[start, end)` in the
+//!    `uniprot_accession_number`-sorted list for `taxon_id` from the OpenSearch database.
 //! 2. Performs an in-silico tryptic digest of each sequence using the provided (or default)
 //!    cleavage regex, discarding fragments shorter than `min_length`.
 //! 3. Looks up each distinct peptide in the global suffix-array index to find every protein in the
@@ -27,6 +28,17 @@
 //! all, are excluded from both categories because their taxon membership cannot be reliably
 //! determined.
 //!
+//! ## Batched consumption
+//!
+//! Use the companion count endpoint (`/taxa/unique_peptides/count?taxon_id=X`) to retrieve the
+//! total number of proteins for a taxon, then fan out parallel requests over disjoint ranges
+//! (e.g. `[0, 1000)`, `[1000, 2000)`, …). Because peptide classification depends only on the
+//! suffix-array index — not on the protein slice — the same peptide receives the same
+//! classification in every batch that produces it. Clients therefore take the **union** of
+//! `unique_peptides` (and `unique_to_parent`) across all batches and deduplicate. The union is
+//! correct. `total_unique_peptides` / `total_unique_to_parent_peptides` in each response are
+//! the lengths of that batch's result lists only; to get a global count, dedup the unioned sets.
+//!
 //! ## Intended use
 //!
 //! The `unique_to_parent` category is intended for web applications that construct a partial-
@@ -40,9 +52,11 @@
 //! | Parameter         | Type   | Required | Default        | Description |
 //! |-------------------|--------|----------|----------------|-------------|
 //! | `taxon_id`        | u32    | yes      | —              | NCBI taxon ID. Must be at species or strain rank. |
+//! | `start`           | usize  | yes      | —              | Start index (inclusive) of the protein range, in `uniprot_accession_number` order. |
+//! | `end`             | usize  | yes      | —              | End index (exclusive) of the protein range. |
 //! | `cleavage_regex`  | String | no       | `[KR](?!P)`    | Regex applied to protein sequences to determine cleavage sites (trypsin rule by default). Supports lookahead via `fancy_regex`. |
 //! | `min_length`      | usize  | no       | `5`            | Minimum peptide length in amino acids. Shorter fragments are discarded before index lookup. |
-//! | `parent_id` | u32    | no       | absent         | NCBI taxon ID of a clade that contains `taxon_id`. When provided, enables the `unique_to_parent` output. Must be a strict ancestor of `taxon_id` in the NCBI taxonomy lineage. |
+//! | `parent_id`       | u32    | no       | absent         | NCBI taxon ID of a clade that contains `taxon_id`. When provided, enables the `unique_to_parent` output. Must be a strict ancestor of `taxon_id` in the NCBI taxonomy lineage. |
 //!
 //! The endpoint accepts both GET (query string) and POST (JSON body).
 //!
@@ -50,19 +64,19 @@
 //!
 //! - `taxon_id` must resolve to a taxon at species or strain rank in the taxon store; any other
 //!   rank returns HTTP 400.
+//! - `start` and `end` are required; omitting either returns HTTP 400 (deserialization error).
 //! - When `parent_id` is supplied, it must appear in the lineage of `taxon_id` (i.e. it must
 //!   be a direct or indirect ancestor). If it does not, the endpoint returns HTTP 400 with a
 //!   descriptive message. This check is performed before the protein fetch to fail fast.
 //!
 //! ## Response fields
 //!
-//! | Field                          | Always present | Description |
-//! |--------------------------------|----------------|-------------|
-//! | `unique_peptides`              | yes            | Peptide sequences that occur exclusively in `taxon_id` across all of UniProt. |
-//! | `total_peptides`               | yes            | Total number of distinct in-silico peptides generated from `taxon_id`'s proteins (before index filtering). |
-//! | `total_unique_peptides`        | yes            | Length of `unique_peptides`. |
-//! | `unique_to_parent`             | only with parent | Peptide sequences that are not fully unique to `taxon_id` but whose LCA (over all UniProt proteins containing the peptide) is equal to `parent_id` or is a descendant of it. |
-//! | `total_unique_to_parent_peptides` | only with parent | Length of `unique_to_parent`. |
+//! | Field                             | Always present   | Description |
+//! |-----------------------------------|------------------|-------------|
+//! | `unique_peptides`                 | yes              | Peptide sequences that occur exclusively in `taxon_id` across all of UniProt. |
+//! | `total_unique_peptides`           | yes              | Length of `unique_peptides` for this batch. |
+//! | `unique_to_parent`                | only with parent | Peptide sequences that are not fully unique to `taxon_id` but whose LCA (over all UniProt proteins containing the peptide) is equal to `parent_id` or is a descendant of it. |
+//! | `total_unique_to_parent_peptides` | only with parent | Length of `unique_to_parent` for this batch. |
 //!
 //! `unique_peptides` and `unique_to_parent` are always disjoint: a peptide appears in at most one
 //! of the two lists.
@@ -90,12 +104,32 @@ use crate::{
     },
     AppState,
 };
-use database::get_protein_sequences_for_taxon;
+use database::{get_protein_counts_by_taxon_ids, get_protein_sequences_for_taxon_range};
+
+/// Parameters for the count endpoint (`/taxa/unique_peptides/count`).
+#[derive(Deserialize)]
+pub struct CountParameters {
+    /// NCBI taxon ID. Must be at species or strain rank.
+    taxon_id: u32,
+}
+
+/// Response for the count endpoint.
+#[derive(Serialize)]
+pub struct ProteinCountResult {
+    /// Total number of UniProt proteins whose `taxon_id` field exactly matches the requested
+    /// taxon. This is the value to use when computing `[start, end)` batch ranges for the
+    /// `/taxa/unique_peptides` endpoint.
+    protein_count: u32,
+}
 
 #[derive(Deserialize)]
 pub struct Parameters {
     /// NCBI taxon ID for which to compute unique peptides. Must be at species or strain rank.
     taxon_id: u32,
+    /// Start index (inclusive) of the protein range, in `uniprot_accession_number` order.
+    start: usize,
+    /// End index (exclusive) of the protein range.
+    end: usize,
     /// Cleavage regex applied to protein sequences. Defaults to `[KR](?!P)` (trypsin).
     #[serde(default = "default_cleavage_regex")]
     cleavage_regex: String,
@@ -114,23 +148,32 @@ pub struct UniquePeptidesResult {
     /// Peptides whose every matching UniProt protein belongs to `taxon_id` or a descendant of it
     /// (e.g. a strain under a species). No protein containing the peptide falls outside the subtree.
     unique_peptides: Vec<String>,
-    /// Total distinct in-silico peptides generated from `taxon_id`'s proteins.
-    total_peptides: usize,
-    /// Number of entries in `unique_peptides`.
+    /// Number of entries in `unique_peptides` for this batch.
     total_unique_peptides: usize,
     /// Non-unique peptides whose LCA of all matching UniProt proteins falls within the subtree of
-    /// `parent_id`. Absent when `parent_id` was not supplied. Disjoint from
-    /// `unique_peptides`.
+    /// `parent_id`. Absent when `parent_id` was not supplied. Disjoint from `unique_peptides`.
     #[serde(skip_serializing_if = "Option::is_none")]
     unique_to_parent: Option<Vec<String>>,
-    /// Number of entries in `unique_to_parent`. Absent when `parent_id` was not supplied.
+    /// Number of entries in `unique_to_parent` for this batch. Absent when `parent_id` was not supplied.
     #[serde(skip_serializing_if = "Option::is_none")]
     total_unique_to_parent_peptides: Option<usize>,
 }
 
+async fn count_handler(
+    State(AppState { datastore, database, .. }): State<AppState>,
+    CountParameters { taxon_id }: CountParameters,
+) -> Result<ProteinCountResult, ApiError> {
+    validate_taxon_rank(datastore.taxon_store(), taxon_id)?;
+
+    let counts = get_protein_counts_by_taxon_ids(database.get_conn(), &[taxon_id as i32]).await?;
+    let protein_count = *counts.get(&taxon_id).unwrap_or(&0);
+
+    Ok(ProteinCountResult { protein_count })
+}
+
 async fn handler(
     State(AppState { index, datastore, database, .. }): State<AppState>,
-    Parameters { taxon_id, cleavage_regex, min_length, parent_id }: Parameters,
+    Parameters { taxon_id, start, end, cleavage_regex, min_length, parent_id }: Parameters,
 ) -> Result<UniquePeptidesResult, ApiError> {
     let re = compile_cleavage_regex(&cleavage_regex)?;
     validate_taxon_rank(datastore.taxon_store(), taxon_id)?;
@@ -147,8 +190,8 @@ async fn handler(
 
     let t_start = Instant::now();
 
-    let sequences = get_protein_sequences_for_taxon(database.get_conn(), taxon_id).await?;
-    tracing::info!(taxon_id, proteins = sequences.len(), elapsed_ms = t_start.elapsed().as_millis(), "protein fetch complete");
+    let sequences = get_protein_sequences_for_taxon_range(database.get_conn(), taxon_id, start, end).await?;
+    tracing::info!(taxon_id, start, end, proteins = sequences.len(), elapsed_ms = t_start.elapsed().as_millis(), "protein fetch complete");
 
     let t_digest = Instant::now();
     let mut peptides: Vec<String> = sequences.iter()
@@ -159,8 +202,7 @@ async fn handler(
     peptides.sort_unstable();
     peptides.dedup();
 
-    let total_peptides = peptides.len();
-    tracing::info!(taxon_id, peptides = total_peptides, elapsed_ms = t_digest.elapsed().as_millis(), "digestion and dedup complete");
+    tracing::info!(taxon_id, peptides = peptides.len(), elapsed_ms = t_digest.elapsed().as_millis(), "digestion and dedup complete");
 
     let t_index = Instant::now();
     let (peptides, results) = tokio::task::spawn_blocking(move || {
@@ -243,12 +285,20 @@ async fn handler(
 
     Ok(UniquePeptidesResult {
         unique_peptides,
-        total_peptides,
         total_unique_peptides,
         unique_to_parent: unique_to_parent_field,
         total_unique_to_parent_peptides: total_unique_to_parent_field,
     })
 }
+
+generate_handlers!(
+    async fn json_count_handler(
+        state => State<AppState>,
+        params => CountParameters
+    ) -> Result<Json<ProteinCountResult>, ApiError> {
+        Ok(Json(count_handler(state, params).await?))
+    }
+);
 
 generate_handlers!(
     async fn json_handler(

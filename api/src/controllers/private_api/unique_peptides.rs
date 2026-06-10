@@ -77,6 +77,7 @@
 //! anywhere in the LCA's own lineage array (meaning the parent is an ancestor of the LCA, so the
 //! LCA is a descendant of the parent).
 
+use std::collections::HashMap;
 use std::time::Instant;
 
 use axum::{extract::State, Json};
@@ -178,6 +179,12 @@ async fn handler(
     let mut unique_peptides: Vec<String> = Vec::new();
     let mut unique_to_parent: Vec<String> = Vec::new();
 
+    // Cache is_ancestor results keyed by protein taxon ID. The two fixed arguments (taxon_id and
+    // parent) are the same for every call within a request, so we only need to compute once per
+    // distinct protein taxon encountered in the result set.
+    let mut descendant_of_taxon: HashMap<u32, bool> = HashMap::new();
+    let mut in_parent_subtree: HashMap<u32, bool> = HashMap::new();
+
     for (peptide, result) in peptides.into_iter().zip(results) {
         // Skip peptides where the match set is unreliable: the cutoff was hit (too many proteins
         // matched, taxon membership cannot be determined) or no proteins were found at all.
@@ -186,7 +193,9 @@ async fn handler(
         }
 
         if result.proteins.iter().all(|p| {
-            p.taxon == taxon_id || is_ancestor(taxon_id, p.taxon, LineageVersion::V2, lineage_store)
+            p.taxon == taxon_id || *descendant_of_taxon
+                .entry(p.taxon)
+                .or_insert_with(|| is_ancestor(taxon_id, p.taxon, LineageVersion::V2, lineage_store))
         }) {
             unique_peptides.push(peptide);
         } else if let Some(parent) = parent_taxon_id {
@@ -200,7 +209,9 @@ async fn handler(
             // exactly the LCA) or when the parent is a strict ancestor of the LCA.
             // Note: a taxon's lineage array does not include itself, so the equality arm is needed.
             let lca_in_parent_subtree = lca_id == parent
-                || is_ancestor(parent, lca_id, LineageVersion::V2, lineage_store);
+                || *in_parent_subtree
+                    .entry(lca_id)
+                    .or_insert_with(|| is_ancestor(parent, lca_id, LineageVersion::V2, lineage_store));
 
             if lca_in_parent_subtree {
                 unique_to_parent.push(peptide);

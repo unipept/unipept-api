@@ -76,6 +76,23 @@ impl Lineage {
             _ => None,
         }
     }
+
+    /// Returns `true` if `ancestor_id` appears at any rank in this lineage.
+    /// Negative placeholder values are compared via `unsigned_abs()`, matching the convention
+    /// used throughout the codebase.
+    pub fn contains_ancestor(&self, ancestor_id: u32) -> bool {
+        [
+            self.domain, self.realm, self.kingdom, self.subkingdom,
+            self.superphylum, self.phylum, self.subphylum, self.superclass,
+            self.class, self.subclass, self.superorder, self.order,
+            self.suborder, self.infraorder, self.superfamily, self.family,
+            self.subfamily, self.tribe, self.subtribe, self.genus,
+            self.subgenus, self.species_group, self.species_subgroup, self.species,
+            self.subspecies, self.strain, self.varietas, self.forma,
+        ]
+        .iter()
+        .any(|v| v.map_or(false, |id| id.unsigned_abs() == ancestor_id))
+    }
 }
 
 pub struct LineageStore {

@@ -77,7 +77,7 @@
 //! anywhere in the LCA's own lineage array (meaning the parent is an ancestor of the LCA, so the
 //! LCA is a descendant of the parent).
 
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::time::Instant;
 
 use axum::{extract::State, Json};
@@ -88,7 +88,6 @@ use crate::{
     errors::ApiError,
     helpers::{
         digestion::{cleave_sequence, compile_cleavage_regex, default_cleavage_regex, default_min_length, validate_taxon_rank},
-        lca_helper::calculate_lca,
         lineage_helper::{is_ancestor, LineageVersion},
     },
     AppState,
@@ -176,14 +175,38 @@ async fn handler(
     let lineage_store = datastore.lineage_store();
 
     let t_classify = Instant::now();
+
+    // Build the subtree set for taxon_id once. Since taxon_id is validated to be at species or
+    // strain rank, every descendant will have taxon_id in exactly the species or strain field of
+    // its lineage. Scanning the entire lineage store once is far cheaper than doing per-protein
+    // is_ancestor calls (with or without memoisation) across potentially millions of protein hits.
+    let descendant_set: HashSet<u32> = std::iter::once(taxon_id)
+        .chain(lineage_store.mapper.iter().filter_map(|(tid, lin)| {
+            let in_subtree = lin.species.map_or(false, |v| v.unsigned_abs() == taxon_id)
+                || lin.strain.map_or(false, |v| v.unsigned_abs() == taxon_id);
+            if in_subtree { Some(*tid) } else { None }
+        }))
+        .collect();
+
+    // If parent_taxon_id is set, build its subtree set the same way. The parent may be at any
+    // rank, so we check all lineage fields via contains_ancestor.
+    let parent_descendant_set: Option<HashSet<u32>> = parent_taxon_id.map(|parent| {
+        std::iter::once(parent)
+            .chain(lineage_store.mapper.iter().filter_map(|(tid, lin)| {
+                if lin.contains_ancestor(parent) { Some(*tid) } else { None }
+            }))
+            .collect()
+    });
+
+    tracing::info!(
+        taxon_id,
+        subtree_taxa = descendant_set.len(),
+        elapsed_ms = t_classify.elapsed().as_millis(),
+        "subtree sets built"
+    );
+
     let mut unique_peptides: Vec<String> = Vec::new();
     let mut unique_to_parent: Vec<String> = Vec::new();
-
-    // Cache is_ancestor results keyed by protein taxon ID. The two fixed arguments (taxon_id and
-    // parent) are the same for every call within a request, so we only need to compute once per
-    // distinct protein taxon encountered in the result set.
-    let mut descendant_of_taxon: HashMap<u32, bool> = HashMap::new();
-    let mut in_parent_subtree: HashMap<u32, bool> = HashMap::new();
 
     for (peptide, result) in peptides.into_iter().zip(results) {
         // Skip peptides where the match set is unreliable: the cutoff was hit (too many proteins
@@ -192,28 +215,18 @@ async fn handler(
             continue;
         }
 
-        if result.proteins.iter().all(|p| {
-            p.taxon == taxon_id || *descendant_of_taxon
-                .entry(p.taxon)
-                .or_insert_with(|| is_ancestor(taxon_id, p.taxon, LineageVersion::V2, lineage_store))
-        }) {
+        if result.proteins.iter().all(|p| descendant_set.contains(&p.taxon)) {
             unique_peptides.push(peptide);
-        } else if let Some(parent) = parent_taxon_id {
-            // Compute the LCA of all taxa that contain this peptide. If the LCA is within the
-            // parent subtree, the peptide never occurs outside the parent clade.
-            let taxa: Vec<u32> = result.proteins.iter().map(|p| p.taxon).collect();
-            let lca = calculate_lca(taxa, LineageVersion::V2, taxon_store, lineage_store, true);
-            let lca_id = lca as u32;
+        } else if let Some(ref parent_set) = parent_descendant_set {
+            // "LCA of valid taxa is within the parent subtree" is equivalent to
+            // "every valid-taxon protein is within the parent subtree", which avoids
+            // the LCA computation entirely.
+            let mut has_valid = false;
+            let all_in_parent = result.proteins.iter()
+                .filter(|p| taxon_store.is_valid(p.taxon))
+                .all(|p| { has_valid = true; parent_set.contains(&p.taxon) });
 
-            // The LCA is within the parent subtree when it equals the parent (the parent is
-            // exactly the LCA) or when the parent is a strict ancestor of the LCA.
-            // Note: a taxon's lineage array does not include itself, so the equality arm is needed.
-            let lca_in_parent_subtree = lca_id == parent
-                || *in_parent_subtree
-                    .entry(lca_id)
-                    .or_insert_with(|| is_ancestor(parent, lca_id, LineageVersion::V2, lineage_store));
-
-            if lca_in_parent_subtree {
+            if has_valid && all_in_parent {
                 unique_to_parent.push(peptide);
             }
         }

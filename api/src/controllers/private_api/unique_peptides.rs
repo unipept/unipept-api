@@ -18,9 +18,9 @@
 //!      to a descendant taxon (e.g. a strain under a species). In other words, the LCA of all
 //!      matching proteins is `taxon_id` or below, and no protein falls outside the subtree.
 //!      These peptides are fully clade-specific and can be used as unambiguous markers.
-//!    - **`unique_to_parent`** (only when `parent_taxon_id` is supplied): among the remaining
+//!    - **`unique_to_parent`** (only when `parent_id` is supplied): among the remaining
 //!      non-unique peptides, those whose LCA of all matching taxa falls within the subtree of
-//!      `parent_taxon_id`. Such peptides occur in more than one taxon, but all those taxa belong
+//!      `parent_id`. Such peptides occur in more than one taxon, but all those taxa belong
 //!      to the parent clade, so the peptide never occurs outside it.
 //!
 //! Peptides whose suffix-array search hit the match cutoff, or that returned no protein hits at
@@ -42,7 +42,7 @@
 //! | `taxon_id`        | u32    | yes      | —              | NCBI taxon ID. Must be at species or strain rank. |
 //! | `cleavage_regex`  | String | no       | `[KR](?!P)`    | Regex applied to protein sequences to determine cleavage sites (trypsin rule by default). Supports lookahead via `fancy_regex`. |
 //! | `min_length`      | usize  | no       | `5`            | Minimum peptide length in amino acids. Shorter fragments are discarded before index lookup. |
-//! | `parent_taxon_id` | u32    | no       | absent         | NCBI taxon ID of a clade that contains `taxon_id`. When provided, enables the `unique_to_parent` output. Must be a strict ancestor of `taxon_id` in the NCBI taxonomy lineage. |
+//! | `parent_id` | u32    | no       | absent         | NCBI taxon ID of a clade that contains `taxon_id`. When provided, enables the `unique_to_parent` output. Must be a strict ancestor of `taxon_id` in the NCBI taxonomy lineage. |
 //!
 //! The endpoint accepts both GET (query string) and POST (JSON body).
 //!
@@ -50,7 +50,7 @@
 //!
 //! - `taxon_id` must resolve to a taxon at species or strain rank in the taxon store; any other
 //!   rank returns HTTP 400.
-//! - When `parent_taxon_id` is supplied, it must appear in the lineage of `taxon_id` (i.e. it must
+//! - When `parent_id` is supplied, it must appear in the lineage of `taxon_id` (i.e. it must
 //!   be a direct or indirect ancestor). If it does not, the endpoint returns HTTP 400 with a
 //!   descriptive message. This check is performed before the protein fetch to fail fast.
 //!
@@ -61,7 +61,7 @@
 //! | `unique_peptides`              | yes            | Peptide sequences that occur exclusively in `taxon_id` across all of UniProt. |
 //! | `total_peptides`               | yes            | Total number of distinct in-silico peptides generated from `taxon_id`'s proteins (before index filtering). |
 //! | `total_unique_peptides`        | yes            | Length of `unique_peptides`. |
-//! | `unique_to_parent`             | only with parent | Peptide sequences that are not fully unique to `taxon_id` but whose LCA (over all UniProt proteins containing the peptide) is equal to `parent_taxon_id` or is a descendant of it. |
+//! | `unique_to_parent`             | only with parent | Peptide sequences that are not fully unique to `taxon_id` but whose LCA (over all UniProt proteins containing the peptide) is equal to `parent_id` or is a descendant of it. |
 //! | `total_unique_to_parent_peptides` | only with parent | Length of `unique_to_parent`. |
 //!
 //! `unique_peptides` and `unique_to_parent` are always disjoint: a peptide appears in at most one
@@ -70,8 +70,8 @@
 //! ## Classification for `unique_to_parent`
 //!
 //! For each non-unique peptide, the endpoint checks whether every valid-taxon protein hit falls
-//! within the subtree of `parent_taxon_id`. The subtree is precomputed as a `HashSet<u32>` by
-//! scanning the lineage store once: any taxon whose lineage contains `parent_taxon_id` (via
+//! within the subtree of `parent_id`. The subtree is precomputed as a `HashSet<u32>` by
+//! scanning the lineage store once: any taxon whose lineage contains `parent_id` (via
 //! `Lineage::contains_ancestor`) is a member. Membership checks during classification are then O(1)
 //! per taxon, with no LCA computation needed.
 
@@ -106,7 +106,7 @@ pub struct Parameters {
     /// When present, enables the `unique_to_parent` output: non-unique peptides whose LCA over
     /// all UniProt proteins falls within this clade are reported separately.
     #[serde(default)]
-    parent_taxon_id: Option<u32>,
+    parent_id: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -119,24 +119,24 @@ pub struct UniquePeptidesResult {
     /// Number of entries in `unique_peptides`.
     total_unique_peptides: usize,
     /// Non-unique peptides whose LCA of all matching UniProt proteins falls within the subtree of
-    /// `parent_taxon_id`. Absent when `parent_taxon_id` was not supplied. Disjoint from
+    /// `parent_id`. Absent when `parent_id` was not supplied. Disjoint from
     /// `unique_peptides`.
     #[serde(skip_serializing_if = "Option::is_none")]
     unique_to_parent: Option<Vec<String>>,
-    /// Number of entries in `unique_to_parent`. Absent when `parent_taxon_id` was not supplied.
+    /// Number of entries in `unique_to_parent`. Absent when `parent_id` was not supplied.
     #[serde(skip_serializing_if = "Option::is_none")]
     total_unique_to_parent_peptides: Option<usize>,
 }
 
 async fn handler(
     State(AppState { index, datastore, database, .. }): State<AppState>,
-    Parameters { taxon_id, cleavage_regex, min_length, parent_taxon_id }: Parameters,
+    Parameters { taxon_id, cleavage_regex, min_length, parent_id }: Parameters,
 ) -> Result<UniquePeptidesResult, ApiError> {
     let re = compile_cleavage_regex(&cleavage_regex)?;
     validate_taxon_rank(datastore.taxon_store(), taxon_id)?;
 
-    // Validate that parent_taxon_id, when provided, is a strict ancestor of taxon_id.
-    if let Some(parent) = parent_taxon_id {
+    // Validate that parent_id, when provided, is a strict ancestor of taxon_id.
+    if let Some(parent) = parent_id {
         if !is_ancestor(parent, taxon_id, LineageVersion::V2, datastore.lineage_store()) {
             return Err(ApiError::InvalidParameterError(format!(
                 "Parent taxon {} is not an ancestor of taxon {}",
@@ -182,7 +182,7 @@ async fn handler(
         }))
         .collect();
 
-    let parent_descendant_set: Option<HashSet<u32>> = parent_taxon_id.map(|parent| {
+    let parent_descendant_set: Option<HashSet<u32>> = parent_id.map(|parent| {
         std::iter::once(parent)
             .chain(lineage_store.mapper.iter().filter_map(|(tid, lin)| {
                 if lin.contains_ancestor(parent) { Some(*tid) } else { None }
@@ -234,7 +234,7 @@ async fn handler(
 
     let total_unique_peptides = unique_peptides.len();
 
-    let (unique_to_parent_field, total_unique_to_parent_field) = if parent_taxon_id.is_some() {
+    let (unique_to_parent_field, total_unique_to_parent_field) = if parent_id.is_some() {
         let count = unique_to_parent.len();
         (Some(unique_to_parent), Some(count))
     } else {

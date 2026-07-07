@@ -1,3 +1,5 @@
+pub mod shared_peptides;
+pub mod unique_peptides;
 pub mod ecnumbers;
 pub mod goterms;
 pub mod interpros;

@@ -5,6 +5,7 @@ pub mod metadata;
 pub mod proteins;
 pub mod proteins_filter;
 pub mod taxa;
+pub mod taxa2rank;
 pub mod taxa_filter;
 pub mod reference_proteomes;
 pub mod reference_proteomes_filter;

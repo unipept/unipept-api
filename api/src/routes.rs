@@ -15,11 +15,11 @@ use crate::{
     controllers::{
         api::{
             pept2ec, pept2funct, pept2go, pept2interpro, pept2lca, pept2prot, pept2taxa, peptinfo, protinfo, taxa2lca,
-               taxa2rank, taxa2tree, taxonomy
+               taxa2tree, taxonomy
         },
         datasets::sampledata,
         mpa::{pept2data},
-        private_api::{ecnumbers, goterms, interpros, metadata, proteins, proteins_filter, reference_proteomes, reference_proteomes_filter, taxa, taxa_filter}
+        private_api::{ecnumbers, goterms, interpros, metadata, proteins, proteins_filter, reference_proteomes, reference_proteomes_filter, taxa, taxa2rank, taxa_filter}
     },
     middleware::{
         cors::create_cors_layer,
@@ -103,9 +103,7 @@ fn create_api_v2_routes() -> Router<AppState> {
         "/taxa2tree",
         get(taxa2tree::get_json_handler_v2).post(taxa2tree::post_json_handler_v2),
         "/taxonomy",
-        get(taxonomy::get_json_handler_v2).post(taxonomy::post_json_handler_v2),
-       "/taxa2rank",
-       get(taxa2rank::get_json_handler).post(taxa2rank::post_json_handler)
+        get(taxonomy::get_json_handler_v2).post(taxonomy::post_json_handler_v2)
     )
     .route("/taxa2tree.html", get(taxa2tree::get_html_handler_v2).post(taxa2tree::post_html_handler_v2))
 }
@@ -145,6 +143,8 @@ fn create_private_api_routes() -> Router<AppState> {
         get(reference_proteomes_filter::get_json_filter_handler).post(reference_proteomes_filter::post_json_filter_handler),
         "/taxa",
         get(taxa::get_json_handler).post(taxa::post_json_handler),
+        "/taxa2rank",
+        get(taxa2rank::get_json_handler).post(taxa2rank::post_json_handler),
         "/taxa/count",
         get(taxa_filter::get_json_count_handler).post(taxa_filter::post_json_count_handler),
         "/taxa/filter",

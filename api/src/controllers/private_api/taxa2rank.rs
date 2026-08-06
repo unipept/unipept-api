@@ -32,7 +32,6 @@ async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
     Parameters { taxa, rank }: Parameters,
 ) -> Result<RankMappingResult, ApiError> {
-
     let rank_lowercase = rank.to_lowercase();
     let rank_idx = LineageStore::rank_to_idx(&rank_lowercase)
         .ok_or_else(|| ApiError::UnknownRankError(format!("Invalid rank: {}", rank)))?;

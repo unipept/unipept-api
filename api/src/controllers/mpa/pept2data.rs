@@ -136,7 +136,7 @@ async fn handler(
                 let lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store);
 
                 Some(DataItem {
-                    sequence,
+                    sequence: sequence.to_string(),
                     cutoff_used,
                     lca: Some(lca as u32),
                     lineage,

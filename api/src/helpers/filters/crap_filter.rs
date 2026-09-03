@@ -61,11 +61,8 @@ mod tests {
     #[test]
     fn test_protein_in_crap_filter() {
         let filter = CrapFilter::new();
-        let protein_in_filter = ProteinInfo {
-            taxon: 1,
-            uniprot_accession: "P68082".to_string(),
-            functional_annotations: "GO:0001234;GO:0005678".to_string()
-        };
+        let annotations = index::fa_compression::algorithm1::encode("GO:0001234;GO:0005678");
+        let protein_in_filter = ProteinInfo { taxon: 1, uniprot_accession: "P68082", annotations: &annotations };
 
         assert!(filter.filter(&protein_in_filter));
     }
@@ -73,11 +70,8 @@ mod tests {
     #[test]
     fn test_protein_not_in_crap_filter() {
         let filter = CrapFilter::new();
-        let protein_not_in_filter = ProteinInfo {
-            taxon: 1,
-            uniprot_accession: "PXXXXX".to_string(),
-            functional_annotations: "GO:0001234;GO:0005678".to_string()
-        };
+        let annotations = index::fa_compression::algorithm1::encode("GO:0001234;GO:0005678");
+        let protein_not_in_filter = ProteinInfo { taxon: 1, uniprot_accession: "PXXXXX", annotations: &annotations };
 
         assert!(!filter.filter(&protein_not_in_filter));
     }

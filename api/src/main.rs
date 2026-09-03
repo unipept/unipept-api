@@ -8,16 +8,14 @@ pub struct Arguments {
     #[arg(short, long)]
     database_address: String,
     #[arg(short, long)]
-    port: u32,
-    #[arg(short, long, default_value_t = false)]
-    mmap: bool
+    port: u32
 }
 
 #[tokio::main]
 async fn main() {
     let args = Arguments::parse();
 
-    if let Err(e) = start(&args.index_location, &args.database_address, args.port, args.mmap).await {
+    if let Err(e) = start(&args.index_location, &args.database_address, args.port).await {
         eprintln!("{}", e);
         std::process::exit(1);
     }

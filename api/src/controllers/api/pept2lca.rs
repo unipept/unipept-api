@@ -83,7 +83,7 @@ async fn handler(
             };
 
             Some(LcaInformation {
-                peptide: item.sequence,
+                peptide: item.sequence.to_string(),
                 cutoff_used: item.cutoff_used,
                 taxon: Taxon {
                     taxon_id: lca as u32,

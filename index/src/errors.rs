@@ -21,5 +21,7 @@ pub enum LoadIndexError {
     #[error("Error while loading mapping: {0}")]
     LoadMappingError(String),
     #[error("Error while loading taxonomy: {0}")]
-    LoadTaxonomyError(String)
+    LoadTaxonomyError(String),
+    #[error("The index files do not belong together: {0}")]
+    MismatchedIndexFiles(String)
 }

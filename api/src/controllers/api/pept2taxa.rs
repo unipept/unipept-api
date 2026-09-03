@@ -91,7 +91,7 @@ async fn handler(
                 }
 
                 Some(TaxaInformation::Compact(CompactTaxaInformation {
-                    peptide: item.sequence,
+                    peptide: item.sequence.to_string(),
                     cutoff_used: item.cutoff_used,
                     taxa: item_taxa,
                 }))
@@ -114,7 +114,7 @@ async fn handler(
                     };
 
                     Some(TaxaInformation::Dense(DenseTaxaInformation {
-                        peptide: item.sequence.clone(),
+                        peptide: item.sequence.to_string(),
                         cutoff_used,
                         taxon: Taxon {
                             taxon_id: taxon,

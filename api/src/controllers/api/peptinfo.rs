@@ -103,7 +103,7 @@ async fn handler(
             };
 
             Some(PeptInformation {
-                peptide: item.sequence,
+                peptide: item.sequence.to_string(),
                 cutoff_used: item.cutoff_used,
                 total_protein_count,
                 ec: ecs,

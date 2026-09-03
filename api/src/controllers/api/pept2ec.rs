@@ -48,12 +48,9 @@ async fn handler(
     }
 
     let unique_peptides: Vec<String> = peptide_counts.keys().cloned().collect();
-    // Move unique_peptides into the blocking task and return it alongside the analysis result,
-    // so we can reuse the original vector without cloning
-    let (unique_peptides, result) = tokio::task::spawn_blocking(move ||{
-        let result = index.analyse(&unique_peptides, equate_il, false, Some(cutoff));
-        (unique_peptides, result)
-    }).await?;
+    let result = tokio::task::block_in_place(|| {
+        index.analyse(&unique_peptides, equate_il, false, Some(cutoff))
+    });
 
     let ec_store = datastore.ec_store();
 

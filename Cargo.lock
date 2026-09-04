@@ -317,12 +317,12 @@ dependencies = [
 [[package]]
 name = "binary-traits"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?rev=718a81e8285d9889839710129389575efe55014a#718a81e8285d9889839710129389575efe55014a"
+source = "git+https://github.com/unipept/unipept-index.git#718a81e8285d9889839710129389575efe55014a"
 
 [[package]]
 name = "bitarray"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?rev=718a81e8285d9889839710129389575efe55014a#718a81e8285d9889839710129389575efe55014a"
+source = "git+https://github.com/unipept/unipept-index.git#718a81e8285d9889839710129389575efe55014a"
 dependencies = [
  "memory-hints",
 ]
@@ -698,7 +698,7 @@ dependencies = [
 [[package]]
 name = "fa-compression"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?rev=718a81e8285d9889839710129389575efe55014a#718a81e8285d9889839710129389575efe55014a"
+source = "git+https://github.com/unipept/unipept-index.git#718a81e8285d9889839710129389575efe55014a"
 
 [[package]]
 name = "fastrand"
@@ -1354,7 +1354,7 @@ dependencies = [
 [[package]]
 name = "memory-hints"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?rev=718a81e8285d9889839710129389575efe55014a#718a81e8285d9889839710129389575efe55014a"
+source = "git+https://github.com/unipept/unipept-index.git#718a81e8285d9889839710129389575efe55014a"
 dependencies = [
  "libc",
  "memmap2",
@@ -1671,7 +1671,7 @@ dependencies = [
 [[package]]
 name = "protein-metadata"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?rev=718a81e8285d9889839710129389575efe55014a#718a81e8285d9889839710129389575efe55014a"
+source = "git+https://github.com/unipept/unipept-index.git#718a81e8285d9889839710129389575efe55014a"
 dependencies = [
  "binary-traits",
  "bytelines",
@@ -1684,7 +1684,7 @@ dependencies = [
 [[package]]
 name = "protein-text"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?rev=718a81e8285d9889839710129389575efe55014a#718a81e8285d9889839710129389575efe55014a"
+source = "git+https://github.com/unipept/unipept-index.git#718a81e8285d9889839710129389575efe55014a"
 dependencies = [
  "binary-traits",
  "bitarray",
@@ -1945,7 +1945,7 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 [[package]]
 name = "sa-index"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?rev=718a81e8285d9889839710129389575efe55014a#718a81e8285d9889839710129389575efe55014a"
+source = "git+https://github.com/unipept/unipept-index.git#718a81e8285d9889839710129389575efe55014a"
 dependencies = [
  "binary-traits",
  "bitarray",
@@ -1962,7 +1962,7 @@ dependencies = [
 [[package]]
 name = "sa-server"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git?rev=718a81e8285d9889839710129389575efe55014a#718a81e8285d9889839710129389575efe55014a"
+source = "git+https://github.com/unipept/unipept-index.git#718a81e8285d9889839710129389575efe55014a"
 dependencies = [
  "axum 0.8.9",
  "binary-traits",

@@ -64,6 +64,25 @@ mod tests {
     }
 
 
+    /// `pept2lca` takes the index's lightweight taxa path, which reports each distinct taxon once
+    /// where the protein path reported one entry per matching protein. That substitution is only
+    /// sound if repeats cannot change the answer — `calculate_lca` reduces rank by rank and asks
+    /// whether every lineage agrees, so they cannot.
+    #[test]
+    fn repeated_taxa_do_not_change_the_lca() {
+        let version: LineageVersion = LineageVersion::V2;
+        let taxon_store: TaxonStore = TaxonStore::try_from_file("../data/taxons_subset_10000.tsv").expect("Reading the file failed");
+        let lineage_store: LineageStore = LineageStore::try_from_file("../data/lineages_subset_10000.tsv").expect("Reading the file failed");
+
+        let distinct: Vec<u32> = vec![8501, 8505, 9503];
+        let with_repeats: Vec<u32> = vec![8501, 8505, 8501, 9503, 8505, 8501];
+
+        assert_eq!(
+            calculate_lca(with_repeats, version, &taxon_store, &lineage_store, true),
+            calculate_lca(distinct, version, &taxon_store, &lineage_store, true)
+        );
+    }
+
     #[test]
     fn small_test_calculate_lca() {
         let taxa: Vec<u32> = vec![8501, 8505, 9503];

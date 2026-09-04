@@ -641,8 +641,10 @@ dependencies = [
 name = "datastore"
 version = "2.3.2"
 dependencies = [
+ "fixtures",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
 ]
 

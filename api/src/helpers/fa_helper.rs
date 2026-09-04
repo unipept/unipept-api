@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use index::{ProteinInfo, fa_compression::algorithm1::decode};
+use index::{ProteinInfo, fa_compression::algorithm1::decode_into};
 use serde::Serialize;
 
 /// A struct that represents the functional annotations once aggregated
@@ -24,10 +24,15 @@ pub fn calculate_fa(proteins: &[ProteinInfo]) -> FunctionalAggregation {
     // Keep track of the counts of the different annotations
     let mut data: HashMap<String, u32> = HashMap::new();
 
+    // Reused across proteins. `decode_into` appends, so this has to be cleared every iteration
+    // or annotations leak from one protein into the next and every count inflates.
+    let mut annotations = String::new();
+
     for protein in proteins.iter() {
         // The index hands back the annotations still encoded, so this is where they are decoded —
         // after the caller's filters have run, rather than for every hit the index examined.
-        let annotations = decode(protein.annotations);
+        annotations.clear();
+        decode_into(protein.annotations, &mut annotations);
 
         for annotation in annotations.split(';') {
             match annotation.chars().next() {
@@ -46,7 +51,14 @@ pub fn calculate_fa(proteins: &[ProteinInfo]) -> FunctionalAggregation {
                 _ => {}
             };
 
-            data.entry(annotation.to_string()).and_modify(|c| *c += 1).or_insert(1);
+            // Allocating only for a term not seen yet: `entry` would need an owned key on every
+            // occurrence, and the same handful of terms recur across the whole result set.
+            match data.get_mut(annotation) {
+                Some(count) => *count += 1,
+                None => {
+                    data.insert(annotation.to_string(), 1);
+                }
+            }
         }
     }
 

@@ -65,6 +65,29 @@ jobs:
       - name: Build release binaries
         run: cargo build --release --locked
 
+  msrv:
+    # cargo enforces `rust-version` against a crate's dependencies, never against its own source,
+    # so nothing else here would notice a change that needs a newer compiler. When the floor moves,
+    # this pin and the root Cargo.toml move together.
+    name: MSRV (1.88)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: 1.88.0
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@1.88.0
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check on the declared MSRV
+        run: cargo check --all-targets --all-features --locked
+
   backends:
     # The storage features pick which concrete type each `Active*` alias in `sa-server` names, and
     # `clippy --all-features` resolves only one of the nine. Sequential, not a matrix: the

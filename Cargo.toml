@@ -7,3 +7,7 @@ members = [
     "datastore", 
     "index"
 ]
+
+# The floor the unipept-index dependency already imposes; 1.87 is refused outright.
+[workspace.package]
+rust-version = "1.88"

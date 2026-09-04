@@ -2,6 +2,7 @@
 name = "datastore"
 version = "2.3.2"
 edition = "2021"
+rust-version.workspace = true
 
 [dependencies]
 serde = { version = "1.0.203", features = ["derive"] }

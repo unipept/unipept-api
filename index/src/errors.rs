@@ -23,5 +23,7 @@ pub enum LoadIndexError {
     #[error("Error while loading taxonomy: {0}")]
     LoadTaxonomyError(String),
     #[error("The index files do not belong together: {0}")]
-    MismatchedIndexFiles(String)
+    MismatchedIndexFiles(String),
+    #[error("Error while loading k-mer table: {0}")]
+    LoadKmerTableError(String)
 }

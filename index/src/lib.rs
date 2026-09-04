@@ -1,6 +1,6 @@
 pub use errors::IndexError;
 use errors::LoadIndexError;
-use sa_server::{ActiveSearcher, load_mapping_file, load_proteins_file, load_suffix_array_file};
+use sa_server::{ActiveSearcher, load_kmer_table_file, load_mapping_file, load_proteins_file, load_suffix_array_file};
 pub use sa_index::peptide_search::{ProteinInfo, SearchResult, TaxaSearchResult};
 use sa_index::peptide_search::{search_all_peptides, search_all_peptides_taxa};
 
@@ -19,7 +19,14 @@ impl Index {
     ///
     /// Which backend that is comes from the `mmap` and `preloaded-*` features rather than from an
     /// argument; see `sa_server::backends`.
-    pub fn try_from_files(index_file: &str, proteins_file: &str, mapping_file: &str) -> Result<Self, IndexError> {
+    /// `kmer_table_file` is optional: when given, the binary search starts from precomputed
+    /// bounds instead of the whole array, which is a large saving on short peptides.
+    pub fn try_from_files(
+        index_file: &str,
+        proteins_file: &str,
+        mapping_file: &str,
+        kmer_table_file: Option<&str>
+    ) -> Result<Self, IndexError> {
         eprintln!("Loading proteins from file: {}", proteins_file);
         let proteins =
             load_proteins_file(proteins_file).map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
@@ -34,8 +41,18 @@ impl Index {
 
         // Each file is well-formed on its own; this is the only check that they came from the same
         // sa-builder run. Without it a stale mapping loads, reports ready, and answers wrongly.
-        let searcher = ActiveSearcher::try_new(suffix_array, proteins, suffix_to_protein_index)
+        let mut searcher = ActiveSearcher::try_new(suffix_array, proteins, suffix_to_protein_index)
             .map_err(LoadIndexError::MismatchedIndexFiles)?;
+
+        if let Some(kmer_table_file) = kmer_table_file {
+            eprintln!("Loading k-mer table from file: {}", kmer_table_file);
+            let table =
+                load_kmer_table_file(kmer_table_file).map_err(|err| LoadIndexError::LoadKmerTableError(err.to_string()))?;
+
+            // Rejects a table built against a different index, the same way `try_new` rejects a
+            // mismatched set of the other three files.
+            searcher = searcher.try_with_kmer_table(table).map_err(LoadIndexError::MismatchedIndexFiles)?;
+        }
 
         Ok(Self { searcher })
     }

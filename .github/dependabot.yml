@@ -1,0 +1,32 @@
+# Three ecosystems live in this repository: cargo (one lockfile at the root covers every
+# workspace member), github-actions (the `uses:` pins in .github/workflows), and devcontainers
+# (.devcontainer/devcontainer.json).
+#
+# Monthly, ungrouped and effectively uncapped: one PR per update, so each bump is merged on its
+# own evidence rather than as part of a batch that is green only as a whole.
+version: 2
+
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: monthly
+      time: "13:00"
+      timezone: Europe/Brussels
+    open-pull-requests-limit: 99
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+      time: "13:00"
+      timezone: Europe/Brussels
+    open-pull-requests-limit: 99
+
+  - package-ecosystem: devcontainers
+    directory: "/"
+    schedule:
+      interval: monthly
+      time: "13:00"
+      timezone: Europe/Brussels
+    open-pull-requests-limit: 99

@@ -29,10 +29,11 @@ pub fn calculate_lca(
             .filter(|&x| if rank == genus_index || rank == species_index { x > 0 } else { x >= 0 });
 
         // Check if all elements in the iterator are the same
-        if let Some(first) = iterator.next() {
-            if first > 0 && iterator.all(|item| item == first) {
-                return first;
-            }
+        if let Some(first) = iterator.next()
+            && first > 0
+            && iterator.all(|item| item == first)
+        {
+            return first;
         }
     }
 

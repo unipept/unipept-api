@@ -49,6 +49,10 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
         &taxons
     )?;
 
+    // The backend is compiled in, so this is the only way to tell how the running server was
+    // built. The configurations differ enough in memory profile to be worth stating.
+    eprintln!("Index storage backend: {}", Index::backend_summary());
+
     let index = Index::try_from_files(&sa, &proteins, &mappings)?;
 
     let app_state = AppState {

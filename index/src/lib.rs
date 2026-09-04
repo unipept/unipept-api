@@ -1,3 +1,5 @@
+use std::path::Path;
+
 pub use errors::IndexError;
 use errors::LoadIndexError;
 use sa_server::{ActiveSearcher, load_kmer_table_file, load_mapping_file, load_proteins_file, load_suffix_array_file};
@@ -19,15 +21,16 @@ impl Index {
     ///
     /// Which backend that is comes from the `mmap` and `preloaded-*` features rather than from an
     /// argument; see `sa_server::backends`.
-    /// `kmer_table_file` is optional: when given, the binary search starts from precomputed
-    /// bounds instead of the whole array, which is a large saving on short peptides. It must have
-    /// been built from the same suffix array — only a table built from a *larger* index is
-    /// rejected, so a stale one left beside a grown index is accepted and answers wrongly.
+    /// `kmer_table_file` need not exist: the table is an accelerator, and an index without one
+    /// searches the whole suffix array instead. When it is there, the binary search starts from
+    /// precomputed bounds, which is a large saving on short peptides. It must have been built
+    /// from the same suffix array — only a table built from a *larger* index is rejected, so a
+    /// stale one left beside a grown index is accepted and answers wrongly.
     pub fn try_from_files(
         index_file: &str,
         proteins_file: &str,
         mapping_file: &str,
-        kmer_table_file: Option<&str>
+        kmer_table_file: &str
     ) -> Result<Self, IndexError> {
         eprintln!("Loading proteins from file: {}", proteins_file);
         let proteins =
@@ -46,7 +49,7 @@ impl Index {
         let mut searcher = ActiveSearcher::try_new(suffix_array, proteins, suffix_to_protein_index)
             .map_err(LoadIndexError::MismatchedIndexFiles)?;
 
-        if let Some(kmer_table_file) = kmer_table_file {
+        if Path::new(kmer_table_file).exists() {
             eprintln!("Loading k-mer table from file: {}", kmer_table_file);
             let table =
                 load_kmer_table_file(kmer_table_file).map_err(|err| LoadIndexError::LoadKmerTableError(err.to_string()))?;
@@ -55,6 +58,8 @@ impl Index {
             // table built from a *larger* index. A table from a smaller one passes: sa-builder
             // writes no build identifier, so this is weaker than the `try_new` check above.
             searcher = searcher.try_with_kmer_table(table).map_err(LoadIndexError::MismatchedIndexFiles)?;
+        } else {
+            eprintln!("No k-mer table at {}; searching the whole suffix array", kmer_table_file);
         }
 
         Ok(Self { searcher })

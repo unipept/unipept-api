@@ -35,6 +35,7 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
     let sa = format!("{}/sa.bin", index_location);
     let proteins = format!("{}/proteins.bin", index_location);
     let mappings = format!("{}/mapping.bin", index_location);
+    let kmer_table = format!("{}/kmer_table.bin", index_location);
 
     let database = Database::try_from_url(database_address)?;
 
@@ -53,17 +54,7 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
     // built. The configurations differ enough in memory profile to be worth stating.
     eprintln!("Index storage backend: {}", Index::backend_summary());
 
-    // Optional, and shipped inside the published index archive, so it is picked up by being
-    // there rather than by a flag the deployment has to learn about.
-    let kmer_table_path = format!("{}/kmer_table.bin", index_location);
-    let kmer_table = if std::path::Path::new(&kmer_table_path).exists() {
-        Some(kmer_table_path.as_str())
-    } else {
-        eprintln!("No k-mer table at {}; searching the whole suffix array", kmer_table_path);
-        None
-    };
-
-    let index = Index::try_from_files(&sa, &proteins, &mappings, kmer_table)?;
+    let index = Index::try_from_files(&sa, &proteins, &mappings, &kmer_table)?;
 
     let app_state = AppState {
         datastore: Arc::new(datastore),

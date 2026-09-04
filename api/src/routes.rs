@@ -62,7 +62,7 @@ fn create_api_routes() -> Router<AppState> {
 
 macro_rules! define_routes {
     (
-        $( $path:tt, $handlers:expr),*
+        $( $path:tt, $handlers:expr_2021),*
     ) => {{
         let mut router = Router::new();
 

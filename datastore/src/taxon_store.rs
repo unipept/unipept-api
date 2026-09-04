@@ -57,16 +57,34 @@ impl TaxonStore {
         let file = std::fs::File::open(file).map_err(|_| TaxonStoreError::FileNotFound(file.to_string()))?;
 
         let mut mapper = HashMap::new();
-        for line in BufReader::new(file).lines() {
+        for (index, line) in BufReader::new(file).lines().enumerate() {
             let line = line?;
+            let line_number = index + 1;
+
+            if line.trim().is_empty() {
+                continue;
+            }
 
             let parts: Vec<&str> = line.trim_end().split('\t').collect();
-            if parts.len() == 5 {
-                mapper.insert(
-                    parts[0].parse()?,
-                    (parts[1].to_string(), parts[2].parse::<LineageRank>()?, matches!(parts[4], "\x01"))
-                );
+            if parts.len() != 5 {
+                return Err(TaxonStoreError::UnexpectedColumnCount {
+                    line: line_number,
+                    expected: 5,
+                    found: parts.len()
+                });
             }
+
+            let taxon_id: u32 = parts[0]
+                .parse()
+                .map_err(|_| TaxonStoreError::InvalidTaxonId { line: line_number, value: parts[0].to_string() })?;
+
+            let rank = parts[2]
+                .parse::<LineageRank>()
+                .map_err(|_| TaxonStoreError::InvalidRank { line: line_number, value: parts[2].to_string() })?;
+
+            // The validity flag is a MySQL boolean dump: 0x01 for a valid taxon, 0x00 otherwise.
+            // Neither byte is whitespace, so `trim_end` above leaves the column intact.
+            mapper.insert(taxon_id, (parts[1].to_string(), rank, matches!(parts[4], "\x01")));
         }
 
         Ok(Self { mapper })

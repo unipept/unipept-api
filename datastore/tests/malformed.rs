@@ -4,8 +4,29 @@
 //! line. Errors name the line they came from, because a store that refuses to load without saying
 //! which row is worse to operate than one that quietly skipped it.
 
-use datastore::{LineageStore, LineageStoreError};
+use datastore::{
+    EcStore, EcStoreError, GoStore, GoStoreError, InterproStore, InterproStoreError, LineageStore, LineageStoreError,
+    ReferenceProteomeStore, ReferenceProteomeStoreError, TaxonStore, TaxonStoreError
+};
 use tempfile::TempDir;
+
+/// Writes `contents` to a file in a fresh temporary directory and hands the path to `load`.
+///
+/// The directory is dropped before returning, which is safe because every store reads its file
+/// eagerly and keeps nothing open.
+fn with_file<T, E>(name: &str, contents: &str, load: impl Fn(&str) -> Result<T, E>) -> Result<T, E> {
+    let dir = TempDir::new().expect("could not create a temporary directory");
+    let path = dir.path().join(name);
+    std::fs::write(&path, contents).expect("could not write the fixture file");
+    load(path.to_str().unwrap())
+}
+
+/// Drops a successfully loaded store, keeping only whether it loaded.
+///
+/// The stores do not implement `Debug`, so a failure message can only render the error side.
+fn outcome<T, E>(result: Result<T, E>) -> Result<(), E> {
+    result.map(|_| ())
+}
 
 /// A well-formed lineage row: a taxon id followed by 28 unrecorded rank columns.
 fn valid_row(taxon_id: u32) -> String {
@@ -126,4 +147,99 @@ fn blank_lines_are_skipped() {
     let store = result.expect("blank lines should be skipped, not rejected");
     assert!(store.get(1).is_some());
     assert!(store.get(8501).is_some());
+}
+
+// ── The stores that used to drop a row they could not read ──────────────────────────────────────
+//
+// Each of these five skipped any line whose column count was wrong, so a truncated file loaded
+// clean and simply held less than it should. The tests below pin the replacement behaviour, and
+// `a_dropped_row_is_now_an_error` states the change itself rather than leaving it implicit.
+
+/// A valid taxon row. The fifth column is the MySQL boolean the loader reads: 0x01 valid, 0x00 not.
+fn taxon_row(id: u32, name: &str, rank: &str, valid: bool) -> String {
+    let flag = if valid { '\u{1}' } else { '\u{0}' };
+    format!("{id}\t{name}\t{rank}\t1\t{flag}")
+}
+
+#[test]
+fn a_dropped_row_is_now_an_error() {
+    // Before this policy each of these files loaded successfully, holding one entry instead of two.
+    // Silently. That is the behaviour being replaced.
+    let contents = format!("{}\n8501\tshort row\n", taxon_row(1, "root", "no rank", true));
+    let taxons = outcome(with_file("taxons.tsv", &contents, TaxonStore::try_from_file));
+    assert!(matches!(taxons, Err(TaxonStoreError::UnexpectedColumnCount { line: 2, .. })), "taxons: {taxons:?}");
+
+    let ec = with_file("ec.tsv", "1\t1.1.1.1\tAlcohol dehydrogenase\n2\tbroken\n", EcStore::try_from_file);
+    assert!(matches!(ec, Err(EcStoreError::UnexpectedColumnCount { line: 2, .. })), "ec");
+
+    let go = with_file("go.tsv", "1\tGO:1\tns\tname\n2\tbroken\n", GoStore::try_from_file);
+    assert!(matches!(go, Err(GoStoreError::UnexpectedColumnCount { line: 2, .. })), "go");
+
+    let interpro = with_file("ipr.tsv", "1\tIPR1\tFamily\tname\n2\tbroken\n", InterproStore::try_from_file);
+    assert!(matches!(interpro, Err(InterproStoreError::UnexpectedColumnCount { line: 2, .. })), "interpro");
+
+    let proteomes =
+        with_file("proteomes.tsv", "1\tUP1\t8501\t1\tP1\n2\tbroken\n", ReferenceProteomeStore::try_from_file);
+    assert!(matches!(proteomes, Err(ReferenceProteomeStoreError::UnexpectedColumnCount { line: 2, .. })), "proteomes");
+}
+
+#[test]
+fn taxon_store_rejects_an_unparseable_id_and_rank() {
+    let bad_id = outcome(with_file("taxons.tsv", "crocodile\tname\tspecies\t1\t\u{1}\n", TaxonStore::try_from_file));
+    match bad_id {
+        Err(TaxonStoreError::InvalidTaxonId { line, value }) => {
+            assert_eq!(line, 1);
+            assert_eq!(value, "crocodile");
+        }
+        other => panic!("expected InvalidTaxonId, got {other:?}")
+    }
+
+    let bad_rank =
+        outcome(with_file("taxons.tsv", &taxon_row(1, "root", "not a rank", true), TaxonStore::try_from_file));
+    match bad_rank {
+        Err(TaxonStoreError::InvalidRank { value, .. }) => assert_eq!(value, "not a rank"),
+        other => panic!("expected InvalidRank, got {other:?}")
+    }
+}
+
+/// The validity byte is 0x00 or 0x01, and neither is whitespace — which matters because the loader
+/// trims the line before splitting it. If that ever became a space, `trim_end` would eat the column
+/// and every row in the file would be one field short.
+#[test]
+fn taxon_store_keeps_the_validity_column_through_trimming() {
+    let contents = format!(
+        "{}\n{}\n",
+        taxon_row(1, "valid taxon", "species", true),
+        taxon_row(2, "invalid taxon", "species", false)
+    );
+    let store = with_file("taxons.tsv", &contents, TaxonStore::try_from_file).expect("both rows should parse");
+
+    assert!(store.is_valid(1));
+    assert!(!store.is_valid(2));
+    assert!(store.get(2).is_some(), "an invalid taxon is still stored, just flagged");
+}
+
+#[test]
+fn blank_lines_are_skipped_by_every_store() {
+    let contents = format!("\n{}\n\n", taxon_row(1, "root", "no rank", true));
+    let taxons = with_file("taxons.tsv", &contents, TaxonStore::try_from_file);
+    assert!(taxons.expect("blank lines should be skipped").get(1).is_some());
+
+    assert!(with_file("ec.tsv", "\n1\t1.1.1.1\tname\n\n", EcStore::try_from_file).is_ok());
+    assert!(with_file("go.tsv", "\n1\tGO:1\tns\tname\n\n", GoStore::try_from_file).is_ok());
+    assert!(with_file("ipr.tsv", "\n1\tIPR1\tFamily\tname\n\n", InterproStore::try_from_file).is_ok());
+    assert!(with_file("proteomes.tsv", "\n1\tUP1\t8501\t1\tP1\n\n", ReferenceProteomeStore::try_from_file).is_ok());
+}
+
+#[test]
+fn reference_proteome_parse_errors_name_their_line() {
+    let contents = "1\tUP1\t8501\t1\tP1\n2\tUP2\tnot-a-taxon\t1\tP2\n";
+    let result = outcome(with_file("proteomes.tsv", contents, ReferenceProteomeStore::try_from_file));
+
+    match result {
+        Err(error @ ReferenceProteomeStoreError::ParseError(_)) => {
+            assert!(error.to_string().contains("Line 2"), "got {error}");
+        }
+        other => panic!("expected a ParseError, got {other:?}")
+    }
 }

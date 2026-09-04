@@ -35,7 +35,9 @@ pub enum EcStoreError {
     #[error("{0}")]
     IoError(#[from] std::io::Error),
     #[error("File not found: {0}")]
-    FileNotFound(String)
+    FileNotFound(String),
+    #[error("Line {line}: expected {expected} columns, found {found}")]
+    UnexpectedColumnCount { line: usize, expected: usize, found: usize }
 }
 
 #[derive(Error, Debug)]
@@ -43,7 +45,9 @@ pub enum GoStoreError {
     #[error("{0}")]
     IoError(#[from] std::io::Error),
     #[error("File not found: {0}")]
-    FileNotFound(String)
+    FileNotFound(String),
+    #[error("Line {line}: expected {expected} columns, found {found}")]
+    UnexpectedColumnCount { line: usize, expected: usize, found: usize }
 }
 
 #[derive(Error, Debug)]
@@ -51,7 +55,9 @@ pub enum InterproStoreError {
     #[error("{0}")]
     IoError(#[from] std::io::Error),
     #[error("File not found: {0}")]
-    FileNotFound(String)
+    FileNotFound(String),
+    #[error("Line {line}: expected {expected} columns, found {found}")]
+    UnexpectedColumnCount { line: usize, expected: usize, found: usize }
 }
 
 #[derive(Error, Debug)]
@@ -61,7 +67,9 @@ pub enum ReferenceProteomeStoreError {
     #[error("File not found: {0}")]
     FileNotFound(String),
     #[error("Error while parsing: {0}")]
-    ParseError(String)
+    ParseError(String),
+    #[error("Line {line}: expected {expected} columns, found {found}")]
+    UnexpectedColumnCount { line: usize, expected: usize, found: usize }
 }
 
 #[derive(Error, Debug)]
@@ -87,5 +95,11 @@ pub enum TaxonStoreError {
     #[error("Taxon id `{0}` not found in taxon store")]
     InvalidTaxonError(#[from] std::num::ParseIntError),
     #[error("Lineage rank `{0}` not found in lineage store")]
-    InvalidRankError(String)
+    InvalidRankError(String),
+    #[error("Line {line}: expected {expected} columns, found {found}")]
+    UnexpectedColumnCount { line: usize, expected: usize, found: usize },
+    #[error("Line {line}: `{value}` is not a taxon id")]
+    InvalidTaxonId { line: usize, value: String },
+    #[error("Line {line}: `{value}` is not a lineage rank")]
+    InvalidRank { line: usize, value: String }
 }

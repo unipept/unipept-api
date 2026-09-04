@@ -17,12 +17,23 @@ impl InterproStore {
         let file = std::fs::File::open(file).map_err(|_| InterproStoreError::FileNotFound(file.to_string()))?;
 
         let mut mapper = HashMap::new();
-        for line in BufReader::new(file).lines() {
+        for (index, line) in BufReader::new(file).lines().enumerate() {
             let line = line?;
-            let parts: Vec<&str> = line.split('\t').collect();
-            if parts.len() == 4 {
-                mapper.insert(parts[1].to_string(), (parts[2].to_string(), parts[3].to_string()));
+
+            if line.trim().is_empty() {
+                continue;
             }
+
+            let parts: Vec<&str> = line.split('\t').collect();
+            if parts.len() != 4 {
+                return Err(InterproStoreError::UnexpectedColumnCount {
+                    line: index + 1,
+                    expected: 4,
+                    found: parts.len()
+                });
+            }
+
+            mapper.insert(parts[1].to_string(), (parts[2].to_string(), parts[3].to_string()));
         }
 
         Ok(InterproStore { mapper })

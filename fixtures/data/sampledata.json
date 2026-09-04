@@ -1,0 +1,23 @@
+{
+  "sample_data": [
+    {
+      "id": 1,
+      "environment": "Fixture environment",
+      "reference": "Unipept fixture corpus",
+      "url": "https://example.org/fixtures/1",
+      "project_website": "https://example.org/fixtures",
+      "datasets": [
+        {
+          "name": "Crocodylus peptides",
+          "order": 1,
+          "data": ["AWDIQNGK", "TVGENYSAK"]
+        },
+        {
+          "name": "Cross-domain peptides",
+          "order": 2,
+          "data": ["GISVNDAWEK"]
+        }
+      ]
+    }
+  ]
+}

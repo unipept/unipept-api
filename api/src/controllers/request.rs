@@ -18,10 +18,13 @@ where
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let query = parts.uri.query().unwrap_or_default();
-        Ok(Self(
-            serde_qs::from_str(&urlencoding::decode(query).unwrap())
-                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid query string"))?
-        ))
+
+        // A percent escape that does not decode to UTF-8 — `%FF`, say — is client input, not an
+        // impossible state: this used to unwrap, so the request took the handler down with it.
+        let decoded =
+            urlencoding::decode(query).map_err(|_| (StatusCode::BAD_REQUEST, "invalid query string encoding"))?;
+
+        Ok(Self(serde_qs::from_str(&decoded).map_err(|_| (StatusCode::BAD_REQUEST, "invalid query string"))?))
     }
 }
 
@@ -63,10 +66,28 @@ where
             .await
             .map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body").into_response())?;
 
+        // Every step here reads client-supplied bytes and every one of them used to unwrap: a
+        // truncated body, a field with no name, or a field whose bytes are not UTF-8 each panicked
+        // the handler rather than returning a status.
         let mut querystring = String::new();
-        while let Some(field) = multipart.next_field().await.unwrap() {
-            let name = field.name().unwrap().to_string();
-            let value = field.text().await.unwrap();
+        loop {
+            let field = multipart
+                .next_field()
+                .await
+                .map_err(|_| (StatusCode::BAD_REQUEST, "malformed multipart body").into_response())?;
+
+            let Some(field) = field else { break };
+
+            let name = field
+                .name()
+                .ok_or_else(|| (StatusCode::BAD_REQUEST, "multipart field without a name").into_response())?
+                .to_string();
+
+            let value = field
+                .text()
+                .await
+                .map_err(|_| (StatusCode::BAD_REQUEST, "multipart field is not valid text").into_response())?;
+
             querystring.push_str(&format!("{}={}&", name, value));
         }
 

@@ -15,12 +15,14 @@ pub struct Index {
 }
 
 impl Index {
-    /// Loads the three index files into the storage backend this binary was compiled for.
+    /// Loads the index files into the storage backend this binary was compiled for.
     ///
     /// Which backend that is comes from the `mmap` and `preloaded-*` features rather than from an
     /// argument; see `sa_server::backends`.
     /// `kmer_table_file` is optional: when given, the binary search starts from precomputed
-    /// bounds instead of the whole array, which is a large saving on short peptides.
+    /// bounds instead of the whole array, which is a large saving on short peptides. It must have
+    /// been built from the same suffix array — only a table built from a *larger* index is
+    /// rejected, so a stale one left beside a grown index is accepted and answers wrongly.
     pub fn try_from_files(
         index_file: &str,
         proteins_file: &str,
@@ -49,8 +51,9 @@ impl Index {
             let table =
                 load_kmer_table_file(kmer_table_file).map_err(|err| LoadIndexError::LoadKmerTableError(err.to_string()))?;
 
-            // Rejects a table built against a different index, the same way `try_new` rejects a
-            // mismatched set of the other three files.
+            // Rejects a table whose bounds run past the end of this suffix array, which catches a
+            // table built from a *larger* index. A table from a smaller one passes: sa-builder
+            // writes no build identifier, so this is weaker than the `try_new` check above.
             searcher = searcher.try_with_kmer_table(table).map_err(LoadIndexError::MismatchedIndexFiles)?;
         }
 

@@ -1,0 +1,150 @@
+# Everything that gates a change, in one workflow, so the ruleset has a single coherent set of
+# required checks to name.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A force-push replaces its predecessor rather than racing it. Not on main: runs there are the
+# record of what the branch did.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Check + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: stable
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # `--all-targets` is not redundant with `cargo test`: it is what compiles the criterion
+      # benches, which `cargo test` does not build.
+      - name: Run cargo check
+        run: cargo check --all-targets --locked
+
+      - name: Run cargo test
+        run: cargo test --locked
+
+  release-build:
+    # `cargo check` proves the workspace typechecks; it does not prove it links, and it never
+    # exercises the release profile.
+    name: Release build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: stable
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binaries
+        run: cargo build --release --locked
+
+  backends:
+    # The storage features pick which concrete type each `Active*` alias in `sa-server` names, and
+    # `clippy --all-features` resolves only one of the nine. Sequential, not a matrix: the
+    # combinations share one warm target directory.
+    name: Storage backend aliases
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: stable
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check every backend combination
+        shell: bash
+        run: |
+          set -euo pipefail
+          for features in "" "mmap" "mmap,preloaded-text" "mmap,preloaded-proteins" \
+                          "mmap,preloaded-mapping" "mmap,preloaded-text,preloaded-proteins" \
+                          "mmap,preloaded-text,preloaded-mapping" \
+                          "mmap,preloaded-proteins,preloaded-mapping" \
+                          "mmap,preloaded-text,preloaded-proteins,preloaded-mapping"; do
+            echo "== ${features:-(none)} =="
+            if [ -z "$features" ]; then
+              cargo check --all-targets --locked -p unipept-api
+            else
+              cargo check --all-targets --locked -p unipept-api --features "$features"
+            fi
+          done
+
+  clippy:
+    name: Run Clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: stable
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: clippy
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # `--all-targets` so `#[cfg(test)]` is linted too, and the tests cannot rot.
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  docs:
+    # `-D warnings` turns a broken intra-doc link — which nothing else here notices — into a
+    # failure. `--no-deps` keeps it to this workspace's own documentation.
+    name: Check documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: stable
+      RUSTDOCFLAGS: -D warnings
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build documentation
+        run: cargo doc --no-deps --all-features --document-private-items

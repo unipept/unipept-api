@@ -40,6 +40,7 @@ This is an exhaustive list of all endpoints that are exposed by this API
 * `/private_api/ecnumbers`
 * `/private_api/interpros`
 * `/private_api/taxa`
+* `/private_api/taxa2rank`
 * `/private_api/proteins`
 * `/private_api/metadata`
 * `/mpa/pept2data`

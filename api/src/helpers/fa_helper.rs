@@ -35,6 +35,12 @@ pub fn calculate_fa(proteins: &[ProteinInfo]) -> FunctionalAggregation {
         decode_into(protein.annotations, &mut annotations);
 
         for annotation in annotations.split(';') {
+            // A protein with no annotations decodes to "", which splits into one empty segment.
+            // Skipping it here is what lets the map never hold an empty key in the first place.
+            if annotation.is_empty() {
+                continue;
+            }
+
             match annotation.chars().next() {
                 Some('E') => {
                     proteins_with_ec.insert(protein.uniprot_accession);
@@ -67,8 +73,6 @@ pub fn calculate_fa(proteins: &[ProteinInfo]) -> FunctionalAggregation {
     counts.insert("EC".to_string(), proteins_with_ec.len());
     counts.insert("GO".to_string(), proteins_with_go.len());
     counts.insert("IPR".to_string(), proteins_with_ipr.len());
-
-    data.remove("");
 
     FunctionalAggregation { counts, data }
 }

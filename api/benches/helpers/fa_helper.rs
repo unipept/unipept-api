@@ -21,6 +21,14 @@ fn corpus(protein_count: usize) -> (Vec<String>, Vec<Vec<u8>>) {
     let accessions: Vec<String> = (0..protein_count).map(|i| format!("P{:05}", i)).collect();
     let annotations: Vec<Vec<u8>> = (0..protein_count)
         .map(|i| {
+            // A share of real proteins carry no annotations at all, and they are not free: each
+            // one still decodes and yields an empty segment. One in eight is a stand-in for a
+            // proportion nobody here has measured against the real index — but any share beats
+            // the zero this corpus had, which made the case invisible.
+            if i % 8 == 0 {
+                return encode("");
+            }
+
             let picked: Vec<&str> = (0..5).map(|k| terms[(i * 7 + k * 11) % terms.len()].as_str()).collect();
             encode(&picked.join(";"))
         })

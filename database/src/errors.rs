@@ -1,7 +1,6 @@
-use url::ParseError;
-use opensearch::http::transport::BuildError;
+use opensearch::{Error as ClientError, http::transport::BuildError};
 use thiserror::Error;
-use opensearch::Error as ClientError;
+use url::ParseError;
 
 #[derive(Error, Debug)]
 pub enum DatabaseError {

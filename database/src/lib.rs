@@ -1,12 +1,19 @@
-use std::{collections::HashMap};
-use std::collections::HashSet;
-use std::time::Duration;
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration
+};
+
 pub use errors::DatabaseError;
 use models::UniprotEntry;
-use opensearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
-use opensearch::http::{Url};
-use opensearch::{OpenSearch, SearchParts};
+use opensearch::{
+    OpenSearch, SearchParts,
+    http::{
+        Url,
+        transport::{SingleNodeConnectionPool, TransportBuilder}
+    }
+};
 use serde_json::json;
+
 use crate::DatabaseError::GeneralError;
 
 mod errors;
@@ -38,7 +45,7 @@ impl Database {
 /// Retrieves protein information from the database for a given set of UniProt accession IDs
 ///
 /// # Arguments
-/// * `conn` - Database connection handle 
+/// * `conn` - Database connection handle
 /// * `accessions` - Set of UniProt accession IDs to retrieve data for
 ///
 /// # Returns
@@ -47,30 +54,23 @@ impl Database {
 /// * `DatabaseError` if the database operation fails
 pub async fn get_accessions(
     client: &OpenSearch,
-    accessions: &HashSet<String>,
+    accessions: &HashSet<String>
 ) -> Result<Vec<UniprotEntry>, DatabaseError> {
     if accessions.is_empty() {
         return Ok(vec![]);
     }
 
     let mut result: Vec<UniprotEntry> = Vec::new();
-    
-    let docs: Vec<_> = accessions
-        .iter()
-        .map(|id| json!({ "_id": id }))
-        .collect();
+
+    let docs: Vec<_> = accessions.iter().map(|id| json!({ "_id": id })).collect();
 
     let body = json!({ "docs": docs });
 
-    let response = client
-        .mget(opensearch::MgetParts::Index("uniprot_entries"))
-        .body(body)
-        .send()
-        .await?;
-    
+    let response = client.mget(opensearch::MgetParts::Index("uniprot_entries")).body(body).send().await?;
+
     if response.status_code().is_success() {
         let response_body: serde_json::Value = response.json().await?;
-        
+
         if let Some(docs) = response_body.get("docs").and_then(|docs| docs.as_array()) {
             for doc in docs {
                 if let Some(source) = doc.get("_source") {
@@ -101,7 +101,7 @@ pub async fn get_accessions(
 /// instead of a vector, allowing direct access to entries by their accession ID.
 pub async fn get_accessions_map(
     client: &OpenSearch,
-    accessions: &HashSet<String>,
+    accessions: &HashSet<String>
 ) -> Result<HashMap<String, UniprotEntry>, DatabaseError> {
     Ok(get_accessions(client, accessions)
         .await?
@@ -124,10 +124,7 @@ pub async fn get_accessions_map(
 /// - Entry name contains the filter string (case-insensitive)
 /// - UniProt accession number contains the filter string
 /// - Taxon ID contains the filter number (if filter is a valid integer, discarded otherwise)
-pub async fn get_accessions_count_by_filter(
-    client: &OpenSearch,
-    filter: String,
-) -> Result<u32, DatabaseError> {
+pub async fn get_accessions_count_by_filter(client: &OpenSearch, filter: String) -> Result<u32, DatabaseError> {
     // If filter is empty, use match_all query to count all documents
     if filter.is_empty() {
         let body = json!({
@@ -149,9 +146,7 @@ pub async fn get_accessions_count_by_filter(
         }
 
         let response_body: serde_json::Value = response.json().await?;
-        return Ok(response_body["hits"]["total"]["value"]
-            .as_u64()
-            .unwrap_or(0) as u32);
+        return Ok(response_body["hits"]["total"]["value"].as_u64().unwrap_or(0) as u32);
     }
 
     // Parse filter as integer for taxon_id matching if possible
@@ -175,7 +170,7 @@ pub async fn get_accessions_count_by_filter(
                     "case_insensitive": true
                 }
             }
-        })
+        }),
     ];
 
     // Add taxon_id term query if filter is a valid integer
@@ -211,10 +206,8 @@ pub async fn get_accessions_count_by_filter(
     }
 
     let response_body: serde_json::Value = response.json().await?;
-    
-    Ok(response_body["hits"]["total"]["value"]
-        .as_u64()
-        .unwrap_or(0) as u32)
+
+    Ok(response_body["hits"]["total"]["value"].as_u64().unwrap_or(0) as u32)
 }
 
 /// Gets UniProt accession IDs from the database that match the given filter criteria
@@ -263,15 +256,15 @@ pub async fn get_accessions_by_filter(
                 }
             }
             }),
-                // Uniprot accession number contains filter
-                json!({
+            // Uniprot accession number contains filter
+            json!({
                 "prefix": {
                     "uniprot_accession_number": {
                         "value": filter,
                         "case_insensitive": true
                     }
                 }
-            })
+            }),
         ];
 
         // Add taxon_id term query if filter is a valid integer

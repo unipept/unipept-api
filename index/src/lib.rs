@@ -2,13 +2,12 @@ use std::path::Path;
 
 pub use errors::IndexError;
 use errors::LoadIndexError;
-use sa_server::{ActiveSearcher, load_kmer_table_file, load_mapping_file, load_proteins_file, load_suffix_array_file};
-pub use sa_index::peptide_search::{ProteinInfo, SearchResult, TaxaSearchResult};
-use sa_index::peptide_search::{search_all_peptides, search_all_peptides_taxa};
-
 /// Re-exported so the API can decode the annotations it is handed without taking its own
 /// dependency on the index repository, and cannot end up on a different version of it.
 pub use fa_compression;
+pub use sa_index::peptide_search::{ProteinInfo, SearchResult, TaxaSearchResult};
+use sa_index::peptide_search::{search_all_peptides, search_all_peptides_taxa};
+use sa_server::{ActiveSearcher, load_kmer_table_file, load_mapping_file, load_proteins_file, load_suffix_array_file};
 
 mod errors;
 
@@ -51,8 +50,8 @@ impl Index {
 
         if Path::new(kmer_table_file).exists() {
             eprintln!("Loading k-mer table from file: {}", kmer_table_file);
-            let table =
-                load_kmer_table_file(kmer_table_file).map_err(|err| LoadIndexError::LoadKmerTableError(err.to_string()))?;
+            let table = load_kmer_table_file(kmer_table_file)
+                .map_err(|err| LoadIndexError::LoadKmerTableError(err.to_string()))?;
 
             // Rejects a table whose bounds run past the end of this suffix array, which catches a
             // table built from a *larger* index. A table from a smaller one passes: sa-builder

@@ -61,7 +61,7 @@ pub enum ReferenceProteomeStoreError {
     #[error("File not found: {0}")]
     FileNotFound(String),
     #[error("Error while parsing: {0}")]
-    ParseError(String),
+    ParseError(String)
 }
 
 #[derive(Error, Debug)]

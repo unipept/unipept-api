@@ -1,11 +1,12 @@
 use std::convert::Infallible;
-use axum::{extract::State, Json};
+
+use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    AppState,
     controllers::generate_handlers,
-    helpers::lineage_helper::{get_lineage_array, LineageVersion},
-    AppState
+    helpers::lineage_helper::{LineageVersion, get_lineage_array}
 };
 
 #[derive(Deserialize)]

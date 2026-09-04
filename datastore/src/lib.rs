@@ -3,18 +3,18 @@ mod errors;
 mod go_store;
 mod interpro_store;
 mod lineage_store;
+mod reference_proteome_store;
 mod sample_store;
 mod taxon_store;
-mod reference_proteome_store;
 
 pub use ec_store::EcStore;
 pub use errors::DataStoreError;
 pub use go_store::GoStore;
 pub use interpro_store::InterproStore;
 pub use lineage_store::{Lineage, LineageStore};
+pub use reference_proteome_store::ReferenceProteomeStore;
 pub use sample_store::SampleStore;
 pub use taxon_store::{LineageRank, TaxonStore};
-pub use reference_proteome_store::ReferenceProteomeStore;
 
 pub struct DataStore {
     version: String,
@@ -39,9 +39,8 @@ impl DataStore {
         lineage_file: &str,
         taxon_file: &str
     ) -> Result<Self, DataStoreError> {
-        let version = std::fs::read_to_string(version_file).map_err(
-            |_err| DataStoreError::FileNotFound(version_file.to_string())
-        )?;
+        let version = std::fs::read_to_string(version_file)
+            .map_err(|_err| DataStoreError::FileNotFound(version_file.to_string()))?;
         Ok(Self {
             version: version.trim_end().to_string(),
             sample_store: SampleStore::try_from_file(sample_file)?,
@@ -73,8 +72,10 @@ impl DataStore {
     pub fn interpro_store(&self) -> &InterproStore {
         &self.interpro_store
     }
-    
-    pub fn reference_proteome_store(&self) -> &ReferenceProteomeStore { &self.reference_proteome_store }
+
+    pub fn reference_proteome_store(&self) -> &ReferenceProteomeStore {
+        &self.reference_proteome_store
+    }
 
     pub fn lineage_store(&self) -> &LineageStore {
         &self.lineage_store

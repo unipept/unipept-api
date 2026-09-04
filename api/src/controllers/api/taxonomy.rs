@@ -1,24 +1,22 @@
 use std::collections::HashSet;
-use axum::{extract::State, Json};
-use serde::{Deserialize, Serialize};
+
+use axum::{Json, extract::State};
 use datastore::{LineageRank, LineageStore};
+use serde::{Deserialize, Serialize};
+
 use crate::{
+    AppState,
     controllers::{
-        api::{default_extra, default_names, default_descendants, default_descendants_ranks},
+        api::{default_descendants, default_descendants_ranks, default_extra, default_names},
         generate_handlers
     },
+    errors::{ApiError, ApiError::UnknownRankError},
     helpers::lineage_helper::{
-        get_lineage,
-        get_lineage_with_names,
-        get_empty_lineage,
-        get_empty_lineage_with_names,
         Lineage,
-        LineageVersion::{self, *}
-    },
-    AppState
+        LineageVersion::{self, *},
+        get_empty_lineage, get_empty_lineage_with_names, get_lineage, get_lineage_with_names
+    }
 };
-use crate::errors::ApiError;
-use crate::errors::ApiError::UnknownRankError;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -68,21 +66,16 @@ fn get_children_at_rank(
 ) -> Option<HashSet<u32>> {
     let descendants_rank: String = descendants_ranks.to_string().to_lowercase();
 
-    let lineages_at_rank = lineage_store.get_lineages_at_rank(
-        rank.to_string().to_lowercase().as_str(),
-        taxon_id
-    );
+    let lineages_at_rank = lineage_store.get_lineages_at_rank(rank.to_string().to_lowercase().as_str(), taxon_id);
 
     let mut children_id_set = HashSet::new();
 
     lineages_at_rank?
         .iter()
-        .filter_map(
-            |lin| {
-                lin.get_taxon_id_at_rank(descendants_rank.as_str())
-            }
-        )
-        .for_each(|id| { children_id_set.insert(id.unsigned_abs()); });
+        .filter_map(|lin| lin.get_taxon_id_at_rank(descendants_rank.as_str()))
+        .for_each(|id| {
+            children_id_set.insert(id.unsigned_abs());
+        });
 
     Some(children_id_set)
 }
@@ -103,13 +96,14 @@ async fn handler(
     if descendants {
         for desc_rank in descendants_ranks.clone() {
             if LineageStore::rank_to_idx(desc_rank.as_str()).is_none() {
-                return Err(UnknownRankError(String::from("An unknown rank has been passed for the `descendant_rank` parameter.")))
+                return Err(UnknownRankError(String::from(
+                    "An unknown rank has been passed for the `descendant_rank` parameter."
+                )));
             }
         }
     }
 
-   Ok(
-       input
+    Ok(input
         .into_iter()
         .filter_map(|taxon_id| {
             // The root taxon is a special case.
@@ -119,17 +113,22 @@ async fn handler(
                 // If descendants is true, we need to get all the taxa at the requested level and
                 // report those as children of the root.
                 if descendants {
-                    children = Some(lineage_store.get_all_taxon_ids_at_rank("domain")?
-                        .iter()
-                        .flat_map(|sk_taxon| {
-                            descendants_ranks
-                                .iter()
-                                .cloned()
-                                .filter_map(|desc_rank| get_children_at_rank(*sk_taxon, LineageRank::Domain, desc_rank, lineage_store))
-                                .flat_map(|set| set.into_iter())
-                                .collect::<Vec<u32>>()
-                        })
-                        .collect());
+                    children = Some(
+                        lineage_store
+                            .get_all_taxon_ids_at_rank("domain")?
+                            .iter()
+                            .flat_map(|sk_taxon| {
+                                descendants_ranks
+                                    .iter()
+                                    .cloned()
+                                    .filter_map(|desc_rank| {
+                                        get_children_at_rank(*sk_taxon, LineageRank::Domain, desc_rank, lineage_store)
+                                    })
+                                    .flat_map(|set| set.into_iter())
+                                    .collect::<Vec<u32>>()
+                            })
+                            .collect()
+                    );
                 }
 
                 let lineage: Option<Lineage> = match (extra, names) {
@@ -165,12 +164,7 @@ async fn handler(
                     let mut child_vector: Vec<u32> = Vec::new();
 
                     for desc_rank in descendants_ranks.clone() {
-                        let items = get_children_at_rank(
-                            taxon_id,
-                            rank.clone(),
-                            desc_rank,
-                            lineage_store
-                        );
+                        let items = get_children_at_rank(taxon_id, rank.clone(), desc_rank, lineage_store);
 
                         if let Some(values) = items {
                             child_vector.extend(values)
@@ -178,7 +172,7 @@ async fn handler(
                     }
 
                     Some(child_vector)
-                },
+                }
                 false => None
             };
 
@@ -192,8 +186,7 @@ async fn handler(
                 descendants: children
             })
         })
-        .collect()
-   )
+        .collect())
 }
 
 generate_handlers!(

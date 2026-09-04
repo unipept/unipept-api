@@ -1,20 +1,21 @@
 use std::collections::HashMap;
-use axum::{extract::State, Json};
+
+use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    AppState,
     controllers::{
         api::{default_cutoff, default_equate_il, default_extra},
         generate_handlers
     },
+    errors::ApiError,
     helpers::{
-        ec_helper::{ec_numbers_from_map, EcNumber},
-        fa_helper::calculate_fa
-    },
-    AppState
+        ec_helper::{EcNumber, ec_numbers_from_map},
+        fa_helper::calculate_fa,
+        sanitize_peptides
+    }
 };
-use crate::errors::ApiError;
-use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -48,9 +49,7 @@ async fn handler(
     }
 
     let unique_peptides: Vec<String> = peptide_counts.keys().cloned().collect();
-    let result = tokio::task::block_in_place(|| {
-        index.analyse(&unique_peptides, equate_il, false, Some(cutoff))
-    });
+    let result = tokio::task::block_in_place(|| index.analyse(&unique_peptides, equate_il, false, Some(cutoff)));
 
     let ec_store = datastore.ec_store();
 
@@ -69,7 +68,7 @@ async fn handler(
                     peptide: item.sequence.to_string(),
                     cutoff_used,
                     total_protein_count,
-                    ec: ecs,
+                    ec: ecs
                 });
             }
         }

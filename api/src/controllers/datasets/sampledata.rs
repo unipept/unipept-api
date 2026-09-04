@@ -1,8 +1,9 @@
 use std::convert::Infallible;
-use axum::{extract::State, Json};
+
+use axum::{Json, extract::State};
 use datastore::SampleStore;
 
-use crate::{controllers::generate_handlers, AppState};
+use crate::{AppState, controllers::generate_handlers};
 
 async fn handler(State(AppState { datastore, .. }): State<AppState>) -> Result<SampleStore, Infallible> {
     Ok(datastore.sample_store().to_owned())

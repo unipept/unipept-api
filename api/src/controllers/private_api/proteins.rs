@@ -1,12 +1,10 @@
 use std::collections::HashSet;
-use axum::{extract::State, Json};
-use serde::{Deserialize, Serialize};
+
+use axum::{Json, extract::State};
 use database::get_accessions;
-use crate::{
-    controllers::generate_handlers,
-    errors::ApiError,
-    AppState
-};
+use serde::{Deserialize, Serialize};
+
+use crate::{AppState, controllers::generate_handlers, errors::ApiError};
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -36,7 +34,7 @@ async fn handler(
             uniprot_accession_id: entry.uniprot_accession_number,
             name: entry.name,
             taxon_id: entry.taxon_id,
-            db_type: entry.db_type,
+            db_type: entry.db_type
         })
         .collect())
 }

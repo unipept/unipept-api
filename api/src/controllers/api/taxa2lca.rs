@@ -1,22 +1,23 @@
 use std::convert::Infallible;
-use axum::{extract::State, Json};
+
+use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    AppState,
     controllers::{
-        api::{default_extra, default_names, default_validate_taxa},
+        api::{Either, default_extra, default_names, default_validate_taxa},
         generate_handlers
     },
     helpers::{
         lca_helper::calculate_lca,
         lineage_helper::{
-            get_lineage, get_lineage_with_names, Lineage,
-            LineageVersion::{self, *}
+            Lineage,
+            LineageVersion::{self, *},
+            get_lineage, get_lineage_with_names
         }
-    },
-    AppState
+    }
 };
-use crate::controllers::api::Either;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -53,10 +54,7 @@ async fn handler(
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
-    let casted_input: Vec<u32> = input
-        .iter()
-        .map(|v| v.into())
-        .collect();
+    let casted_input: Vec<u32> = input.iter().map(|v| v.into()).collect();
 
     // Calculate the LCA of all taxa
     let lca: i32 = calculate_lca(casted_input, version, taxon_store, lineage_store, validate_taxa);

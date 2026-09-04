@@ -1,5 +1,7 @@
 use std::collections::HashSet;
+
 use index::ProteinInfo;
+
 use crate::helpers::filters::UniprotFilter;
 
 pub struct ProteinFilter {

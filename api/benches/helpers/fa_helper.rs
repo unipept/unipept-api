@@ -3,8 +3,8 @@
 //! `calculate_fa` is pure — no index, no datastore and no OpenSearch — so it can be measured
 //! directly rather than through a request.
 
-use criterion::{black_box, Criterion};
-use index::{fa_compression::algorithm1::encode, ProteinInfo};
+use criterion::{Criterion, black_box};
+use index::{ProteinInfo, fa_compression::algorithm1::encode};
 use unipept_api::helpers::fa_helper::calculate_fa;
 
 /// A result set the shape a real one has: many proteins drawing from a small pool of terms, so

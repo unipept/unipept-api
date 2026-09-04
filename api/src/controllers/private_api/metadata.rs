@@ -1,8 +1,9 @@
 use std::convert::Infallible;
-use axum::{extract::State, Json};
+
+use axum::{Json, extract::State};
 use serde::Serialize;
 
-use crate::{controllers::generate_handlers, AppState};
+use crate::{AppState, controllers::generate_handlers};
 
 #[derive(Serialize)]
 pub struct Version {

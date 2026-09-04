@@ -14,9 +14,7 @@ pub struct GoStore {
 
 impl GoStore {
     pub fn try_from_file(file: &str) -> Result<Self, GoStoreError> {
-        let file = std::fs::File::open(file).map_err(
-            |_| GoStoreError::FileNotFound(file.to_string())
-        )?;
+        let file = std::fs::File::open(file).map_err(|_| GoStoreError::FileNotFound(file.to_string()))?;
 
         let mut mapper = HashMap::new();
         for line in BufReader::new(file).lines() {

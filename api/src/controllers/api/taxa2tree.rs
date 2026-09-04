@@ -1,11 +1,11 @@
-use std::collections::HashMap;
-use std::convert::Infallible;
+use std::{collections::HashMap, convert::Infallible};
 
 use askama::Template;
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    AppState,
     controllers::{
         api::default_link,
         generate_handlers,
@@ -16,8 +16,7 @@ use crate::{
     helpers::{
         lineage_helper::LineageVersion::{self, *},
         tree_helper::{build_tree, frequency::FrequencyTable, node::Node}
-    },
-    AppState
+    }
 };
 
 #[derive(Deserialize)]

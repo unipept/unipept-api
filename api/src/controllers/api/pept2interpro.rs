@@ -1,19 +1,19 @@
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    AppState,
     controllers::{
         api::{default_cutoff, default_domains, default_equate_il, default_extra},
         generate_handlers
     },
+    errors::ApiError,
     helpers::{
         fa_helper::calculate_fa,
-        interpro_helper::{interpro_entries_from_map, InterproEntries}
-    },
-    AppState
+        interpro_helper::{InterproEntries, interpro_entries_from_map},
+        sanitize_peptides
+    }
 };
-use crate::errors::ApiError;
-use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -42,9 +42,7 @@ async fn handler(
     Parameters { input, equate_il, extra, domains, cutoff }: Parameters
 ) -> Result<Vec<InterproInformation>, ApiError> {
     let input = sanitize_peptides(input);
-    let result = tokio::task::block_in_place(|| {
-        index.analyse(&input, equate_il, false, Some(cutoff))
-    });
+    let result = tokio::task::block_in_place(|| index.analyse(&input, equate_il, false, Some(cutoff)));
 
     let interpro_store = datastore.interpro_store();
 
@@ -56,7 +54,12 @@ async fn handler(
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
 
-            InterproInformation { peptide: item.sequence.to_string(), cutoff_used: item.cutoff_used, total_protein_count, ipr: iprs }
+            InterproInformation {
+                peptide: item.sequence.to_string(),
+                cutoff_used: item.cutoff_used,
+                total_protein_count,
+                ipr: iprs
+            }
         })
         .collect())
 }

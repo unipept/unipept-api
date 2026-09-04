@@ -28,9 +28,7 @@ pub struct Dataset {
 
 impl SampleStore {
     pub fn try_from_file(file: &str) -> Result<Self, SampleStoreError> {
-        let json = std::fs::read_to_string(file).map_err(
-            |_| SampleStoreError::FileNotFound(file.to_string())
-        )?;
+        let json = std::fs::read_to_string(file).map_err(|_| SampleStoreError::FileNotFound(file.to_string()))?;
         Ok(serde_json::from_str(&json)?)
     }
 }

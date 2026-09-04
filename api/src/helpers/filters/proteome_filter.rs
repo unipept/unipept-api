@@ -1,7 +1,9 @@
 use std::collections::HashSet;
-use index::ProteinInfo;
-use crate::helpers::filters::UniprotFilter;
+
 use datastore::ReferenceProteomeStore;
+use index::ProteinInfo;
+
+use crate::helpers::filters::UniprotFilter;
 
 pub struct ProteomeFilter {
     pub proteins: HashSet<String>

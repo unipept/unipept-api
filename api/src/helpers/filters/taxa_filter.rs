@@ -1,8 +1,12 @@
 use std::collections::HashSet;
+
 use datastore::LineageStore;
 use index::ProteinInfo;
-use crate::helpers::filters::UniprotFilter;
-use crate::helpers::lineage_helper::{get_lineage_array, LineageVersion};
+
+use crate::helpers::{
+    filters::UniprotFilter,
+    lineage_helper::{LineageVersion, get_lineage_array}
+};
 
 pub struct TaxaFilter<'a> {
     pub taxa: HashSet<u32>,

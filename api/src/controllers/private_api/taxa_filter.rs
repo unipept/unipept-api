@@ -1,11 +1,10 @@
 use std::convert::Infallible;
-use axum::{extract::State, Json};
-use serde::{Deserialize, Serialize};
+
+use axum::{Json, extract::State};
 use datastore::LineageRank;
-use crate::{
-    controllers::generate_handlers,
-    AppState
-};
+use serde::{Deserialize, Serialize};
+
+use crate::{AppState, controllers::generate_handlers};
 
 fn default_filter() -> String {
     String::from("")
@@ -14,7 +13,7 @@ fn default_filter() -> String {
 #[derive(Deserialize)]
 pub struct TaxaCountParameters {
     #[serde(default = "default_filter")]
-    filter: String,
+    filter: String
 }
 
 #[derive(Deserialize)]
@@ -26,64 +25,61 @@ pub struct TaxaFilterParameters {
     #[serde(default)]
     sort_by: String, // Can be "id", "name", or "rank"
     #[serde(default)]
-    sort_descending: bool,
+    sort_descending: bool
 }
 
 #[derive(Serialize)]
 pub struct TaxonCountResult {
-    count: u32,
+    count: u32
 }
 
 async fn count_handler(
     State(AppState { datastore, .. }): State<AppState>,
-    TaxaCountParameters { filter }: TaxaCountParameters,
+    TaxaCountParameters { filter }: TaxaCountParameters
 ) -> Result<TaxonCountResult, Infallible> {
     let taxon_store = datastore.taxon_store();
 
     if filter.is_empty() {
         Ok(TaxonCountResult {
-            count: taxon_store.mapper
+            count: taxon_store
+                .mapper
                 .values()
                 .filter(|&(_, rank, is_valid)| *is_valid && *rank != LineageRank::NoRank)
-                .count() as u32,
+                .count() as u32
         })
     } else {
         Ok(TaxonCountResult {
-            count: taxon_store.mapper
+            count: taxon_store
+                .mapper
                 .iter()
-                .filter(|(taxon_id, (name, rank, is_valid))|
-                    *is_valid && *rank != LineageRank::NoRank && (
-                        name.to_lowercase().contains(&filter.to_lowercase()) ||
-                            taxon_id.to_string().to_lowercase().contains(&filter.to_lowercase()) ||
-                            rank.to_string().to_lowercase().contains(&filter.to_lowercase())
-                    )
-                )
-                .count() as u32,
+                .filter(|(taxon_id, (name, rank, is_valid))| {
+                    *is_valid
+                        && *rank != LineageRank::NoRank
+                        && (name.to_lowercase().contains(&filter.to_lowercase())
+                            || taxon_id.to_string().to_lowercase().contains(&filter.to_lowercase())
+                            || rank.to_string().to_lowercase().contains(&filter.to_lowercase()))
+                })
+                .count() as u32
         })
     }
 }
 
 async fn filter_handler(
     State(AppState { datastore, .. }): State<AppState>,
-    TaxaFilterParameters {
-        filter,
-        start,
-        end,
-        sort_by,
-        sort_descending,
-    }: TaxaFilterParameters,
+    TaxaFilterParameters { filter, start, end, sort_by, sort_descending }: TaxaFilterParameters
 ) -> Result<Vec<u32>, Infallible> {
     let taxon_store = datastore.taxon_store();
 
-    let mut filtered_taxa: Vec<_> = taxon_store.mapper
+    let mut filtered_taxa: Vec<_> = taxon_store
+        .mapper
         .iter()
-        .filter(|(taxon_id, (name, rank, is_valid))|
-            *is_valid && *rank != LineageRank::NoRank && (
-                name.to_lowercase().contains(&filter.to_lowercase()) ||
-                    taxon_id.to_string().to_lowercase().contains(&filter.to_lowercase()) ||
-                    rank.to_string().to_lowercase().contains(&filter.to_lowercase())
-            )
-        )
+        .filter(|(taxon_id, (name, rank, is_valid))| {
+            *is_valid
+                && *rank != LineageRank::NoRank
+                && (name.to_lowercase().contains(&filter.to_lowercase())
+                    || taxon_id.to_string().to_lowercase().contains(&filter.to_lowercase())
+                    || rank.to_string().to_lowercase().contains(&filter.to_lowercase()))
+        })
         .map(|(id, _)| *id)
         .collect();
 
@@ -91,24 +87,16 @@ async fn filter_handler(
     match sort_by.as_str() {
         "name" => {
             if sort_descending {
-                filtered_taxa.sort_by(|&a_id, &b_id| {
-                    taxon_store.mapper[&b_id].0.cmp(&taxon_store.mapper[&a_id].0)
-                });
+                filtered_taxa.sort_by(|&a_id, &b_id| taxon_store.mapper[&b_id].0.cmp(&taxon_store.mapper[&a_id].0));
             } else {
-                filtered_taxa.sort_by(|&a_id, &b_id| {
-                    taxon_store.mapper[&a_id].0.cmp(&taxon_store.mapper[&b_id].0)
-                });
+                filtered_taxa.sort_by(|&a_id, &b_id| taxon_store.mapper[&a_id].0.cmp(&taxon_store.mapper[&b_id].0));
             }
         }
         "rank" => {
             if sort_descending {
-                filtered_taxa.sort_by(|&a_id, &b_id| {
-                    taxon_store.mapper[&b_id].1.cmp(&taxon_store.mapper[&a_id].1)
-                });
+                filtered_taxa.sort_by(|&a_id, &b_id| taxon_store.mapper[&b_id].1.cmp(&taxon_store.mapper[&a_id].1));
             } else {
-                filtered_taxa.sort_by(|&a_id, &b_id| {
-                    taxon_store.mapper[&a_id].1.cmp(&taxon_store.mapper[&b_id].1)
-                });
+                filtered_taxa.sort_by(|&a_id, &b_id| taxon_store.mapper[&a_id].1.cmp(&taxon_store.mapper[&b_id].1));
             }
         }
         _ => {

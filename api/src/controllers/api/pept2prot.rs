@@ -1,17 +1,18 @@
 use std::collections::HashSet;
-use axum::{extract::State, Json};
+
+use axum::{Json, extract::State};
 use database::get_accessions_map;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    AppState,
     controllers::{
-        api::{default_equate_il, default_extra, default_tryptic, default_cutoff},
+        api::{default_cutoff, default_equate_il, default_extra, default_tryptic},
         generate_handlers
     },
     errors::ApiError,
-    AppState
+    helpers::sanitize_peptides
 };
-use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -60,9 +61,7 @@ async fn handler(
 
     let connection = database.get_conn();
 
-    let result = tokio::task::block_in_place(|| {
-        index.analyse(&input, equate_il, tryptic, Some(cutoff))
-    });
+    let result = tokio::task::block_in_place(|| index.analyse(&input, equate_il, tryptic, Some(cutoff)));
 
     let accession_numbers: HashSet<String> = result
         .iter()
@@ -73,12 +72,10 @@ async fn handler(
         return Ok(vec![]);
     }
 
-    let accessions_map = get_accessions_map(connection, &accession_numbers)
-        .await
-        .map_err(|e| {
-            println!("Error occurred: {:?}", e);
-            e
-        })?;
+    let accessions_map = get_accessions_map(connection, &accession_numbers).await.map_err(|e| {
+        println!("Error occurred: {:?}", e);
+        e
+    })?;
 
     let taxon_store = datastore.taxon_store();
 

@@ -1,25 +1,29 @@
 use std::collections::HashSet;
-use axum::{extract::State, Json};
+
+use axum::{Json, extract::State};
+use index::{ProteinInfo, SearchResult};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use index::{ProteinInfo, SearchResult};
+
 use crate::{
-    controllers::{generate_handlers, mpa::default_equate_il, mpa::default_tryptic, mpa::default_report_taxa, api::default_cutoff, api::default_validate_taxa},
-    helpers::{
-        fa_helper::{calculate_fa, FunctionalAggregation},
-        lca_helper::calculate_lca,
-        lineage_helper::{get_lineage_array, LineageVersion}
+    AppState,
+    controllers::{
+        api::{default_cutoff, default_validate_taxa},
+        generate_handlers,
+        mpa::{default_equate_il, default_report_taxa, default_tryptic}
     },
-    AppState
+    errors::ApiError,
+    helpers::{
+        fa_helper::{FunctionalAggregation, calculate_fa},
+        filters::{
+            UniprotFilter, crap_filter::CrapFilter, empty_filter::EmptyFilter, protein_filter::ProteinFilter,
+            proteome_filter::ProteomeFilter, taxa_filter::TaxaFilter
+        },
+        lca_helper::calculate_lca,
+        lineage_helper::{LineageVersion, get_lineage_array},
+        sanitize_peptides
+    }
 };
-use crate::errors::ApiError;
-use crate::helpers::filters::crap_filter::CrapFilter;
-use crate::helpers::filters::empty_filter::EmptyFilter;
-use crate::helpers::filters::protein_filter::ProteinFilter;
-use crate::helpers::filters::proteome_filter::ProteomeFilter;
-use crate::helpers::filters::taxa_filter::TaxaFilter;
-use crate::helpers::filters::UniprotFilter;
-use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -35,7 +39,7 @@ pub struct Parameters {
     report_taxa: bool,
     #[serde(default = "default_validate_taxa")]
     validate_taxa: bool,
-    filter: Option<Filter>,
+    filter: Option<Filter>
 }
 
 #[derive(Deserialize)]
@@ -57,7 +61,7 @@ pub struct DataItem {
     fa: FunctionalAggregation,
     #[serde(skip_serializing_if = "Option::is_none")]
     taxa: Option<Vec<u32>>,
-    crap_filtered: bool,
+    crap_filtered: bool
 }
 
 #[derive(Serialize)]
@@ -67,7 +71,15 @@ pub struct Data {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { mut peptides, equate_il, tryptic, cutoff, report_taxa, validate_taxa, filter }: Parameters
+    Parameters {
+        mut peptides,
+        equate_il,
+        tryptic,
+        cutoff,
+        report_taxa,
+        validate_taxa,
+        filter
+    }: Parameters
 ) -> Result<Data, ApiError> {
     if peptides.is_empty() {
         return Ok(Data { peptides: Vec::new() });
@@ -89,13 +101,9 @@ async fn handler(
             } else {
                 Box::new(TaxaFilter::new(taxa, lineage_store))
             }
-        },
-        Some(Filter::Proteomes(proteomes)) => {
-            Box::new(ProteomeFilter::new(proteomes, proteome_store).await.unwrap())
-        },
-        Some(Filter::Proteins(proteins)) => {
-            Box::new(ProteinFilter::new(proteins))
-        },
+        }
+        Some(Filter::Proteomes(proteomes)) => Box::new(ProteomeFilter::new(proteomes, proteome_store).await.unwrap()),
+        Some(Filter::Proteins(proteins)) => Box::new(ProteinFilter::new(proteins)),
         None => Box::new(EmptyFilter::new())
     };
 
@@ -105,18 +113,14 @@ async fn handler(
     // results may safely be held across an `.await`. `block_in_place` does require a
     // multi-threaded runtime, so a `#[tokio::test]` covering this handler needs
     // `flavor = "multi_thread"`.
-    let result = tokio::task::block_in_place(|| {
-        index.analyse(&peptides, equate_il, tryptic, Some(cutoff))
-    });
+    let result = tokio::task::block_in_place(|| index.analyse(&peptides, equate_il, tryptic, Some(cutoff)));
 
     Ok(Data {
         peptides: result
             .into_iter()
             .filter_map(|SearchResult { proteins, sequence, cutoff_used }| {
-                let filtered_proteins: Vec<ProteinInfo> = proteins
-                    .into_iter()
-                    .filter(|protein| filter_proteins.filter(protein))
-                    .collect();
+                let filtered_proteins: Vec<ProteinInfo> =
+                    proteins.into_iter().filter(|protein| filter_proteins.filter(protein)).collect();
 
                 if filtered_proteins.is_empty() {
                     return None;
@@ -126,13 +130,7 @@ async fn handler(
 
                 let taxa: Vec<u32> = filtered_proteins.iter().map(|protein| protein.taxon).unique().collect();
 
-                let lca = calculate_lca(
-                    taxa.clone(),
-                    LineageVersion::V2,
-                    taxon_store,
-                    lineage_store,
-                    validate_taxa
-                );
+                let lca = calculate_lca(taxa.clone(), LineageVersion::V2, taxon_store, lineage_store, validate_taxa);
                 let lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store);
 
                 Some(DataItem {
@@ -142,7 +140,7 @@ async fn handler(
                     lineage,
                     fa: calculate_fa(&filtered_proteins),
                     taxa: if report_taxa { Some(taxa) } else { None },
-                    crap_filtered,
+                    crap_filtered
                 })
             })
             .collect()

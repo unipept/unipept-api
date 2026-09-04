@@ -1,7 +1,6 @@
+use std::task::{Context, Poll};
+
 use http::{Request, Response, Uri};
-use std::{
-    task::{Context, Poll},
-};
 use tower_layer::Layer;
 use tower_service::Service;
 
@@ -54,7 +53,7 @@ impl<S> Layer<S> for NormalizePathLayer {
 /// See the [module docs](self) for more details.
 #[derive(Debug, Copy, Clone)]
 pub struct NormalizePath<S> {
-    inner: S,
+    inner: S
 }
 
 impl<S> NormalizePath<S> {
@@ -71,7 +70,7 @@ impl<S> NormalizePath<S> {
 
 impl<S, ReqBody, ResBody> Service<Request<ReqBody>> for NormalizePath<S>
 where
-    S: Service<Request<ReqBody>, Response = Response<ResBody>>,
+    S: Service<Request<ReqBody>, Response = Response<ResBody>>
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -92,30 +91,15 @@ fn normalize_uris(uri: &mut Uri) {
     println!("{}", uri);
 
     // Normalize the path by removing consecutive slashes
-    let normalized_path = uri
-        .path()
-        .split('/')
-        .filter(|&segment| !segment.is_empty())
-        .collect::<Vec<&str>>()
-        .join("/");
+    let normalized_path = uri.path().split('/').filter(|&segment| !segment.is_empty()).collect::<Vec<&str>>().join("/");
 
     // Reconstruct the URI with the normalized path
     let new_uri = if normalized_path.is_empty() {
-        Uri::builder()
-            .path_and_query("/")
-            .build()
-            .unwrap()
+        Uri::builder().path_and_query("/").build().unwrap()
     } else if let Some(path) = uri.query() {
-        Uri::builder()
-            .path_and_query(format!("/{}?{}", normalized_path, path))
-            .build()
-            .unwrap()
-
+        Uri::builder().path_and_query(format!("/{}?{}", normalized_path, path)).build().unwrap()
     } else {
-        Uri::builder()
-            .path_and_query(format!("/{}", normalized_path))
-            .build()
-            .unwrap()
+        Uri::builder().path_and_query(format!("/{}", normalized_path)).build().unwrap()
     };
 
     *uri = new_uri;

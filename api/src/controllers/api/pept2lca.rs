@@ -1,22 +1,23 @@
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    AppState,
     controllers::{
         api::{default_cutoff, default_equate_il, default_extra, default_names, default_validate_taxa},
         generate_handlers
     },
+    errors::ApiError,
     helpers::{
         lca_helper::calculate_lca,
         lineage_helper::{
-            get_lineage, get_lineage_with_names, Lineage,
-            LineageVersion::{self, *}
-        }
-    },
-    AppState
+            Lineage,
+            LineageVersion::{self, *},
+            get_lineage, get_lineage_with_names
+        },
+        sanitize_peptides
+    }
 };
-use crate::errors::ApiError;
-use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -59,9 +60,7 @@ async fn handler(
     let input = sanitize_peptides(input);
     // Only the taxa are used below, so this takes the lightweight path: no accession or
     // annotation is retrieved for hits that would immediately be discarded.
-    let result = tokio::task::block_in_place(|| {
-        index.analyse_taxa(&input, equate_il, false, Some(cutoff))
-    });
+    let result = tokio::task::block_in_place(|| index.analyse_taxa(&input, equate_il, false, Some(cutoff)));
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();

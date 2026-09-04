@@ -1,31 +1,29 @@
 use std::time::Duration;
+
 use axum::{
-    BoxError,
-    error_handling::HandleErrorLayer,
-    extract::DefaultBodyLimit,
-    http::StatusCode,
-    routing::get,
-    Router
+    BoxError, Router, error_handling::HandleErrorLayer, extract::DefaultBodyLimit, http::StatusCode, routing::get
 };
-use tower::{ServiceBuilder};
-use tower::timeout::TimeoutLayer;
+use tower::{ServiceBuilder, timeout::TimeoutLayer};
 use tower_http::limit::RequestBodyLimitLayer;
 
 use crate::{
+    AppState,
     controllers::{
         api::{
             pept2ec, pept2funct, pept2go, pept2interpro, pept2lca, pept2prot, pept2taxa, peptinfo, protinfo, taxa2lca,
-               taxa2tree, taxonomy
+            taxa2tree, taxonomy
         },
         datasets::sampledata,
-        mpa::{pept2data},
-        private_api::{ecnumbers, goterms, interpros, metadata, proteins, proteins_filter, reference_proteomes, reference_proteomes_filter, taxa, taxa2rank, taxa_filter}
+        mpa::pept2data,
+        private_api::{
+            ecnumbers, goterms, interpros, metadata, proteins, proteins_filter, reference_proteomes,
+            reference_proteomes_filter, taxa, taxa_filter, taxa2rank
+        }
     },
     middleware::{
         cors::create_cors_layer,
-        tracing::{create_tracing_layer, init_tracing_subscriber},
-    },
-    AppState
+        tracing::{create_tracing_layer, init_tracing_subscriber}
+    }
 };
 
 const REQUEST_TIMEOUT_DURATION: u64 = 150;
@@ -113,10 +111,7 @@ fn create_datasets_routes() -> Router<AppState> {
 }
 
 fn create_mpa_routes() -> Router<AppState> {
-    define_routes!(
-        "/pept2data",
-        get(pept2data::get_json_handler).post(pept2data::post_json_handler)
-    )
+    define_routes!("/pept2data", get(pept2data::get_json_handler).post(pept2data::post_json_handler))
 }
 
 fn create_private_api_routes() -> Router<AppState> {
@@ -138,9 +133,11 @@ fn create_private_api_routes() -> Router<AppState> {
         "/proteomes",
         get(reference_proteomes::get_json_handler).post(reference_proteomes::post_json_handler),
         "/proteomes/count",
-        get(reference_proteomes_filter::get_json_count_handler).post(reference_proteomes_filter::post_json_count_handler),
+        get(reference_proteomes_filter::get_json_count_handler)
+            .post(reference_proteomes_filter::post_json_count_handler),
         "/proteomes/filter",
-        get(reference_proteomes_filter::get_json_filter_handler).post(reference_proteomes_filter::post_json_filter_handler),
+        get(reference_proteomes_filter::get_json_filter_handler)
+            .post(reference_proteomes_filter::post_json_filter_handler),
         "/taxa",
         get(taxa::get_json_handler).post(taxa::post_json_handler),
         "/taxa2rank",

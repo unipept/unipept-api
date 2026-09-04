@@ -56,7 +56,7 @@ async fn handler(
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let gos = go_terms_from_map(&fa.data, go_store, extra, domains);
 
-            GoInformation { peptide: item.sequence, cutoff_used: item.cutoff_used, total_protein_count, go: gos }
+            GoInformation { peptide: item.sequence.to_string(), cutoff_used: item.cutoff_used, total_protein_count, go: gos }
         })
         .collect())
 }

@@ -56,7 +56,7 @@ async fn handler(
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
 
-            InterproInformation { peptide: item.sequence, cutoff_used: item.cutoff_used, total_protein_count, ipr: iprs }
+            InterproInformation { peptide: item.sequence.to_string(), cutoff_used: item.cutoff_used, total_protein_count, ipr: iprs }
         })
         .collect())
 }

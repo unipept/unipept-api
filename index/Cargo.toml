@@ -6,4 +6,12 @@ edition = "2021"
 [dependencies]
 sa-server = { git = "https://github.com/unipept/unipept-index.git" }
 sa-index = { git = "https://github.com/unipept/unipept-index.git" }
+fa-compression = { git = "https://github.com/unipept/unipept-index.git" }
 thiserror = "1.0"
+
+# Storage backend, forwarded to sa-server. No features = fully preloaded.
+[features]
+mmap = ["sa-server/mmap"]
+preloaded-text = ["sa-server/preloaded-text"]
+preloaded-proteins = ["sa-server/preloaded-proteins"]
+preloaded-mapping = ["sa-server/preloaded-mapping"]

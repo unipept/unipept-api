@@ -9,7 +9,7 @@ pub struct ProteomeFilter {
 
 impl UniprotFilter for ProteomeFilter {
     fn filter(&self, protein: &ProteinInfo) -> bool {
-        self.proteins.contains(&protein.uniprot_accession)
+        self.proteins.contains(protein.uniprot_accession)
     }
 }
 
@@ -31,8 +31,8 @@ impl ProteomeFilter {
 mod tests {
     use super::*;
 
-    fn protein(accession: &str) -> ProteinInfo {
-        ProteinInfo { taxon: 1, uniprot_accession: accession.to_string(), functional_annotations: String::new() }
+    fn protein(accession: &str) -> ProteinInfo<'_> {
+        ProteinInfo { taxon: 1, uniprot_accession: accession, annotations: &[] }
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use index::ProteinInfo;
+use index::{ProteinInfo, fa_compression::algorithm1::decode};
 use serde::Serialize;
 
 /// A struct that represents the functional annotations once aggregated
@@ -25,19 +25,23 @@ pub fn calculate_fa(proteins: &[ProteinInfo]) -> FunctionalAggregation {
     let mut data: HashMap<String, u32> = HashMap::new();
 
     for protein in proteins.iter() {
-        for annotation in protein.functional_annotations.split(';') {
+        // The index hands back the annotations still encoded, so this is where they are decoded —
+        // after the caller's filters have run, rather than for every hit the index examined.
+        let annotations = decode(protein.annotations);
+
+        for annotation in annotations.split(';') {
             match annotation.chars().next() {
                 Some('E') => {
-                    proteins_with_ec.insert(&protein.uniprot_accession);
-                    proteins_with_annotations.insert(&protein.uniprot_accession);
+                    proteins_with_ec.insert(protein.uniprot_accession);
+                    proteins_with_annotations.insert(protein.uniprot_accession);
                 }
                 Some('G') => {
-                    proteins_with_go.insert(&protein.uniprot_accession);
-                    proteins_with_annotations.insert(&protein.uniprot_accession);
+                    proteins_with_go.insert(protein.uniprot_accession);
+                    proteins_with_annotations.insert(protein.uniprot_accession);
                 }
                 Some('I') => {
-                    proteins_with_ipr.insert(&protein.uniprot_accession);
-                    proteins_with_annotations.insert(&protein.uniprot_accession);
+                    proteins_with_ipr.insert(protein.uniprot_accession);
+                    proteins_with_annotations.insert(protein.uniprot_accession);
                 }
                 _ => {}
             };
@@ -61,21 +65,18 @@ pub fn calculate_fa(proteins: &[ProteinInfo]) -> FunctionalAggregation {
 mod tests {
     use super::*;
 
-    fn protein(accession: &str, annotations: &str) -> ProteinInfo {
-        ProteinInfo {
-            taxon: 1,
-            uniprot_accession: accession.to_string(),
-            functional_annotations: annotations.to_string()
-        }
+    fn encoded(annotations: &str) -> Vec<u8> {
+        index::fa_compression::algorithm1::encode(annotations)
+    }
+
+    fn protein<'a>(accession: &'a str, annotations: &'a [u8]) -> ProteinInfo<'a> {
+        ProteinInfo { taxon: 1, uniprot_accession: accession, annotations }
     }
 
     #[test]
     fn counts_proteins_while_data_counts_occurrences() {
-        let proteins = [
-            protein("P1", "GO:0001;EC:1.1.1.1"),
-            protein("P2", "GO:0001;IPR:IPR001"),
-            protein("P3", "")
-        ];
+        let (a, b, c) = (encoded("GO:0001;EC:1.1.1.1"), encoded("GO:0001;IPR:IPR001"), encoded(""));
+        let proteins = [protein("P1", &a), protein("P2", &b), protein("P3", &c)];
 
         let fa = calculate_fa(&proteins);
 
@@ -92,7 +93,8 @@ mod tests {
     /// A protein carrying no annotations must not leave an empty key behind.
     #[test]
     fn the_empty_annotation_is_not_reported() {
-        let fa = calculate_fa(&[protein("P1", "")]);
+        let none = encoded("");
+        let fa = calculate_fa(&[protein("P1", &none)]);
 
         assert!(!fa.data.contains_key(""));
         assert_eq!(fa.counts.get("all"), Some(&0));
@@ -102,7 +104,8 @@ mod tests {
     /// count once in the first and twice in the second.
     #[test]
     fn one_accession_twice_counts_as_one_protein() {
-        let fa = calculate_fa(&[protein("P1", "GO:0001"), protein("P1", "GO:0001")]);
+        let go = encoded("GO:0001");
+        let fa = calculate_fa(&[protein("P1", &go), protein("P1", &go)]);
 
         assert_eq!(fa.counts.get("all"), Some(&1));
         assert_eq!(fa.counts.get("GO"), Some(&1));

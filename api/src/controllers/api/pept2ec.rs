@@ -66,7 +66,7 @@ async fn handler(
                 let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
 
                 final_results.push(EcInformation {
-                    peptide: item.sequence.clone(),
+                    peptide: item.sequence.to_string(),
                     cutoff_used,
                     total_protein_count,
                     ec: ecs,

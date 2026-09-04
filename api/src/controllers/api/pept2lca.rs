@@ -57,8 +57,10 @@ async fn handler(
     version: LineageVersion
 ) -> Result<Vec<LcaInformation>, ApiError> {
     let input = sanitize_peptides(input);
+    // Only the taxa are used below, so this takes the lightweight path: no accession or
+    // annotation is retrieved for hits that would immediately be discarded.
     let result = tokio::task::block_in_place(|| {
-        index.analyse(&input, equate_il, false, Some(cutoff))
+        index.analyse_taxa(&input, equate_il, false, Some(cutoff))
     });
 
     let taxon_store = datastore.taxon_store();
@@ -67,13 +69,9 @@ async fn handler(
     Ok(result
         .into_iter()
         .filter_map(|item| {
-            let lca = calculate_lca(
-                item.proteins.iter().map(|protein| protein.taxon).collect(),
-                version,
-                taxon_store,
-                lineage_store,
-                validate_taxa
-            );
+            // Already sorted and deduplicated; `calculate_lca` reduces rank by rank and is
+            // unaffected by repeats.
+            let lca = calculate_lca(item.taxa, version, taxon_store, lineage_store, validate_taxa);
 
             let (name, rank, _) = taxon_store.get(lca as u32)?;
             let lineage = match (extra, names) {
@@ -83,7 +81,7 @@ async fn handler(
             };
 
             Some(LcaInformation {
-                peptide: item.sequence,
+                peptide: item.sequence.to_string(),
                 cutoff_used: item.cutoff_used,
                 taxon: Taxon {
                     taxon_id: lca as u32,

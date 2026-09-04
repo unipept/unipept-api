@@ -65,7 +65,7 @@ async fn handler(
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
 
             FunctInformation {
-                peptide: item.sequence,
+                peptide: item.sequence.to_string(),
                 cutoff_used: item.cutoff_used,
                 total_protein_count,
                 ec: ecs,

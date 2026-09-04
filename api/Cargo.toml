@@ -28,6 +28,13 @@ tower-service = "0.3.2"
 itertools = "0.13.0"
 reqwest = { version = "0.12.8", features = [ "json" ] }
 
+# Storage backend, forwarded to sa-server via `index`.
+[features]
+mmap = ["index/mmap"]
+preloaded-text = ["index/preloaded-text"]
+preloaded-proteins = ["index/preloaded-proteins"]
+preloaded-mapping = ["index/preloaded-mapping"]
+
 [dev-dependencies]
 criterion = "0.5.1"
 

@@ -42,9 +42,9 @@ async fn handler(
     Parameters { input, equate_il, extra, domains, cutoff }: Parameters
 ) -> Result<Vec<InterproInformation>, ApiError> {
     let input = sanitize_peptides(input);
-    let result = tokio::task::spawn_blocking(move || {
+    let result = tokio::task::block_in_place(|| {
         index.analyse(&input, equate_il, false, Some(cutoff))
-    }).await?;
+    });
 
     let interpro_store = datastore.interpro_store();
 

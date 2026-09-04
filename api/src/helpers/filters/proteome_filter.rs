@@ -26,3 +26,20 @@ impl ProteomeFilter {
         Ok(ProteomeFilter { proteins })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn protein(accession: &str) -> ProteinInfo {
+        ProteinInfo { taxon: 1, uniprot_accession: accession.to_string(), functional_annotations: String::new() }
+    }
+
+    #[test]
+    fn keeps_only_the_proteins_of_the_selected_proteomes() {
+        let filter = ProteomeFilter { proteins: HashSet::from(["P1".to_string()]) };
+
+        assert!(filter.filter(&protein("P1")));
+        assert!(!filter.filter(&protein("P2")));
+    }
+}

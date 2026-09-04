@@ -77,9 +77,6 @@ async fn handler(
     peptides.dedup();
 
     let peptides = sanitize_peptides(peptides);
-    let result = tokio::task::spawn_blocking(move || {
-        index.analyse(&peptides, equate_il, tryptic, Some(cutoff))
-    }).await?;
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
@@ -103,6 +100,14 @@ async fn handler(
     };
 
     let crap_filter = CrapFilter::new();
+
+    // Built before the search only so a failure to construct the filters costs nothing; the
+    // results may safely be held across an `.await`. `block_in_place` does require a
+    // multi-threaded runtime, so a `#[tokio::test]` covering this handler needs
+    // `flavor = "multi_thread"`.
+    let result = tokio::task::block_in_place(|| {
+        index.analyse(&peptides, equate_il, tryptic, Some(cutoff))
+    });
 
     Ok(Data {
         peptides: result

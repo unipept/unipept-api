@@ -17,3 +17,20 @@ impl ProteinFilter {
         ProteinFilter { proteins }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn protein(accession: &str) -> ProteinInfo {
+        ProteinInfo { taxon: 1, uniprot_accession: accession.to_string(), functional_annotations: String::new() }
+    }
+
+    #[test]
+    fn keeps_only_the_listed_accessions() {
+        let filter = ProteinFilter::new(HashSet::from(["P1".to_string()]));
+
+        assert!(filter.filter(&protein("P1")));
+        assert!(!filter.filter(&protein("P2")));
+    }
+}

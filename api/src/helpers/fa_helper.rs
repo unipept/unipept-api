@@ -56,3 +56,67 @@ pub fn calculate_fa(proteins: &[ProteinInfo]) -> FunctionalAggregation {
 
     FunctionalAggregation { counts, data }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn protein(accession: &str, annotations: &str) -> ProteinInfo {
+        ProteinInfo {
+            taxon: 1,
+            uniprot_accession: accession.to_string(),
+            functional_annotations: annotations.to_string()
+        }
+    }
+
+    #[test]
+    fn counts_proteins_while_data_counts_occurrences() {
+        let proteins = [
+            protein("P1", "GO:0001;EC:1.1.1.1"),
+            protein("P2", "GO:0001;IPR:IPR001"),
+            protein("P3", "")
+        ];
+
+        let fa = calculate_fa(&proteins);
+
+        assert_eq!(fa.data.get("GO:0001"), Some(&2));
+        assert_eq!(fa.data.get("EC:1.1.1.1"), Some(&1));
+        assert_eq!(fa.data.get("IPR:IPR001"), Some(&1));
+
+        assert_eq!(fa.counts.get("all"), Some(&2));
+        assert_eq!(fa.counts.get("EC"), Some(&1));
+        assert_eq!(fa.counts.get("GO"), Some(&2));
+        assert_eq!(fa.counts.get("IPR"), Some(&1));
+    }
+
+    /// A protein carrying no annotations must not leave an empty key behind.
+    #[test]
+    fn the_empty_annotation_is_not_reported() {
+        let fa = calculate_fa(&[protein("P1", "")]);
+
+        assert!(!fa.data.contains_key(""));
+        assert_eq!(fa.counts.get("all"), Some(&0));
+    }
+
+    /// `counts` is per protein and `data` is per occurrence, so two entries for one accession
+    /// count once in the first and twice in the second.
+    #[test]
+    fn one_accession_twice_counts_as_one_protein() {
+        let fa = calculate_fa(&[protein("P1", "GO:0001"), protein("P1", "GO:0001")]);
+
+        assert_eq!(fa.counts.get("all"), Some(&1));
+        assert_eq!(fa.counts.get("GO"), Some(&1));
+        assert_eq!(fa.data.get("GO:0001"), Some(&2));
+    }
+
+    #[test]
+    fn no_proteins_reports_zero_rather_than_nothing() {
+        let fa = calculate_fa(&[]);
+
+        assert_eq!(fa.counts.get("all"), Some(&0));
+        assert_eq!(fa.counts.get("EC"), Some(&0));
+        assert_eq!(fa.counts.get("GO"), Some(&0));
+        assert_eq!(fa.counts.get("IPR"), Some(&0));
+        assert!(fa.data.is_empty());
+    }
+}

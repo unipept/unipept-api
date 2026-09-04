@@ -42,9 +42,9 @@ async fn handler(
     Parameters { input, equate_il, extra, domains, cutoff }: Parameters
 ) -> Result<Vec<GoInformation>, ApiError> {
     let input = sanitize_peptides(input);
-    let result = tokio::task::spawn_blocking(move || {
+    let result = tokio::task::block_in_place(|| {
         index.analyse(&input, equate_il, false, Some(cutoff))
-    }).await?;
+    });
 
     let go_store = datastore.go_store();
 

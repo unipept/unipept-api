@@ -57,9 +57,9 @@ async fn handler(
     version: LineageVersion
 ) -> Result<Vec<LcaInformation>, ApiError> {
     let input = sanitize_peptides(input);
-    let result = tokio::task::spawn_blocking(move || {
+    let result = tokio::task::block_in_place(|| {
         index.analyse(&input, equate_il, false, Some(cutoff))
-    }).await?;
+    });
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();

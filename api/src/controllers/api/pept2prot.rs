@@ -60,9 +60,9 @@ async fn handler(
 
     let connection = database.get_conn();
 
-    let result = tokio::task::spawn_blocking(move || {
+    let result = tokio::task::block_in_place(|| {
         index.analyse(&input, equate_il, tryptic, Some(cutoff))
-    }).await?;
+    });
 
     let accession_numbers: HashSet<String> = result
         .iter()

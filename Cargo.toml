@@ -1,5 +1,7 @@
 [workspace]
-resolver = "2"
+# Explicit: a virtual root infers no resolver from its members' editions and silently falls back
+# to 1. Resolver 3 prefers dependency versions each member's own rust-version can build.
+resolver = "3"
 
 members = [
     "api", 
@@ -10,4 +12,5 @@ members = [
 
 # The floor the unipept-index dependency already imposes; 1.87 is refused outright.
 [workspace.package]
+edition = "2024"
 rust-version = "1.88"

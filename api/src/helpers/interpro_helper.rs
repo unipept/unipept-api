@@ -88,10 +88,10 @@ fn handle_domains<'a>(
 ) -> InterproEntries {
     let mut interpro_domains = HashMap::new();
     for (key, &count) in iprs {
-        if let Some(entry) = interpro_entry(key, count, interpro_store, extra, true) {
-            if let InterproEntry::Domains { domain, .. } | InterproEntry::ExtraDomains { domain, .. } = &entry {
-                interpro_domains.entry(domain.to_string()).or_insert_with(Vec::new).push(entry);
-            }
+        if let Some(entry) = interpro_entry(key, count, interpro_store, extra, true)
+            && let InterproEntry::Domains { domain, .. } | InterproEntry::ExtraDomains { domain, .. } = &entry
+        {
+            interpro_domains.entry(domain.to_string()).or_insert_with(Vec::new).push(entry);
         }
     }
 

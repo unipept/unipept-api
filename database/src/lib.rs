@@ -73,10 +73,10 @@ pub async fn get_accessions(
 
         if let Some(docs) = response_body.get("docs").and_then(|docs| docs.as_array()) {
             for doc in docs {
-                if let Some(source) = doc.get("_source") {
-                    if let Ok(entry) = serde_json::from_value::<UniprotEntry>(source.clone()) {
-                        result.push(entry);
-                    }
+                if let Some(source) = doc.get("_source")
+                    && let Ok(entry) = serde_json::from_value::<UniprotEntry>(source.clone())
+                {
+                    result.push(entry);
                 }
             }
         }

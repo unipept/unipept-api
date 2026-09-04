@@ -96,10 +96,10 @@ async fn filter_handler(
             };
 
             filtered_proteomes
-                .sort_by(|(_, &(a_taxon_id, _, _)), (_, &(b_taxon_id, _, _))| sort_fn(a_taxon_id, b_taxon_id));
+                .sort_by(|&(_, &(a_taxon_id, _, _)), &(_, &(b_taxon_id, _, _))| sort_fn(a_taxon_id, b_taxon_id));
         }
         "protein_count" => {
-            filtered_proteomes.sort_by(|(_, &(_, a_protein_count, _)), (_, &(_, b_protein_count, _))| {
+            filtered_proteomes.sort_by(|&(_, &(_, a_protein_count, _)), &(_, &(_, b_protein_count, _))| {
                 if sort_descending {
                     b_protein_count.cmp(&a_protein_count)
                 } else {

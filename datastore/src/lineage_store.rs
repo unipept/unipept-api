@@ -133,16 +133,41 @@ impl LineageStore {
             index_references.push(HashMap::new());
         }
 
-        for line in BufReader::new(file).lines() {
+        for (index, line) in BufReader::new(file).lines().enumerate() {
             let line = line?;
-            let mut splitted_line = line.split('\t');
+            let line_number = index + 1;
 
-            let taxon_id: u32 = splitted_line.next().unwrap().parse().unwrap();
-            let parts: Vec<Option<i32>> =
-                splitted_line.map(|x| if x == "\\N" { None } else { Some(x.parse::<i32>().unwrap()) }).collect();
+            // A blank line is not a malformed row. `lines()` yields one for every empty line in the
+            // file, including the one a file ending in two newlines produces.
+            if line.trim().is_empty() {
+                continue;
+            }
 
-            // All lines in the input should be of equal length. If, for some reason, this is not the case, panic and inform the user!
-            assert_eq!(parts.len(), LineageStore::AMOUNT_OF_RANKS, "Input lineage has not the correct dimension.");
+            // Counted before anything is parsed, so a row of the wrong width is reported as such
+            // rather than as whichever of its fields happens to fail parsing first.
+            let fields: Vec<&str> = line.split('\t').collect();
+            if fields.len() != LineageStore::AMOUNT_OF_RANKS + 1 {
+                return Err(LineageStoreError::UnexpectedColumnCount {
+                    line: line_number,
+                    expected: LineageStore::AMOUNT_OF_RANKS + 1,
+                    found: fields.len()
+                });
+            }
+
+            let taxon_id: u32 = fields[0]
+                .parse()
+                .map_err(|_| LineageStoreError::InvalidTaxonId { line: line_number, value: fields[0].to_string() })?;
+
+            let mut parts: Vec<Option<i32>> = Vec::with_capacity(LineageStore::AMOUNT_OF_RANKS);
+            for field in &fields[1..] {
+                parts.push(match *field {
+                    "\\N" => None,
+                    value => Some(value.parse::<i32>().map_err(|_| LineageStoreError::InvalidRankId {
+                        line: line_number,
+                        value: value.to_string()
+                    })?)
+                });
+            }
 
             let lin = Arc::new(Lineage {
                 domain: parts[0],
@@ -177,13 +202,11 @@ impl LineageStore {
 
             mapper.insert(taxon_id, Arc::clone(&lin));
 
-            for (i, part) in parts.iter().enumerate().take(LineageStore::AMOUNT_OF_RANKS) {
+            // Zipped rather than indexed: both sides are `AMOUNT_OF_RANKS` long, and pairing them
+            // this way says so without a bounds check that could fail.
+            for (rank_map, part) in index_references.iter_mut().zip(parts.iter()) {
                 if let Some(id) = part {
-                    let rank_map = index_references.get_mut(i).unwrap();
-                    let id: u32 = id.unsigned_abs();
-                    rank_map.entry(id).or_insert_with(Vec::new);
-                    let vec = rank_map.get_mut(&id).unwrap();
-                    vec.push(Arc::clone(&lin));
+                    rank_map.entry(id.unsigned_abs()).or_default().push(Arc::clone(&lin));
                 }
             }
         }

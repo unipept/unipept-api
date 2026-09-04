@@ -69,7 +69,13 @@ pub enum LineageStoreError {
     #[error("{0}")]
     IoError(#[from] std::io::Error),
     #[error("File not found: {0}")]
-    FileNotFound(String)
+    FileNotFound(String),
+    #[error("Line {line}: expected {expected} columns, found {found}")]
+    UnexpectedColumnCount { line: usize, expected: usize, found: usize },
+    #[error("Line {line}: `{value}` is not a taxon id")]
+    InvalidTaxonId { line: usize, value: String },
+    #[error("Line {line}: `{value}` is not a rank taxon id")]
+    InvalidRankId { line: usize, value: String }
 }
 
 #[derive(Error, Debug)]

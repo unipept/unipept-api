@@ -12,9 +12,7 @@ pub struct EcStore {
 
 impl EcStore {
     pub fn try_from_file(file: &str) -> Result<Self, EcStoreError> {
-        let file = std::fs::File::open(file).map_err(
-            |_| EcStoreError::FileNotFound(file.to_string())
-        )?;
+        let file = std::fs::File::open(file).map_err(|_| EcStoreError::FileNotFound(file.to_string()))?;
 
         let mut mapper = HashMap::new();
         for line in BufReader::new(file).lines() {

@@ -149,6 +149,21 @@ jobs:
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
+  fmt:
+    # Deliberately does not set RUSTUP_TOOLCHAIN: .rustfmt.toml needs the nightly pinned in
+    # rust-toolchain.toml, and rustup reads that pin only when the variable is unset. Bump the
+    # nightly there, never here.
+    name: Check formatting
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
   docs:
     # `-D warnings` turns a broken intra-doc link — which nothing else here notices — into a
     # failure. `--no-deps` keeps it to this workspace's own documentation.

@@ -1,21 +1,24 @@
 use std::collections::HashSet;
 
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    AppState,
     controllers::{
-        api::{default_cutoff, default_equate_il, default_extra, default_names, default_compact, default_tryptic},
+        api::{default_compact, default_cutoff, default_equate_il, default_extra, default_names, default_tryptic},
         generate_handlers
     },
-    helpers::lineage_helper::{
-        get_lineage, get_lineage_with_names, Lineage,
-        LineageVersion::{self, *}
-    },
-    AppState
+    errors::ApiError,
+    helpers::{
+        lineage_helper::{
+            Lineage,
+            LineageVersion::{self, *},
+            get_lineage, get_lineage_with_names
+        },
+        sanitize_peptides
+    }
 };
-use crate::errors::ApiError;
-use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -39,8 +42,8 @@ pub struct Parameters {
 #[derive(Serialize)]
 #[serde(untagged)]
 pub enum TaxaInformation {
-    Dense (DenseTaxaInformation),
-    Compact (CompactTaxaInformation)
+    Dense(DenseTaxaInformation),
+    Compact(CompactTaxaInformation)
 }
 
 #[derive(Serialize)]
@@ -73,9 +76,7 @@ async fn handler(
     version: LineageVersion
 ) -> Result<Vec<TaxaInformation>, ApiError> {
     let input = sanitize_peptides(input);
-    let result = tokio::task::block_in_place(|| {
-        index.analyse(&input, equate_il, tryptic, Some(cutoff))
-    });
+    let result = tokio::task::block_in_place(|| index.analyse(&input, equate_il, tryptic, Some(cutoff)));
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
@@ -84,7 +85,12 @@ async fn handler(
         return Ok(result
             .into_iter()
             .filter_map(|item| {
-                let item_taxa: Vec<u32> = item.proteins.iter().map(|protein| protein.taxon).filter(|&taxon_id| taxon_store.is_valid(taxon_id)).collect();
+                let item_taxa: Vec<u32> = item
+                    .proteins
+                    .iter()
+                    .map(|protein| protein.taxon)
+                    .filter(|&taxon_id| taxon_store.is_valid(taxon_id))
+                    .collect();
 
                 if item_taxa.is_empty() {
                     return None;
@@ -93,11 +99,10 @@ async fn handler(
                 Some(TaxaInformation::Compact(CompactTaxaInformation {
                     peptide: item.sequence.to_string(),
                     cutoff_used: item.cutoff_used,
-                    taxa: item_taxa,
+                    taxa: item_taxa
                 }))
             })
-            .collect()
-        )
+            .collect());
     }
 
     Ok(result

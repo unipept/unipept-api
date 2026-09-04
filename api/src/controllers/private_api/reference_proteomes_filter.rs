@@ -1,10 +1,9 @@
 use std::convert::Infallible;
-use axum::{extract::State, Json};
+
+use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
-use crate::{
-    controllers::generate_handlers,
-    AppState
-};
+
+use crate::{AppState, controllers::generate_handlers};
 
 fn default_filter() -> String {
     String::from("")
@@ -34,10 +33,7 @@ pub struct ReferenceProteomeCountResult {
 }
 
 fn get_taxon_name_by_id(taxon_store: &datastore::TaxonStore, taxon_id: u32) -> String {
-    taxon_store
-        .get_name(taxon_id)
-        .cloned()
-        .unwrap_or_else(|| "Unknown".to_string())
+    taxon_store.get_name(taxon_id).cloned().unwrap_or_else(|| "Unknown".to_string())
 }
 
 async fn count_handler(
@@ -45,23 +41,20 @@ async fn count_handler(
     ReferenceProteomeCountParameters { filter }: ReferenceProteomeCountParameters
 ) -> Result<ReferenceProteomeCountResult, Infallible> {
     let proteome_store = datastore.reference_proteome_store();
-    
+
     if filter.is_empty() {
-        Ok(ReferenceProteomeCountResult {
-            count: proteome_store.mapper
-                .values()
-                .count() as u32
-        })
+        Ok(ReferenceProteomeCountResult { count: proteome_store.mapper.values().count() as u32 })
     } else {
         Ok(ReferenceProteomeCountResult {
-            count: proteome_store.mapper
+            count: proteome_store
+                .mapper
                 .iter()
                 .filter(|(key, (taxon_id, _, _))| {
                     let taxon_name = get_taxon_name_by_id(datastore.taxon_store(), *taxon_id);
 
-                    key.to_lowercase().contains(&filter.to_lowercase()) ||
-                        taxon_id.to_string().contains(&filter) || 
-                        taxon_name.to_lowercase().contains(&filter.to_lowercase())
+                    key.to_lowercase().contains(&filter.to_lowercase())
+                        || taxon_id.to_string().contains(&filter)
+                        || taxon_name.to_lowercase().contains(&filter.to_lowercase())
                 })
                 .count() as u32
         })
@@ -80,14 +73,15 @@ async fn filter_handler(
 ) -> Result<Vec<String>, Infallible> {
     let proteome_store = datastore.reference_proteome_store();
 
-    let mut filtered_proteomes: Vec<(&String, &(u32, u32, String))> = proteome_store.mapper
+    let mut filtered_proteomes: Vec<(&String, &(u32, u32, String))> = proteome_store
+        .mapper
         .iter()
         .filter(|(key, (taxon_id, _, _))| {
             let taxon_name = get_taxon_name_by_id(datastore.taxon_store(), *taxon_id);
 
-            key.to_lowercase().contains(&filter.to_lowercase()) ||
-                taxon_id.to_string().contains(&filter) ||
-                taxon_name.to_lowercase().contains(&filter.to_lowercase())
+            key.to_lowercase().contains(&filter.to_lowercase())
+                || taxon_id.to_string().contains(&filter)
+                || taxon_name.to_lowercase().contains(&filter.to_lowercase())
         })
         .collect();
 
@@ -98,17 +92,12 @@ async fn filter_handler(
                 let taxon_name_a = get_taxon_name_by_id(datastore.taxon_store(), a_taxon_id);
                 let taxon_name_b = get_taxon_name_by_id(datastore.taxon_store(), b_taxon_id);
 
-                if sort_descending {
-                    taxon_name_b.cmp(&taxon_name_a)
-                } else {
-                    taxon_name_a.cmp(&taxon_name_b)
-                }
+                if sort_descending { taxon_name_b.cmp(&taxon_name_a) } else { taxon_name_a.cmp(&taxon_name_b) }
             };
-            
-            filtered_proteomes.sort_by(|(_, &(a_taxon_id, _, _)), (_, &(b_taxon_id,_, _))| {
-                sort_fn(a_taxon_id, b_taxon_id)
-            });
-        },
+
+            filtered_proteomes
+                .sort_by(|(_, &(a_taxon_id, _, _)), (_, &(b_taxon_id, _, _))| sort_fn(a_taxon_id, b_taxon_id));
+        }
         "protein_count" => {
             filtered_proteomes.sort_by(|(_, &(_, a_protein_count, _)), (_, &(_, b_protein_count, _))| {
                 if sort_descending {
@@ -117,19 +106,20 @@ async fn filter_handler(
                     a_protein_count.cmp(&b_protein_count)
                 }
             });
-        },
+        }
         _ => {
             filtered_proteomes.sort_by(|(a_proteome_id, _), (b_proteome_id, _)| {
-                if sort_descending {
-                    b_proteome_id.cmp(a_proteome_id)
-                } else {
-                    a_proteome_id.cmp(b_proteome_id) 
-                }
+                if sort_descending { b_proteome_id.cmp(a_proteome_id) } else { a_proteome_id.cmp(b_proteome_id) }
             });
-        },
+        }
     }
 
-    Ok(filtered_proteomes.into_iter().skip(start).take(end - start).map(|(key, _)| key.to_string()).collect())
+    Ok(filtered_proteomes
+        .into_iter()
+        .skip(start)
+        .take(end - start)
+        .map(|(key, _)| key.to_string())
+        .collect())
 }
 
 generate_handlers!(

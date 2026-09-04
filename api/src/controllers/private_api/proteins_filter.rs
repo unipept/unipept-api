@@ -1,11 +1,8 @@
-use axum::{extract::State, Json};
-use serde::{Deserialize, Serialize};
+use axum::{Json, extract::State};
 use database::{get_accessions_by_filter, get_accessions_count_by_filter};
-use crate::{
-    controllers::generate_handlers,
-    AppState
-};
-use crate::errors::ApiError;
+use serde::{Deserialize, Serialize};
+
+use crate::{AppState, controllers::generate_handlers, errors::ApiError};
 
 fn default_filter() -> String {
     String::from("")
@@ -32,15 +29,17 @@ pub struct ProteinCountResult {
 
 async fn count_handler(
     State(AppState { database, .. }): State<AppState>,
-    ProteinCountParameters { filter }:  ProteinCountParameters
+    ProteinCountParameters { filter }: ProteinCountParameters
 ) -> Result<ProteinCountResult, ApiError> {
     let connection = database.get_conn();
-    Ok(ProteinCountResult { count: get_accessions_count_by_filter(connection, filter).await? })
+    Ok(ProteinCountResult {
+        count: get_accessions_count_by_filter(connection, filter).await?
+    })
 }
 
 async fn filter_handler(
     State(AppState { database, .. }): State<AppState>,
-    ProteinFilterParameters { filter, start, end }:  ProteinFilterParameters
+    ProteinFilterParameters { filter, start, end }: ProteinFilterParameters
 ) -> Result<Vec<String>, ApiError> {
     let connection = database.get_conn();
     Ok(get_accessions_by_filter(connection, filter, start, end).await?)

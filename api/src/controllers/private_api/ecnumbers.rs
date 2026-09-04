@@ -1,8 +1,9 @@
 use std::convert::Infallible;
-use axum::{extract::State, Json};
+
+use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
-use crate::{controllers::generate_handlers, AppState};
+use crate::{AppState, controllers::generate_handlers};
 
 #[derive(Serialize, Deserialize)]
 pub struct Parameters {

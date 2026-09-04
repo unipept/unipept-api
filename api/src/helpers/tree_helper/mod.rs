@@ -2,7 +2,7 @@ use datastore::{LineageStore, TaxonStore};
 use frequency::FrequencyTable;
 use node::Node;
 
-use super::lineage_helper::{get_lineage_array, LineageVersion};
+use super::lineage_helper::{LineageVersion, get_lineage_array};
 
 pub mod frequency;
 pub mod node;

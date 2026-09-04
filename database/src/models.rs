@@ -1,6 +1,9 @@
-use serde::Deserialize;
-use serde::de::{self, Deserializer};
 use std::str::FromStr;
+
+use serde::{
+    Deserialize,
+    de::{self, Deserializer}
+};
 
 #[derive(Debug, Deserialize)]
 pub struct UniprotEntry {
@@ -20,7 +23,7 @@ pub struct UniprotEntry {
 
 fn string_to_u32<'de, D>(deserializer: D) -> Result<u32, D::Error>
 where
-    D: Deserializer<'de>,
+    D: Deserializer<'de>
 {
     let s: String = Deserialize::deserialize(deserializer)?; // Deserialize input as a String
     u32::from_str(&s).map_err(de::Error::custom) // Convert the String to u32

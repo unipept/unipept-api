@@ -73,7 +73,7 @@ impl Lineage {
             "strain" => self.strain,
             "varietas" => self.varietas,
             "forma" => self.forma,
-            _ => None,
+            _ => None
         }
     }
 }
@@ -118,14 +118,12 @@ impl LineageStore {
             "strain" => Some(25),
             "varietas" => Some(26),
             "forma" => Some(27),
-            _ => None,
+            _ => None
         }
     }
 
     pub fn try_from_file(file: &str) -> Result<Self, LineageStoreError> {
-        let file = std::fs::File::open(file).map_err(
-            |_| LineageStoreError::FileNotFound(file.to_string())
-        )?;
+        let file = std::fs::File::open(file).map_err(|_| LineageStoreError::FileNotFound(file.to_string()))?;
 
         let mut mapper = HashMap::new();
 
@@ -138,14 +136,14 @@ impl LineageStore {
         for line in BufReader::new(file).lines() {
             let line = line?;
             let mut splitted_line = line.split('\t');
-            
+
             let taxon_id: u32 = splitted_line.next().unwrap().parse().unwrap();
             let parts: Vec<Option<i32>> =
                 splitted_line.map(|x| if x == "\\N" { None } else { Some(x.parse::<i32>().unwrap()) }).collect();
-            
+
             // All lines in the input should be of equal length. If, for some reason, this is not the case, panic and inform the user!
             assert_eq!(parts.len(), LineageStore::AMOUNT_OF_RANKS, "Input lineage has not the correct dimension.");
-            
+
             let lin = Arc::new(Lineage {
                 domain: parts[0],
                 realm: parts[1],
@@ -206,6 +204,7 @@ impl LineageStore {
     /// Returns all unique taxon IDs at a specific rank in the NCBI taxonomy.
     pub fn get_all_taxon_ids_at_rank(&self, rank: &str) -> Option<Vec<u32>> {
         LineageStore::rank_to_idx(rank)
-            .and_then(|idx| self.index_references.get(idx)).map(|map| map.keys().cloned().collect())
+            .and_then(|idx| self.index_references.get(idx))
+            .map(|map| map.keys().cloned().collect())
     }
 }

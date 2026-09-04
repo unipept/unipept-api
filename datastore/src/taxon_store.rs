@@ -1,9 +1,10 @@
 use std::{
     collections::HashMap,
+    fmt,
     io::{BufRead, BufReader},
-    str::FromStr,
-    fmt
+    str::FromStr
 };
+
 use crate::errors::TaxonStoreError;
 
 pub type TaxonInformation = (String, LineageRank, bool);
@@ -43,23 +44,17 @@ pub enum LineageRank {
 
 impl fmt::Display for LineageRank {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if *self == LineageRank::NoRank {
-            write!(f, "{:?}", "root")
-        } else {
-            write!(f, "{:?}", self)
-        }
+        if *self == LineageRank::NoRank { write!(f, "{:?}", "root") } else { write!(f, "{:?}", self) }
     }
 }
 
 pub struct TaxonStore {
-    pub mapper: HashMap<u32, TaxonInformation>,
+    pub mapper: HashMap<u32, TaxonInformation>
 }
 
 impl TaxonStore {
     pub fn try_from_file(file: &str) -> Result<Self, TaxonStoreError> {
-        let file = std::fs::File::open(file).map_err(
-            |_| TaxonStoreError::FileNotFound(file.to_string())
-        )?;
+        let file = std::fs::File::open(file).map_err(|_| TaxonStoreError::FileNotFound(file.to_string()))?;
 
         let mut mapper = HashMap::new();
         for line in BufReader::new(file).lines() {

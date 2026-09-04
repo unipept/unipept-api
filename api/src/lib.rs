@@ -1,13 +1,14 @@
 use std::sync::Arc;
+
+use axum::{
+    ServiceExt, // for `into_make_service`
+    extract::Request
+};
 use database::Database;
 use datastore::DataStore;
 use index::Index;
 use tokio::net::TcpListener;
 use tower::Layer;
-use axum::{
-    ServiceExt, // for `into_make_service`
-    extract::Request,
-};
 
 pub mod controllers;
 pub mod errors;

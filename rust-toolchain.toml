@@ -1,0 +1,13 @@
+# Nightly is required for formatting: .rustfmt.toml sets `unstable_features = true`. Stable
+# rustfmt does not ignore those settings — it warns and reformats against the remaining rules,
+# so a plain `cargo fmt` on stable rewrites files nobody touched.
+#
+# Pinned to a date, not floating `nightly`: rustfmt's output changes between nightlies, so a
+# floating channel can turn the gate red on a commit that touched nothing. Bumping is two steps —
+# change the date, run `cargo fmt --all`, commit both together.
+#
+# CI does not build on this toolchain. Every ci.yml job except `fmt` sets RUSTUP_TOOLCHAIN: stable,
+# which takes precedence over this file.
+[toolchain]
+channel = "nightly-2026-03-11"
+components = ["rustfmt", "clippy"]

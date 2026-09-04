@@ -1,26 +1,29 @@
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    AppState,
     controllers::{
-        api::{default_cutoff, default_domains, default_equate_il, default_extra, default_names, default_validate_taxa},
+        api::{
+            default_cutoff, default_domains, default_equate_il, default_extra, default_names, default_validate_taxa
+        },
         generate_handlers
     },
+    errors::ApiError,
     helpers::{
-        ec_helper::{ec_numbers_from_map, EcNumber},
+        ec_helper::{EcNumber, ec_numbers_from_map},
         fa_helper::calculate_fa,
-        go_helper::{go_terms_from_map, GoTerms},
-        interpro_helper::{interpro_entries_from_map, InterproEntries},
+        go_helper::{GoTerms, go_terms_from_map},
+        interpro_helper::{InterproEntries, interpro_entries_from_map},
         lca_helper::calculate_lca,
         lineage_helper::{
-            get_lineage, get_lineage_with_names, Lineage,
-            LineageVersion::{self, *}
-        }
-    },
-    AppState
+            Lineage,
+            LineageVersion::{self, *},
+            get_lineage, get_lineage_with_names
+        },
+        sanitize_peptides
+    }
 };
-use crate::errors::ApiError;
-use crate::helpers::sanitize_peptides;
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -63,13 +66,19 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, domains, names, validate_taxa, cutoff }: Parameters,
+    Parameters {
+        input,
+        equate_il,
+        extra,
+        domains,
+        names,
+        validate_taxa,
+        cutoff
+    }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<PeptInformation>, ApiError> {
     let input = sanitize_peptides(input);
-    let result = tokio::task::block_in_place(|| {
-        index.analyse(&input, equate_il, false, Some(cutoff))
-    });
+    let result = tokio::task::block_in_place(|| index.analyse(&input, equate_il, false, Some(cutoff)));
 
     let ec_store = datastore.ec_store();
     let go_store = datastore.go_store();

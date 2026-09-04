@@ -1,26 +1,28 @@
 use std::collections::HashSet;
-use axum::{extract::State, Json};
+
+use axum::{Json, extract::State};
 use database::get_accessions;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    AppState,
     controllers::{
         api::{default_domains, default_extra, default_names},
         generate_handlers
     },
     errors::ApiError,
     helpers::{
-        ec_helper::{ec_numbers_from_list, EcNumber},
-        go_helper::{go_terms_from_list, GoTerms},
-        interpro_helper::{interpro_entries_from_list, InterproEntries},
+        ec_helper::{EcNumber, ec_numbers_from_list},
+        go_helper::{GoTerms, go_terms_from_list},
+        interpro_helper::{InterproEntries, interpro_entries_from_list},
         lineage_helper::{
-            get_lineage, get_lineage_with_names, Lineage,
-            LineageVersion::{self, *}
-        }
-    },
-    AppState
+            Lineage,
+            LineageVersion::{self, *},
+            get_lineage, get_lineage_with_names
+        },
+        sanitize_proteins
+    }
 };
-use crate::helpers::sanitize_proteins;
 
 #[derive(Deserialize)]
 pub struct Parameters {

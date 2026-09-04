@@ -35,6 +35,7 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
     let sa = format!("{}/sa.bin", index_location);
     let proteins = format!("{}/proteins.bin", index_location);
     let mappings = format!("{}/mapping.bin", index_location);
+    let kmer_table = format!("{}/kmer_table.bin", index_location);
 
     let database = Database::try_from_url(database_address)?;
 
@@ -53,7 +54,7 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
     // built. The configurations differ enough in memory profile to be worth stating.
     eprintln!("Index storage backend: {}", Index::backend_summary());
 
-    let index = Index::try_from_files(&sa, &proteins, &mappings)?;
+    let index = Index::try_from_files(&sa, &proteins, &mappings, &kmer_table)?;
 
     let app_state = AppState {
         datastore: Arc::new(datastore),

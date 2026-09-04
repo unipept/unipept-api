@@ -7,7 +7,7 @@ edition = "2021"
 sa-server = { git = "https://github.com/unipept/unipept-index.git" }
 sa-index = { git = "https://github.com/unipept/unipept-index.git" }
 fa-compression = { git = "https://github.com/unipept/unipept-index.git" }
-thiserror = "1.0"
+thiserror = "2.0"
 
 # Storage backend, forwarded to sa-server. No features = fully preloaded.
 [features]

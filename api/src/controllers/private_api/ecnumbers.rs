@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
@@ -18,7 +19,7 @@ pub struct EcNumber {
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
     Parameters { ecnumbers }: Parameters
-) -> Result<Vec<EcNumber>, ()> {
+) -> Result<Vec<EcNumber>, Infallible> {
     Ok(ecnumbers
         .iter()
         .map(|ec_number| ec_number.trim())
@@ -35,7 +36,7 @@ generate_handlers!(
     async fn json_handler(
         state => State<AppState>,
         params => Parameters
-    ) -> Result<Json<Vec<EcNumber>>, ()> {
+    ) -> Result<Json<Vec<EcNumber>>, Infallible> {
         Ok(Json(handler(state, params).await?))
     }
 );

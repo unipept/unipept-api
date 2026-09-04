@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 use datastore::LineageRank;
@@ -36,7 +37,7 @@ pub struct TaxonCountResult {
 async fn count_handler(
     State(AppState { datastore, .. }): State<AppState>,
     TaxaCountParameters { filter }: TaxaCountParameters,
-) -> Result<TaxonCountResult, ()> {
+) -> Result<TaxonCountResult, Infallible> {
     let taxon_store = datastore.taxon_store();
 
     if filter.is_empty() {
@@ -71,7 +72,7 @@ async fn filter_handler(
         sort_by,
         sort_descending,
     }: TaxaFilterParameters,
-) -> Result<Vec<u32>, ()> {
+) -> Result<Vec<u32>, Infallible> {
     let taxon_store = datastore.taxon_store();
 
     let mut filtered_taxa: Vec<_> = taxon_store.mapper
@@ -131,7 +132,7 @@ generate_handlers!(
     async fn json_count_handler(
         state => State<AppState>,
         params => TaxaCountParameters
-    ) -> Result<Json<TaxonCountResult>, ()> {
+    ) -> Result<Json<TaxonCountResult>, Infallible> {
         Ok(Json(count_handler(state, params).await?))
     }
 );
@@ -140,7 +141,7 @@ generate_handlers!(
     async fn json_filter_handler(
         state => State<AppState>,
         params => TaxaFilterParameters
-    ) -> Result<Json<Vec<u32>>, ()> {
+    ) -> Result<Json<Vec<u32>>, Infallible> {
         Ok(Json(filter_handler(state, params).await?))
     }
 );

@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
@@ -48,7 +49,7 @@ async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
     Parameters { input, extra, names, validate_taxa }: Parameters,
     version: LineageVersion
-) -> Result<LcaInformation, ()> {
+) -> Result<LcaInformation, Infallible> {
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
@@ -87,7 +88,7 @@ generate_handlers! (
         state => State<AppState>,
         params => Parameters,
         version: LineageVersion
-    ) -> Result<Json<LcaInformation>, ()> {
+    ) -> Result<Json<LcaInformation>, Infallible> {
         Ok(Json(handler(state, params, version).await?))
     }
 );

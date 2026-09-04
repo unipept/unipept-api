@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::Infallible;
 
 use askama::Template;
 use axum::{extract::State, Json};
@@ -88,7 +89,7 @@ generate_handlers!(
         state => State<AppState>,
         GetContent(params) => GetContent<GetParameters>,
         version: LineageVersion
-    ) -> Result<Json<TreeInformation>, ()> {
+    ) -> Result<Json<TreeInformation>, Infallible> {
         Ok(Json(handler(state, Parameters::Get(params), version)))
     }
 );
@@ -99,7 +100,7 @@ generate_handlers!(
         state => State<AppState>,
         PostContent(params) => PostContent<PostParameters>,
         version: LineageVersion
-    ) -> Result<Json<TreeInformation>, ()> {
+    ) -> Result<Json<TreeInformation>, Infallible> {
         Ok(Json(handler(state, Parameters::Post(params), version)))
     }
 );

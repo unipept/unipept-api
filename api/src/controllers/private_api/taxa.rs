@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +25,7 @@ pub struct Taxon {
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
     Parameters { taxids }: Parameters
-) -> Result<Vec<Taxon>, ()> {
+) -> Result<Vec<Taxon>, Infallible> {
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
@@ -49,7 +50,7 @@ generate_handlers!(
     async fn json_handler(
         state => State<AppState>,
         params => Parameters
-    ) -> Result<Json<Vec<Taxon>>, ()> {
+    ) -> Result<Json<Vec<Taxon>>, Infallible> {
         Ok(Json(handler(state, params).await?))
     }
 );

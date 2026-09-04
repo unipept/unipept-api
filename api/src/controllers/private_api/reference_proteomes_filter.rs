@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 use crate::{
@@ -42,7 +43,7 @@ fn get_taxon_name_by_id(taxon_store: &datastore::TaxonStore, taxon_id: u32) -> S
 async fn count_handler(
     State(AppState { datastore, .. }): State<AppState>,
     ReferenceProteomeCountParameters { filter }: ReferenceProteomeCountParameters
-) -> Result<ReferenceProteomeCountResult, ()> {
+) -> Result<ReferenceProteomeCountResult, Infallible> {
     let proteome_store = datastore.reference_proteome_store();
     
     if filter.is_empty() {
@@ -76,7 +77,7 @@ async fn filter_handler(
         sort_by,
         sort_descending
     }: ReferenceProteomeFilterParameters
-) -> Result<Vec<String>, ()> {
+) -> Result<Vec<String>, Infallible> {
     let proteome_store = datastore.reference_proteome_store();
 
     let mut filtered_proteomes: Vec<(&String, &(u32, u32, String))> = proteome_store.mapper
@@ -135,7 +136,7 @@ generate_handlers!(
     async fn json_count_handler(
         state => State<AppState>,
         params => ReferenceProteomeCountParameters
-    ) -> Result<Json<ReferenceProteomeCountResult>, ()> {
+    ) -> Result<Json<ReferenceProteomeCountResult>, Infallible> {
         Ok(Json(count_handler(state, params).await?))
     }
 );
@@ -144,7 +145,7 @@ generate_handlers!(
     async fn json_filter_handler(
         state => State<AppState>,
         params => ReferenceProteomeFilterParameters
-    ) -> Result<Json<Vec<String>>, ()> {
+    ) -> Result<Json<Vec<String>>, Infallible> {
         Ok(Json(filter_handler(state, params).await?))
     }
 );

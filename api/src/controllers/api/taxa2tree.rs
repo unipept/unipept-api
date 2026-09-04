@@ -1,5 +1,5 @@
-use std::convert::Infallible;
 use std::collections::HashMap;
+use std::convert::Infallible;
 
 use askama::Template;
 use axum::{extract::State, Json};

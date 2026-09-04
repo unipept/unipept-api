@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +20,7 @@ pub struct GoTerm {
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
     Parameters { goterms }: Parameters
-) -> Result<Vec<GoTerm>, ()> {
+) -> Result<Vec<GoTerm>, Infallible> {
     Ok(goterms
         .iter()
         .map(|go_term| go_term.trim())
@@ -37,7 +38,7 @@ generate_handlers!(
     async fn json_handler(
         state => State<AppState>,
         params => Parameters
-    ) -> Result<Json<Vec<GoTerm>>, ()> {
+    ) -> Result<Json<Vec<GoTerm>>, Infallible> {
         Ok(Json(handler(state, params).await?))
     }
 );

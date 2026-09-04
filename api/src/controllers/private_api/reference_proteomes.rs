@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 use crate::{
@@ -22,7 +23,7 @@ pub struct ReferenceProteome {
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
     Parameters { proteomes }: Parameters
-) -> Result<Vec<ReferenceProteome>, ()> {
+) -> Result<Vec<ReferenceProteome>, Infallible> {
     Ok(
         proteomes
             .iter()
@@ -51,7 +52,7 @@ generate_handlers!(
     async fn json_handler(
         state => State<AppState>,
         params => Parameters
-    ) -> Result<Json<Vec<ReferenceProteome>>, ()> {
+    ) -> Result<Json<Vec<ReferenceProteome>>, Infallible> {
         Ok(Json(handler(state, params).await?))
     }
 );

@@ -1,3 +1,4 @@
+use std::convert::Infallible;
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +20,7 @@ pub struct InterproEntry {
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
     Parameters { interpros }: Parameters
-) -> Result<Vec<InterproEntry>, ()> {
+) -> Result<Vec<InterproEntry>, Infallible> {
     Ok(interpros
         .iter()
         .map(|interpro_entry| interpro_entry.trim())
@@ -37,7 +38,7 @@ generate_handlers!(
     async fn json_handler(
         state => State<AppState>,
         params => Parameters
-    ) -> Result<Json<Vec<InterproEntry>>, ()> {
+    ) -> Result<Json<Vec<InterproEntry>>, Infallible> {
         Ok(Json(handler(state, params).await?))
     }
 );

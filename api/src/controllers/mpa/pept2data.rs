@@ -101,10 +101,9 @@ async fn handler(
 
     let crap_filter = CrapFilter::new();
 
-    // Everything the results are compared against is built above, because no `.await` may sit
-    // between this call and the last use of `result`: `block_in_place` places no `'static` bound
-    // on its closure, so the results are free to borrow from `index` and `peptides`. It does
-    // require a multi-threaded runtime — a `#[tokio::test]` covering this handler needs
+    // Built before the search only so a failure to construct the filters costs nothing; the
+    // results may safely be held across an `.await`. `block_in_place` does require a
+    // multi-threaded runtime, so a `#[tokio::test]` covering this handler needs
     // `flavor = "multi_thread"`.
     let result = tokio::task::block_in_place(|| {
         index.analyse(&peptides, equate_il, tryptic, Some(cutoff))

@@ -2,6 +2,7 @@
 name = "database"
 version = "2.3.2"
 edition = "2021"
+rust-version.workspace = true
 
 [dependencies]
 opensearch = "^2.0.0"

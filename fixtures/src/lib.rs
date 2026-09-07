@@ -9,11 +9,19 @@
 //!
 //! Two layers make up the corpus:
 //!
-//! - **Taxonomy** — not authored here. [`taxons_tsv`] and [`lineages_tsv`] point at the 10,000-taxon
-//!   pair already committed under `data/`, whose ID sets are identical. Real NCBI structure, deep
-//!   enough that rank-by-rank LCA reduction genuinely runs, and already used by the benchmarks.
-//! - **Proteins** — authored here, in `data/proteins.tsv`, referencing only taxa drawn from that
-//!   pair. This is the half that did not exist.
+//! - **Taxonomy** — `data/taxons.tsv` and `data/lineages.tsv`: twenty-one real NCBI rows, copied
+//!   verbatim out of the 10,000-taxon pair under the repository's own `data/`. The set is closed
+//!   under ancestry — every taxon a protein names, every ancestor those taxa's lineages record, and
+//!   root — so it is small enough to read in full, which is what makes an expected LCA checkable by
+//!   eye rather than by rerunning the code.
+//! - **Proteins** — `data/proteins.tsv`: twelve rows referencing only taxa from that subset.
+//!
+//! To regenerate the taxonomy after changing the proteins: take the taxon column of
+//! `proteins.tsv`, union it with every non-`\N` rank id on those taxa's rows in
+//! `data/lineages_subset_10000.tsv`, add taxon 1, and copy the matching rows out of both
+//! `data/*_subset_10000.tsv` files. Copy them rather than rewriting them — the fifth taxon column
+//! is a raw `0x01`/`0x00` byte, not text, and fifteen of the ancestors have a lineage row but no
+//! taxon row, which is a property of the 10,000-row sample and not an error.
 //!
 //! Writers panic rather than returning errors. A fixture that cannot be written to a temporary
 //! directory is a broken harness, not a condition a test should handle; this is the opposite of
@@ -49,6 +57,13 @@ pub const SAMPLEDATA_JSON: &str = include_str!("../data/sampledata.json");
 /// Index version string, written to `.version`.
 pub const VERSION: &str = include_str!("../data/version.txt");
 
+/// Taxa: `id`, `name`, `rank`, `parent`, validity. The rank strings are the ones
+/// `LineageRank::from_str` accepts, and the fifth column is a raw `0x01`/`0x00` byte.
+pub const TAXONS_TSV: &str = include_str!("../data/taxons.tsv");
+
+/// Lineages: a taxon id followed by 28 rank columns, `\N` where the taxonomy records nothing.
+pub const LINEAGES_TSV: &str = include_str!("../data/lineages.tsv");
+
 /// Every accession in the corpus, in file order.
 ///
 /// Database mocks key their canned responses on these, so that an index built from the corpus and
@@ -58,7 +73,7 @@ pub const ACCESSIONS: [&str; 12] = [
     "P00012"
 ];
 
-/// Taxa the corpus references, all drawn from `data/taxons_subset_10000.tsv`.
+/// Taxa the corpus references, all present in `data/taxons.tsv`.
 ///
 /// The relationships between them are what the LCA scenarios rest on, so they are named rather
 /// than written as bare numbers at the assertion site.
@@ -128,25 +143,12 @@ pub struct DataStorePaths {
     pub taxons: PathBuf
 }
 
-/// Absolute path to the committed taxon table.
+/// Writes all eight datastore files into `dir` and returns their paths.
 ///
-/// Resolved from `CARGO_MANIFEST_DIR` rather than relative to the working directory, so it holds
-/// wherever the test binary is run from.
-pub fn taxons_tsv() -> PathBuf {
-    repo_data("taxons_subset_10000.tsv")
-}
-
-/// Absolute path to the committed lineage table; the companion of [`taxons_tsv`].
-pub fn lineages_tsv() -> PathBuf {
-    repo_data("lineages_subset_10000.tsv")
-}
-
-/// Writes every datastore file into `dir` and returns their paths.
-///
-/// The taxonomy is not copied — those two entries point at the committed files, so there is
-/// exactly one taxonomy in the repository and no second copy to drift from it.
+/// Every returned path is inside `dir`, including the taxonomy, so a caller can delete the
+/// directory and be certain nothing of the fixture survives.
 pub fn write_datastore_files(dir: &Path) -> DataStorePaths {
-    fs::create_dir_all(dir).expect("could not create the fixture directory");
+    create_dir(dir);
 
     DataStorePaths {
         version: write(dir, ".version", VERSION),
@@ -155,8 +157,8 @@ pub fn write_datastore_files(dir: &Path) -> DataStorePaths {
         go_terms: write(dir, "go_terms.tsv", GO_TERMS_TSV),
         interpro_entries: write(dir, "interpro_entries.tsv", INTERPRO_ENTRIES_TSV),
         proteomes: write(dir, "proteomes.tsv", PROTEOMES_TSV),
-        lineages: lineages_tsv(),
-        taxons: taxons_tsv()
+        lineages: write(dir, "lineages.tsv", LINEAGES_TSV),
+        taxons: write(dir, "taxons.tsv", TAXONS_TSV)
     }
 }
 
@@ -165,16 +167,16 @@ pub fn write_datastore_files(dir: &Path) -> DataStorePaths {
 /// This is the input `sa-builder` reads; the index files built from it are produced separately, so
 /// that nothing binary is ever committed.
 pub fn write_proteins_tsv(dir: &Path) -> PathBuf {
-    fs::create_dir_all(dir).expect("could not create the fixture directory");
+    create_dir(dir);
     write(dir, "proteins.tsv", PROTEINS_TSV)
+}
+
+fn create_dir(dir: &Path) {
+    fs::create_dir_all(dir).expect("could not create the fixture directory");
 }
 
 fn write(dir: &Path, name: &str, contents: &str) -> PathBuf {
     let path = dir.join(name);
     fs::write(&path, contents).unwrap_or_else(|err| panic!("could not write {}: {}", path.display(), err));
     path
-}
-
-fn repo_data(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../data").join(name)
 }

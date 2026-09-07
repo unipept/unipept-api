@@ -5,14 +5,18 @@
 //! `true` again, and nothing about that fails to compile. This walks the endpoints instead.
 //!
 //! The extractor rejects before any handler runs, so none of these requests reach the index or
-//! OpenSearch — the corpus is built once and every case is a parse.
+//! OpenSearch: every case is a parse, and the app is built once per test and cloned per request.
+//!
+//! Both halves of every route are walked. `taxa2tree` is why: its GET and POST handlers take two
+//! different structs, `GetParameters` and `PostParameters`, each with their own `link` field. A
+//! GET-only pass leaves the POST one unannotated and green.
 
 mod common;
 
 use axum::{
     Router,
     body::Body,
-    http::{Request, StatusCode}
+    http::{Request, StatusCode, header}
 };
 use tower::ServiceExt;
 use unipept_api::{middleware::normalize_path::NormalizePath, routes::create_app};
@@ -96,6 +100,19 @@ async fn status_of(app: &NormalizePath<Router>, path: &str) -> StatusCode {
         .status()
 }
 
+/// The same query, sent as a form body so the POST handler's own struct is the one parsed.
+///
+/// The status differs from the GET half: `PostContent` maps a `Form` rejection to `422`, where
+/// `GetContent` answers `400`. Both are refusals; only the code differs.
+async fn post_status_of(app: &NormalizePath<Router>, path: &str, query: &str) -> StatusCode {
+    let request = Request::post(path)
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from(query.to_owned()))
+        .unwrap();
+
+    app.clone().oneshot(request).await.expect("the app responds").status()
+}
+
 /// `?flag=` is refused everywhere.
 ///
 /// This is the case the parser reads as `true`. On a flag defaulting to false it would switch on
@@ -172,6 +189,28 @@ async fn every_boolean_still_accepts_true_and_false() {
     drop(dir);
 
     assert!(refused.is_empty(), "these refused a valid boolean: {refused:#?}");
+}
+
+/// Every boolean refuses an empty value on the POST half too.
+///
+/// `taxa2tree` has a separate `PostParameters`, so the GET pass above never touches its `link`.
+/// Without this, dropping `strict_bool` from that field leaves the whole suite green while
+/// `POST /api/v2/taxa2tree` with `counts[1]=1&link=` answers `200` and reads `link` as `true`.
+#[tokio::test(flavor = "multi_thread")]
+async fn every_boolean_refuses_an_empty_value_on_the_post_half() {
+    let (dir, state) = common::offline_state();
+    let app = create_app(state);
+
+    let mut accepted = Vec::new();
+    for (path, flag, extra) in BOOLEAN_PARAMETERS {
+        let body = query("", extra, &format!("{flag}=")).trim_start_matches('?').to_owned();
+        if post_status_of(&app, path, &body).await != StatusCode::UNPROCESSABLE_ENTITY {
+            accepted.push(format!("POST {path} {body}"));
+        }
+    }
+    drop(dir);
+
+    assert!(accepted.is_empty(), "these read an empty value as a flag on POST: {accepted:#?}");
 }
 
 /// A JSON body carries a real boolean, and it is read as one.

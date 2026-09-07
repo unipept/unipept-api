@@ -298,6 +298,32 @@ async fn a_flag_with_a_value_that_is_not_a_boolean_is_rejected() {
     assert_eq!(get("equate_il=yes").await, Err(StatusCode::BAD_REQUEST));
 }
 
+/// A JSON body may spell a boolean as a string.
+///
+/// `strict_bool` reads whatever the format hands it — a typed `true` from JSON, text from a query
+/// string — which means JSON spelling it `"true"` is taken where a plain `bool` would refuse it. A
+/// widening, limited to the two literal spellings, pinned so it stays a decision.
+#[tokio::test]
+async fn a_json_body_may_spell_a_boolean_as_a_string() {
+    let parameters = post("application/json", r#"{"equate_il":"true"}"#).await.expect("a string spelling is taken");
+
+    assert!(parameters.equate_il);
+}
+
+#[tokio::test]
+async fn a_json_body_refuses_a_value_that_is_not_a_boolean() {
+    assert_eq!(post("application/json", r#"{"equate_il":"yes"}"#).await, Err(StatusCode::UNPROCESSABLE_ENTITY));
+    assert_eq!(post("application/json", r#"{"equate_il":1}"#).await, Err(StatusCode::UNPROCESSABLE_ENTITY));
+}
+
+/// A flag in array syntax is refused rather than unwrapped: `?equate_il[]=true` used to be read by
+/// taking the last of the sequence, and a scalar is not a list.
+#[tokio::test]
+async fn a_flag_in_array_syntax_is_rejected() {
+    assert_eq!(get("equate_il[]=true").await, Err(StatusCode::BAD_REQUEST));
+    assert_eq!(get("equate_il[0]=true").await, Err(StatusCode::BAD_REQUEST));
+}
+
 /// Once per encoding: a JSON body carries a typed boolean and the other two carry text, so
 /// strictness asserted on one path can quietly differ on another.
 #[tokio::test]

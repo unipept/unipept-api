@@ -12,15 +12,19 @@ use axum::{
     response::IntoResponse
 };
 use serde::Deserialize;
-use unipept_api::controllers::request::{GetContent, PostContent};
+use unipept_api::controllers::request::{GetContent, PostContent, strict_bool};
 
+// Shaped like a real controller's `Parameters`, `strict_bool` included. Without that attribute
+// this struct would be more permissive than any endpoint the API actually serves, and the tests
+// below would document a contract that does not exist.
+//
 // `filter` mirrors the private-api filters, which take a `String` where an empty one is a real
 // request. It is here so the empty-value rule can be pinned on both a boolean and a string.
 #[derive(Debug, Deserialize, PartialEq)]
 struct Parameters {
     #[serde(default)]
     input: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "strict_bool")]
     equate_il: bool,
     #[serde(default)]
     filter: String
@@ -278,18 +282,38 @@ async fn a_flag_sent_twice_in_a_multipart_body_is_rejected() {
     assert_eq!(post_bytes("multipart/form-data; boundary=X", body).await, Err(StatusCode::UNPROCESSABLE_ENTITY));
 }
 
-/// A flag named without a value reads as set.
+/// A flag named without a value is refused rather than read as set.
 ///
-/// The sharp end of this is a flag defaulting to false — `?tryptic=` switches on behaviour the
-/// caller never spelled out, and raises no error.
+/// The query-string parser reads `?equate_il=` and a bare `?equate_il` as `true`, which on a flag
+/// defaulting to false switches on behaviour the caller never spelled out. `strict_bool` refuses
+/// both.
 #[tokio::test]
-async fn a_flag_with_an_empty_value_reads_as_set() {
-    assert!(get("equate_il=").await.expect("accepted").equate_il);
-    assert!(get("equate_il").await.expect("accepted").equate_il);
+async fn a_flag_without_a_value_is_rejected() {
+    assert_eq!(get("equate_il=").await, Err(StatusCode::BAD_REQUEST));
+    assert_eq!(get("equate_il").await, Err(StatusCode::BAD_REQUEST));
 }
 
-/// Only a boolean turns an empty value into `true`; a string field keeps the empty string, which
-/// the private-api filters send as a real request.
+#[tokio::test]
+async fn a_flag_with_a_value_that_is_not_a_boolean_is_rejected() {
+    assert_eq!(get("equate_il=yes").await, Err(StatusCode::BAD_REQUEST));
+}
+
+/// Once per encoding: a JSON body carries a typed boolean and the other two carry text, so
+/// strictness asserted on one path can quietly differ on another.
+#[tokio::test]
+async fn a_flag_with_an_empty_value_in_a_form_body_is_rejected() {
+    assert_eq!(post("application/x-www-form-urlencoded", "equate_il=").await, Err(StatusCode::UNPROCESSABLE_ENTITY));
+}
+
+#[tokio::test]
+async fn a_flag_with_an_empty_value_in_a_multipart_body_is_rejected() {
+    let body = b"--X\r\nContent-Disposition: form-data; name=\"equate_il\"\r\n\r\n\r\n--X--\r\n".to_vec();
+
+    assert_eq!(post_bytes("multipart/form-data; boundary=X", body).await, Err(StatusCode::UNPROCESSABLE_ENTITY));
+}
+
+/// A string field keeps the empty string, which the private-api filters send as a real request —
+/// only a boolean turns an empty value into a refusal.
 #[tokio::test]
 async fn an_empty_value_on_a_string_field_stays_empty() {
     let parameters = get("filter=").await.expect("an empty filter is a real request");

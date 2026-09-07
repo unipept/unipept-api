@@ -23,9 +23,10 @@ use unipept_api::{middleware::normalize_path::NormalizePath, routes::create_app}
 /// them every request is a 400 regardless of the flag — which would let the refusal tests below
 /// pass without ever reaching `strict_bool`.
 ///
-/// Derived from the `deserialize_with = "strict_bool"` annotations rather than written by hand. A
-/// new boolean parameter belongs here as well as on the struct; nothing enforces that, which is
-/// why it is worth saying so.
+/// This list is maintained by hand. It was seeded by reading the `deserialize_with =
+/// "strict_bool"` annotations out of `controllers`, but nothing regenerates it and nothing checks
+/// it is complete: a new boolean parameter has to be added here as well as to its struct, or it
+/// simply is not covered.
 const BOOLEAN_PARAMETERS: &[(&str, &str, &str)] = &[
     ("/mpa/pept2data", "equate_il", ""),
     ("/mpa/pept2data", "report_taxa", ""),

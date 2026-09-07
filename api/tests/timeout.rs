@@ -42,15 +42,23 @@ fn any_other_error_is_an_internal_server_error() {
 /// Driven against a service that never finishes rather than through the app: the corpus answers
 /// immediately, and `Timeout` polls the inner service before its own sleep, so a real endpoint
 /// cannot be made to elapse by lowering the duration.
+///
+/// The inner service never completes on its own, so the call is bounded by a second timeout of its
+/// own. Without it the regression this test exists to catch -- `TimeoutLayer` failing to fire --
+/// would hang the suite until CI killed the job, reporting a job timeout rather than the assertion
+/// that actually failed.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_timeout_layer_raises_the_error_the_handler_recognises() {
     let never_finishes = tower::service_fn(|_: ()| std::future::pending::<Result<(), BoxError>>());
 
     let mut service = ServiceBuilder::new().layer(TimeoutLayer::new(Duration::from_millis(10))).service(never_finishes);
 
-    let err = service.ready().await.expect("ready").call(()).await.expect_err("the call should elapse");
+    let call = service.ready().await.expect("ready").call(());
+    let elapsed = tokio::time::timeout(Duration::from_secs(5), call)
+        .await
+        .expect("the 10ms layer should have ended the call long before this bound");
 
-    assert_eq!(timeout_status(err), StatusCode::REQUEST_TIMEOUT);
+    assert_eq!(timeout_status(elapsed.expect_err("the call should elapse")), StatusCode::REQUEST_TIMEOUT);
 }
 
 /// A request inside the timeout is untouched by the layer.

@@ -35,6 +35,28 @@ const REQUEST_TIMEOUT_DURATION: u64 = 150;
 /// process — `.init()` panics on a second call — which made a router something a program could
 /// build exactly one of. It belongs to `start`, which runs once by construction.
 pub fn create_router(state: AppState) -> Router {
+    create_router_with_timeout(state, Duration::from_secs(REQUEST_TIMEOUT_DURATION))
+}
+
+/// The status a request that failed inside the middleware stack answers with.
+///
+/// A downcast rather than a match: `HandleErrorLayer` hands over a `BoxError`, so which error this
+/// is can only be asked at run time. Nothing about that is checked when the code compiles, which
+/// is why it is a named function with a test rather than a closure inline below — were `Elapsed`
+/// to become a different type, a timeout would quietly start answering 500.
+pub fn timeout_status(err: BoxError) -> StatusCode {
+    if err.is::<tower::timeout::error::Elapsed>() {
+        StatusCode::REQUEST_TIMEOUT
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    }
+}
+
+/// As [`create_router`], with the timeout given rather than taken from the constant.
+///
+/// Production has one timeout and does not need this; a test that waits 150 seconds to observe one
+/// is not a test anybody runs.
+pub fn create_router_with_timeout(state: AppState, timeout: Duration) -> Router {
     Router::new()
         .route("/", get(|| async { "Unipept API server" }))
         .nest("/api", create_api_routes())
@@ -43,14 +65,8 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/private_api", create_private_api_routes())
         .layer(
             ServiceBuilder::new()
-                .layer(HandleErrorLayer::new(|err: BoxError| async move {
-                    if err.is::<tower::timeout::error::Elapsed>() {
-                        StatusCode::REQUEST_TIMEOUT
-                    } else {
-                        StatusCode::INTERNAL_SERVER_ERROR
-                    }
-                }))
-                .layer(TimeoutLayer::new(Duration::from_secs(REQUEST_TIMEOUT_DURATION)))
+                .layer(HandleErrorLayer::new(|err: BoxError| async move { timeout_status(err) }))
+                .layer(TimeoutLayer::new(timeout))
                 // Set max request size to 50MiB (default is 2MiB)
                 .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
                 .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024))
@@ -68,6 +84,11 @@ pub fn create_router(state: AppState) -> Router {
 /// router is exercising a different stack than the one production runs.
 pub fn create_app(state: AppState) -> NormalizePath<Router> {
     NormalizePathLayer::normalize_uris().layer(create_router(state))
+}
+
+/// As [`create_app`], with the timeout given rather than taken from the constant.
+pub fn create_app_with_timeout(state: AppState, timeout: Duration) -> NormalizePath<Router> {
+    NormalizePathLayer::normalize_uris().layer(create_router_with_timeout(state, timeout))
 }
 
 fn create_api_routes() -> Router<AppState> {

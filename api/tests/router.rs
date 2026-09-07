@@ -7,16 +7,29 @@
 mod common;
 
 use axum::{
+    Router,
     body::Body,
     http::{Request, StatusCode}
 };
 use http_body_util::BodyExt;
 use tower::ServiceExt;
-use unipept_api::routes::create_app;
+use unipept_api::{middleware::normalize_path::NormalizePath, routes::create_app};
 
 async fn get(path: &str) -> (StatusCode, String) {
-    let (_dir, state) = common::offline_state();
-    let response = create_app(state)
+    let (dir, state) = common::offline_state();
+    let answered = get_with(&create_app(state), path).await;
+    drop(dir);
+    answered
+}
+
+/// Sends one request to an app that is already built.
+///
+/// `oneshot` consumes the service, so a test issuing several requests clones the app rather than
+/// rebuilding the corpus behind it — the clone is a handful of `Arc` bumps, the rebuild is a fresh
+/// index.
+async fn get_with(app: &NormalizePath<Router>, path: &str) -> (StatusCode, String) {
+    let response = app
+        .clone()
         .oneshot(Request::get(path).body(Body::empty()).unwrap())
         .await
         .expect("the app responds");
@@ -58,8 +71,11 @@ async fn an_unknown_route_is_a_not_found() {
 /// are 404s without it.
 #[tokio::test(flavor = "multi_thread")]
 async fn trailing_and_repeated_slashes_are_normalised() {
+    let (_dir, state) = common::offline_state();
+    let app = create_app(state);
+
     for path in ["/api/v2/pept2lca", "/api/v2/pept2lca/", "//api//v2//pept2lca", "/api/v2/pept2lca///"] {
-        assert_eq!(get(path).await.0, StatusCode::OK, "{path} should reach the handler");
+        assert_eq!(get_with(&app, path).await.0, StatusCode::OK, "{path} should reach the handler");
     }
 }
 

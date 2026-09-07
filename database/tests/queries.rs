@@ -268,3 +268,67 @@ async fn canned_documents_cover_the_corpus_accessions() {
         assert!(map.contains_key(accession), "{accession} is in the corpus but not in the mocked database");
     }
 }
+
+/// The listing side of a filter, which was reachable by no test.
+///
+/// `get_accessions_by_filter` builds its own query rather than sharing one with
+/// `get_accessions_count_by_filter`, and the two have drifted: the count clause for a numeric
+/// filter is a `match`, this one is a `term`. Both are asserted, so the difference is at least
+/// visible — `/private_api/proteins` calls both, and a filter that counts one set and lists
+/// another is the failure this pins.
+#[tokio::test]
+async fn a_numeric_filter_lists_by_a_term_clause() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/uniprot_entries/_search")
+                .query_param("from", "0")
+                .query_param("size", "2")
+                .json_body_partial(
+                    r#"{ "query": { "bool": { "minimum_should_match": 1, "should": [
+                           { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
+                           { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
+                           { "term": { "taxon_id": 8501 } }
+                         ] } } }"#
+                );
+            then.status(200).json_body(json!({
+                "hits": { "hits": [ { "_source": { "uniprot_accession_number": "P00001" } } ] }
+            }));
+        })
+        .await;
+
+    let database = database(&server);
+    let found = get_accessions_by_filter(database.get_conn(), "8501".to_string(), 0, 2)
+        .await
+        .expect("the page parses");
+
+    mock.assert_async().await;
+    assert_eq!(found, vec!["P00001"]);
+}
+
+/// A filter that is not a number gains no taxon clause on the listing side either.
+///
+/// Without this, a change that always appended the clause would leave every text search carrying
+/// one that matches nothing, and the count test alone would not notice.
+#[tokio::test]
+async fn a_text_filter_lists_without_a_taxon_clause() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST).path("/uniprot_entries/_search").json_body_partial(
+                r#"{ "query": { "bool": { "minimum_should_match": 1, "should": [
+                       { "wildcard": { "name": { "value": "*croc*", "case_insensitive": true } } },
+                       { "prefix": { "uniprot_accession_number": { "value": "croc", "case_insensitive": true } } }
+                     ] } } }"#
+            );
+            then.status(200).json_body(json!({ "hits": { "hits": [] } }));
+        })
+        .await;
+
+    let database = database(&server);
+    let found = get_accessions_by_filter(database.get_conn(), "croc".to_string(), 0, 10).await.expect("parses");
+
+    mock.assert_async().await;
+    assert!(found.is_empty());
+}

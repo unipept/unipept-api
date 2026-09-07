@@ -170,32 +170,20 @@ async fn an_encoded_separator_in_a_form_body_does_not_become_a_parameter() {
     assert!(!parameters.equate_il);
 }
 
-/// A bracket the client encoded is still an array.
+/// Brackets a client encoded still spell an array.
 ///
-/// `URLSearchParams`, a browser `<form>` and `$.param` all percent-encode `[` and `]`, so
-/// `input[]` leaves a standard client as `input%5B%5D`. Read with query encoding the brackets are
-/// looked at before the key is decoded, so that key names no field, the peptides are dropped, and
-/// the caller gets `200` with an empty result rather than an error. This is the assertion that the
-/// parser is configured to decode first.
+/// `URLSearchParams`, browser forms and `$.param` all percent-encode `[` and `]`, so `input[]`
+/// arrives as `input%5B%5D`. Unless the key is decoded first that names no field: the peptides are
+/// dropped and the caller is answered `200` with an empty result.
 #[tokio::test]
 async fn an_encoded_bracket_is_still_an_array() {
-    let parameters = get("input%5B%5D=AALTER&input%5B%5D=AAKNER").await.expect("parses");
+    let many = get("input%5B%5D=AALTER&input%5B%5D=AAKNER").await.expect("parses");
+    assert_eq!(many.input, vec!["AALTER", "AAKNER"]);
 
-    assert_eq!(parameters.input, vec!["AALTER", "AAKNER"]);
+    let one = get("input%5B%5D=AALTER").await.expect("parses");
+    assert_eq!(one.input, vec!["AALTER"]);
 }
 
-/// The same for a single value, which no version of this ever rejected outright.
-///
-/// Worth its own case: with two values the duplicate-key check used to turn this into a `400`, so
-/// the shape was at least visible. With one value it has always been a silent empty result.
-#[tokio::test]
-async fn a_single_encoded_bracket_value_is_still_an_array() {
-    let parameters = get("input%5B%5D=AALTER").await.expect("parses");
-
-    assert_eq!(parameters.input, vec!["AALTER"]);
-}
-
-/// Encoded brackets reach the same place through a form body.
 #[tokio::test]
 async fn an_encoded_bracket_in_a_form_body_is_still_an_array() {
     let parameters = post("application/x-www-form-urlencoded", "input%5B%5D=AALTER&input%5B%5D=AAKNER")
@@ -205,11 +193,8 @@ async fn an_encoded_bracket_in_a_form_body_is_still_an_array() {
     assert_eq!(parameters.input, vec!["AALTER", "AAKNER"]);
 }
 
-/// Decoding the key first does not decode the *value* first.
-///
-/// The two are separate steps, and only the second one is what keeps a separator inside a value.
-/// `an_encoded_separator_does_not_become_a_parameter` covers the literal-bracket spelling; this is
-/// the encoded one, so the guard is pinned in the configuration this parser actually runs with.
+/// Decoding the key early does not decode the value early: a separator inside a value still stays
+/// there.
 #[tokio::test]
 async fn an_encoded_separator_survives_an_encoded_bracket() {
     let parameters = get("input%5B%5D=A%26equate_il%3Dtrue").await.expect("parses");
@@ -263,25 +248,19 @@ async fn a_multipart_field_name_that_cannot_be_parsed_is_rejected() {
     assert_eq!(post_bytes("multipart/form-data; boundary=X", body).await, Err(StatusCode::UNPROCESSABLE_ENTITY));
 }
 
-// A parameter the API refuses is part of its contract just as much as one it accepts, and the
-// tests above only ever send well-formed input. These cover the boundary: query strings that
-// parse structurally but do not describe a request this API serves.
+// The tests above only send well-formed input. These cover the boundary: query strings that parse
+// structurally but do not describe a request this API serves.
 
 /// A flag sent twice is refused rather than resolved to one of the two.
 ///
-/// A request that sets `equate_il` both ways states no intention worth guessing at, and either
-/// choice would be silent. The parser's own default is to take the last value, so this is refused
-/// only because `request::QS` configures it to be -- delete that configuration and this test is
-/// what notices.
+/// `serde_qs` would otherwise take the last value, so this holds only because `request::QS` sets
+/// `DuplicateKeyBehavior::Error`.
 #[tokio::test]
 async fn a_flag_sent_twice_is_rejected() {
     assert_eq!(get("equate_il=true&equate_il=false").await, Err(StatusCode::BAD_REQUEST));
 }
 
-/// The same on the form-encoded body, which is parsed from bytes rather than from the URI.
-///
-/// Three call sites share one parser, and nothing but a test keeps them sharing it. A request must
-/// not be refused as a query string and accepted as a body.
+/// The other two encodings reach different parsers, so each gets its own assertion.
 #[tokio::test]
 async fn a_flag_sent_twice_in_a_form_body_is_rejected() {
     assert_eq!(
@@ -290,7 +269,6 @@ async fn a_flag_sent_twice_in_a_form_body_is_rejected() {
     );
 }
 
-/// And on the multipart body, which rebuilds a query string out of its parts before parsing.
 #[tokio::test]
 async fn a_flag_sent_twice_in_a_multipart_body_is_rejected() {
     let body = b"--X\r\nContent-Disposition: form-data; name=\"equate_il\"\r\n\r\ntrue\r\n\
@@ -300,32 +278,18 @@ async fn a_flag_sent_twice_in_a_multipart_body_is_rejected() {
     assert_eq!(post_bytes("multipart/form-data; boundary=X", body).await, Err(StatusCode::UNPROCESSABLE_ENTITY));
 }
 
-/// A flag with an empty value reads as set.
+/// A flag named without a value reads as set.
 ///
-/// `?equate_il=` names the flag without saying what to set it to, and it is read as `true`. Worth
-/// stating outright because it is the surprising half of the contract: on a flag that defaults to
-/// false -- `tryptic`, `extra` -- the same query switches on behaviour the caller did not spell
-/// out, and no error is raised.
+/// The sharp end of this is a flag defaulting to false — `?tryptic=` switches on behaviour the
+/// caller never spelled out, and raises no error.
 #[tokio::test]
 async fn a_flag_with_an_empty_value_reads_as_set() {
-    let parameters = get("equate_il=").await.expect("an empty value is accepted");
-
-    assert!(parameters.equate_il);
+    assert!(get("equate_il=").await.expect("accepted").equate_il);
+    assert!(get("equate_il").await.expect("accepted").equate_il);
 }
 
-/// The same for a bare key, which carries no `=` at all.
-#[tokio::test]
-async fn a_flag_with_no_value_reads_as_set() {
-    let parameters = get("equate_il").await.expect("a bare key is accepted");
-
-    assert!(parameters.equate_il);
-}
-
-/// An empty value on a string field stays an empty string rather than reading as set.
-///
-/// `filter=` is a real request — the private-api filters take a `String` and an empty one is
-/// meaningful. It marks the boundary of the rule above: an empty value is read rather than
-/// refused, and it is only on a boolean that being read means `true`.
+/// Only a boolean turns an empty value into `true`; a string field keeps the empty string, which
+/// the private-api filters send as a real request.
 #[tokio::test]
 async fn an_empty_value_on_a_string_field_stays_empty() {
     let parameters = get("filter=").await.expect("an empty filter is a real request");
@@ -334,10 +298,7 @@ async fn an_empty_value_on_a_string_field_stays_empty() {
     assert!(!parameters.equate_il, "an unrelated flag is untouched");
 }
 
-/// A repeated key without brackets collects into the list.
-///
-/// `input[]=A&input[]=B` is how several peptides are sent and is covered above; `input=A` repeated
-/// reaches the same list. Both spellings work, which is wider than the bracket syntax alone.
+/// `input=A` repeated reaches the same list as `input[]=A`, so both spellings work.
 #[tokio::test]
 async fn a_repeated_key_without_brackets_collects_into_the_list() {
     let parameters = get("input=AALTER&input=AAKNER").await.expect("parses");

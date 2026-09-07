@@ -9,21 +9,14 @@ use serde_qs::{Config, DuplicateKeyBehavior};
 
 /// The query-string parser every body path shares.
 ///
-/// `DuplicateKeyBehavior::Error` is the whole reason this is a `Config` rather than the free
-/// functions: the default takes the last of a repeated scalar, so `?tryptic=true&tryptic=false`
-/// would silently resolve to one of the two. A request that states a flag both ways states no
-/// intention worth guessing at, and is refused.
+/// Both settings are non-default. `DuplicateKeyBehavior::Error` refuses `?tryptic=true&tryptic=false`
+/// rather than taking the last of the two. `use_form_encoding` decodes a key before reading its
+/// brackets, so the `input%5B%5D` that `URLSearchParams` and browser forms send is still the array
+/// `input[]` — and it is spelled out because `Config::new` otherwise takes it from a Cargo feature
+/// that any crate in the graph could enable.
 ///
-/// `use_form_encoding` decides when a key is decoded. With it on, `input%5B%5D` is decoded before
-/// the brackets are read and is therefore the array `input[]`; with it off the brackets are read
-/// first, the key is a name with two odd characters in it, it matches no field and the value is
-/// dropped. `URLSearchParams`, a browser form and `$.param` all encode brackets, so off means
-/// answering those clients with an empty result and a 200. It is spelled out rather than left to
-/// `Config::new`, which reads it from a Cargo feature — `default_to_form_encoding`, enabled by any
-/// crate in the graph, would otherwise flip all three paths at once.
-///
-/// Shared by all three paths deliberately. Parsing that differs by content type is a way for the
-/// same request to be accepted as a form body and refused as a query string.
+/// Shared by all three paths: parsing that differs by content type lets one request be accepted as
+/// a body and refused as a query string.
 const QS: Config = Config::new().duplicate_key_behavior(DuplicateKeyBehavior::Error).use_form_encoding(true);
 
 pub struct GetContent<T>(pub T);

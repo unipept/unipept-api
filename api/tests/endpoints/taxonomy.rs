@@ -1,0 +1,179 @@
+//! `/api/v2/taxonomy` — taxon information, optionally with a lineage and with descendants.
+//!
+//! Four optional parameters, and the widest behaviour surface of the datastore-only endpoints.
+//! Root is a branch of its own.
+
+use axum::http::StatusCode;
+
+use crate::common::get_json;
+
+/// Descendant ids, sorted. The endpoint collects them through a `HashSet` and does not order them,
+/// so nothing may compare two responses element by element.
+fn sorted_ids(value: &serde_json::Value) -> Vec<u64> {
+    let mut ids: Vec<u64> =
+        value.as_array().expect("descendants").iter().map(|id| id.as_u64().expect("an id")).collect();
+    ids.sort_unstable();
+    ids
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_taxon_is_named_and_ranked() {
+    let (status, body) = get_json("/api/v2/taxonomy?input[]=8501").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body[0]["taxon_id"], 8501);
+    assert_eq!(body[0]["taxon_name"], "Crocodylus niloticus");
+    assert_eq!(body[0]["taxon_rank"], "species");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn several_taxa_come_back_in_one_call() {
+    let (status, body) = get_json("/api/v2/taxonomy?input[]=8501&input[]=9503&input[]=7").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_array().map(Vec::len), Some(3));
+}
+
+/// All four combinations of the two lineage flags, since only one of the four is the default.
+#[tokio::test(flavor = "multi_thread")]
+async fn extra_and_names_choose_how_much_lineage_comes_back() {
+    let (_, plain) = get_json("/api/v2/taxonomy?input[]=8501").await;
+    assert!(plain[0].get("genus_id").is_none());
+
+    let (_, named_only) = get_json("/api/v2/taxonomy?input[]=8501&names=true").await;
+    assert!(named_only[0].get("genus_id").is_none(), "names without extra adds nothing");
+
+    let (_, extra_only) = get_json("/api/v2/taxonomy?input[]=8501&extra=true").await;
+    assert_eq!(extra_only[0]["genus_id"], 8500);
+    assert!(extra_only[0].get("genus_name").is_none());
+
+    let (status, both) = get_json("/api/v2/taxonomy?input[]=8501&extra=true&names=true").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(both[0]["genus_name"], "Crocodylus");
+}
+
+/// `descendants` is off by default, so the field is absent rather than empty.
+#[tokio::test(flavor = "multi_thread")]
+async fn descendants_are_absent_unless_asked_for() {
+    let (_, without) = get_json("/api/v2/taxonomy?input[]=8500").await;
+    assert!(without[0].get("descendants").is_none());
+
+    let (status, with) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(with[0]["descendants"].is_array());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_genus_finds_its_species() {
+    let (status, body) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true&descendants_ranks[]=species").await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    assert_eq!(sorted_ids(&body[0]["descendants"]), vec![8501, 8502, 8503]);
+}
+
+/// `descendants_ranks` defaults to `["species"]`, so asking without it is asking for species.
+///
+/// The two lists are sorted before comparing because the endpoint does not order them: descendants
+/// are collected through a `HashSet`, so the same request answers with the same ids in a different
+/// order from one call to the next. Worth knowing for any client that diffs or caches a response.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_default_descendant_rank_is_species() {
+    let (_, defaulted) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true").await;
+    let (_, explicit) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true&descendants_ranks[]=species").await;
+
+    assert_eq!(sorted_ids(&defaulted[0]["descendants"]), sorted_ids(&explicit[0]["descendants"]));
+}
+
+/// The order is genuinely not stable, which is why every assertion here sorts first.
+#[tokio::test(flavor = "multi_thread")]
+async fn descendants_carry_the_same_ids_however_they_are_ordered() {
+    let (_, first) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true").await;
+    let (_, second) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true").await;
+
+    assert_eq!(sorted_ids(&first[0]["descendants"]), sorted_ids(&second[0]["descendants"]));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn several_descendant_ranks_are_collected_together() {
+    let (status, body) = get_json(
+        "/api/v2/taxonomy?input[]=8493&descendants=true&descendants_ranks[]=genus&descendants_ranks[]=species"
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let found = body[0]["descendants"].as_array().expect("descendants");
+    assert!(found.len() >= 4, "the genus and its three species: {found:?}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_rank_nothing_sits_at_is_an_empty_list() {
+    let (status, body) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true&descendants_ranks[]=forma").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body[0]["descendants"].as_array().map(Vec::len), Some(0));
+}
+
+/// Root does not walk a lineage: it collects every taxon at the requested rank beneath each domain.
+///
+/// That branch also sidesteps issue #148, which is worth recording because it looks like it should
+/// not. Root's own rank is `no rank`, one of the three multi-word ranks whose `Display` output
+/// `rank_to_idx` cannot read — but this path hardcodes `LineageRank::Domain` rather than using
+/// root's rank, so the broken conversion is never reached.
+#[tokio::test(flavor = "multi_thread")]
+async fn root_reports_every_taxon_at_the_requested_rank() {
+    let (status, body) = get_json("/api/v2/taxonomy?input[]=1&descendants=true&descendants_ranks[]=species").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body[0]["taxon_id"], 1);
+    assert_eq!(body[0]["taxon_rank"], "no rank");
+    assert_eq!(body[0]["descendants"].as_array().map(Vec::len), Some(7), "every species in the corpus");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn root_carries_an_empty_lineage_when_extra_is_asked_for() {
+    let (status, body) = get_json("/api/v2/taxonomy?input[]=1&extra=true&names=true").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body[0]["taxon_name"], "root");
+    assert!(body[0]["genus_id"].is_null(), "root sits above every rank");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unknown_taxon_is_omitted_rather_than_failing() {
+    let (status, body) = get_json("/api/v2/taxonomy?input[]=999999999&input[]=8501").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_array().map(Vec::len), Some(1));
+}
+
+/// The rank conversion behind issue #148, tested where it is actually reachable.
+///
+/// `LineageRank`'s `Display` writes the variant name, so the three multi-word ranks come out in a
+/// spelling `rank_to_idx` does not know — and `NoRank` comes out as `"root"` with the quotation
+/// marks `{:?}` puts around a `&str`. This asserts the broken behaviour, so fixing #148 turns it
+/// red rather than leaving it quietly passing.
+///
+/// Reaching it through an endpoint needs a non-root taxon of a multi-word rank, and the corpus has
+/// none — one exists in the entire 10,000-row source table.
+#[test]
+fn multi_word_ranks_do_not_survive_a_render_and_lookup_issue_148() {
+    use datastore::{LineageRank, LineageStore};
+
+    for rank in [LineageRank::NoRank, LineageRank::SpeciesGroup, LineageRank::SpeciesSubgroup] {
+        let rendered = rank.to_string().to_lowercase();
+        assert_eq!(
+            LineageStore::rank_to_idx(&rendered),
+            None,
+            "issue #148: `{rank:?}` renders as `{rendered}`, which addresses no lineage column. If this now \
+             resolves, the bug is fixed and this test should assert the column instead."
+        );
+    }
+
+    assert_eq!(LineageRank::NoRank.to_string(), "\"root\"", "and NoRank arrives quoted");
+
+    // The conversion that does work, for contrast.
+    let spaced: String = LineageRank::SpeciesGroup.into();
+    assert_eq!(spaced, "species group");
+    assert_eq!(LineageStore::rank_to_idx("species_group"), Some(21), "while the lookup wants underscores");
+}

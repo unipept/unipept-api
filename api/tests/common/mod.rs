@@ -89,17 +89,48 @@ pub async fn request_raw(state: unipept_api::AppState, request: Request<Body>) -
 }
 
 /// A GET against an offline state, for the endpoints that never reach OpenSearch.
+///
+/// The `TempDir` is bound to a name and dropped explicitly after the request, rather than left to
+/// fall out of scope. A named binding already lives to the end of the block — only a bare `_`
+/// pattern would drop immediately — but the difference between `_dir` and `_` is one character,
+/// invisible in review, and deletes the corpus out from under a running request if anyone gets it
+/// wrong. `corpus_files_outlive_the_request` in this module fails if that ever happens.
 pub async fn get_json(path: &str) -> (StatusCode, serde_json::Value) {
-    let (_dir, state) = offline_state();
-    request_json(state, Request::get(path).body(Body::empty()).unwrap()).await
+    let (dir, state) = offline_state();
+    let answered = request_json(state, Request::get(path).body(Body::empty()).unwrap()).await;
+    drop(dir);
+    answered
 }
 
 /// The same request as a JSON POST, so both halves of every route are exercised.
 pub async fn post_json(path: &str, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
-    let (_dir, state) = offline_state();
+    let (dir, state) = offline_state();
     let request = Request::post(path)
         .header(axum::http::header::CONTENT_TYPE, "application/json")
         .body(Body::from(body.to_string()))
         .unwrap();
-    request_json(state, request).await
+    let answered = request_json(state, request).await;
+    drop(dir);
+    answered
+}
+
+/// The corpus files must still be on disk while a request is being served.
+///
+/// A memory-mapped index reads them for as long as it is alive, so a `TempDir` dropped too early
+/// would delete an index mid-search. Asserting the directory still exists *after* the await is what
+/// catches a helper that stopped holding it.
+#[tokio::test(flavor = "multi_thread")]
+async fn corpus_files_outlive_the_request() {
+    let (dir, state) = offline_state();
+    let path = dir.path().to_path_buf();
+
+    let (status, _) =
+        request_json(state, Request::get("/api/v2/taxa2lca?input[]=8501").body(Body::empty()).unwrap()).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(path.join("sa.bin").exists(), "the index files were deleted before the request finished");
+    assert!(path.join("taxons.tsv").exists(), "the datastore files were deleted before the request finished");
+
+    drop(dir);
+    assert!(!path.exists(), "and they are cleaned up once the guard is dropped");
 }

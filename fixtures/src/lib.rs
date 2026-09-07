@@ -32,6 +32,14 @@ use std::{
     path::{Path, PathBuf}
 };
 
+#[cfg(feature = "index-builder")]
+mod index_builder;
+#[cfg(feature = "index-builder")]
+pub use index_builder::{
+    IndexPaths, build_index_files, build_index_files_from, build_index_files_from_with_kmer_table,
+    build_index_files_with_kmer_table
+};
+
 /// The protein corpus: `accession`, `taxon`, `sequence`, `annotations`, tab separated.
 ///
 /// The layout is the one `sa-builder` reads; see `protein-metadata` in the index repository.

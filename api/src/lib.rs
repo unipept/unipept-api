@@ -8,7 +8,6 @@ use database::Database;
 use datastore::DataStore;
 use index::Index;
 use tokio::net::TcpListener;
-use tower::Layer;
 
 pub mod controllers;
 pub mod errors;
@@ -63,8 +62,10 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
         index: Arc::new(index)
     };
 
-    let router = routes::create_router(app_state);
-    let app = middleware::normalize_path::NormalizePathLayer::normalize_uris().layer(router);
+    // Once per process: `.init()` panics if a subscriber is already set.
+    middleware::tracing::init_tracing_subscriber();
+
+    let app = routes::create_app(app_state);
 
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
 

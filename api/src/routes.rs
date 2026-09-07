@@ -3,7 +3,7 @@ use std::time::Duration;
 use axum::{
     BoxError, Router, error_handling::HandleErrorLayer, extract::DefaultBodyLimit, http::StatusCode, routing::get
 };
-use tower::{ServiceBuilder, timeout::TimeoutLayer};
+use tower::{Layer, ServiceBuilder, timeout::TimeoutLayer};
 use tower_http::limit::RequestBodyLimitLayer;
 
 use crate::{
@@ -22,15 +22,19 @@ use crate::{
     },
     middleware::{
         cors::create_cors_layer,
-        tracing::{create_tracing_layer, init_tracing_subscriber}
+        normalize_path::{NormalizePath, NormalizePathLayer},
+        tracing::create_tracing_layer
     }
 };
 
 const REQUEST_TIMEOUT_DURATION: u64 = 150;
 
+/// The routes and their middleware, without the path normalisation `create_app` adds.
+///
+/// Installing the tracing subscriber used to happen here. It could only ever happen once per
+/// process — `.init()` panics on a second call — which made a router something a program could
+/// build exactly one of. It belongs to `start`, which runs once by construction.
 pub fn create_router(state: AppState) -> Router {
-    init_tracing_subscriber();
-
     Router::new()
         .route("/", get(|| async { "Unipept API server" }))
         .nest("/api", create_api_routes())
@@ -54,6 +58,16 @@ pub fn create_router(state: AppState) -> Router {
                 .layer(create_cors_layer())
         )
         .with_state(state)
+}
+
+/// The whole service, exactly as `start` serves it.
+///
+/// Path normalisation has to wrap the router rather than sit inside it: it rewrites the URI, and
+/// `Router::layer` only runs after routing has already used it. That is why this returns a service
+/// rather than a `Router` — and why composing it here matters, since a caller that builds only the
+/// router is exercising a different stack than the one production runs.
+pub fn create_app(state: AppState) -> NormalizePath<Router> {
+    NormalizePathLayer::normalize_uris().layer(create_router(state))
 }
 
 fn create_api_routes() -> Router<AppState> {

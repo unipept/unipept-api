@@ -26,8 +26,16 @@ pub fn build_tree(
 
             let child = current_node.get_child(lineage_id as usize);
             if child.is_none() {
-                let (name, rank, _) = taxon_store.get(lineage_id as u32).unwrap();
-                current_node.add_child(Node::new(lineage_id as usize, name.clone(), rank.clone().into()));
+                // A lineage may name an ancestor the taxon table does not — the two are separate
+                // dumps, and a taxon can be dropped from one without the other. This used to
+                // unwrap, so an incomplete pair turned every request touching that branch into a
+                // panic. The rest of the API renders such a taxon with an empty name, and the node
+                // is still added so the branch below it hangs in the right place.
+                let (name, rank) = match taxon_store.get(lineage_id as u32) {
+                    Some((name, rank, _)) => (name.clone(), rank.clone().into()),
+                    None => (String::new(), String::from("no rank"))
+                };
+                current_node.add_child(Node::new(lineage_id as usize, name, rank));
             }
 
             current_node = current_node.get_child(lineage_id as usize).unwrap();

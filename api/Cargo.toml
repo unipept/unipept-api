@@ -6,7 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 askama = "0.16.1"
-axum = { version = "0.7.4", features = ["macros", "form", "multipart"] }
+axum = { version = "0.8.9", features = ["macros", "form", "multipart"] }
 clap = { version = "4.5.1", features = ["derive"] }
 database = { path = "../database" }
 datastore = { path = "../datastore" }

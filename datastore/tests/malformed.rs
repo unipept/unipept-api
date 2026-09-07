@@ -37,6 +37,11 @@ fn a_well_formed_file_still_loads() {
     assert!(result.is_ok(), "the baseline row shape must parse, or the rest of this file proves nothing");
 }
 
+/// A short row is reported as short — including when its fields are also unparseable.
+///
+/// The width is checked before anything is parsed, so a row of nonsense that is also the wrong
+/// length points at the length. Getting that order backwards sends the reader after the wrong
+/// problem entirely.
 #[test]
 fn a_row_with_too_few_columns_is_an_error() {
     match rejection("8501\t2759\t\\N\n") {
@@ -47,6 +52,9 @@ fn a_row_with_too_few_columns_is_an_error() {
         }
         other => panic!("expected an UnexpectedColumnCount error, got {other:?}")
     }
+
+    let nonsense = rejection("nonsense\tmore nonsense\n");
+    assert!(matches!(nonsense, LineageStoreError::UnexpectedColumnCount { .. }), "got {nonsense:?}");
 }
 
 #[test]
@@ -84,15 +92,6 @@ fn a_non_numeric_rank_id_is_an_error() {
         }
         other => panic!("expected an InvalidRankId error, got {other:?}")
     }
-}
-
-/// The width check runs before any field is parsed, so a short row full of nonsense is reported as
-/// a short row. Getting this backwards produces an error that sends the reader after the wrong
-/// problem entirely.
-#[test]
-fn a_short_row_is_reported_as_short_not_as_unparseable() {
-    let error = rejection("nonsense\tmore nonsense\n");
-    assert!(matches!(error, LineageStoreError::UnexpectedColumnCount { .. }), "got {error:?}");
 }
 
 #[test]

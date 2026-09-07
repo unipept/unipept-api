@@ -3,7 +3,9 @@
 //! `calculate_fa` is pure — no index, no datastore and no OpenSearch — so it can be measured
 //! directly rather than through a request.
 
-use criterion::{Criterion, black_box};
+use std::hint::black_box;
+
+use criterion::Criterion;
 use index::{ProteinInfo, fa_compression::algorithm1::encode};
 use unipept_api::helpers::fa_helper::calculate_fa;
 

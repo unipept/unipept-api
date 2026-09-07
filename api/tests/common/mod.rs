@@ -1,3 +1,7 @@
+// This module is compiled into every integration-test binary that declares it, and no single one
+// uses all of it — the router tests need only the state, the endpoint suites need the helpers too.
+#![allow(dead_code)]
+
 //! One `AppState` over the shared corpus, for the endpoint tests to drive.
 //!
 //! All three of its pieces come from the same corpus, which is what makes a result mean anything:
@@ -11,8 +15,14 @@
 
 use std::sync::Arc;
 
+use axum::{
+    body::Body,
+    http::{Request, StatusCode}
+};
+use http_body_util::BodyExt;
 use tempfile::TempDir;
-use unipept_api::AppState;
+use tower::ServiceExt;
+use unipept_api::{AppState, routes::create_app};
 
 /// Builds the corpus into a temporary directory and returns state over it.
 ///
@@ -58,4 +68,38 @@ pub fn test_state(database_url: &str) -> (TempDir, AppState) {
 /// A state pointed at an address nothing listens on, for endpoints that never reach OpenSearch.
 pub fn offline_state() -> (TempDir, AppState) {
     test_state("http://127.0.0.1:1")
+}
+
+/// Drives one request through the whole stack and returns the status with the body as JSON.
+///
+/// `oneshot` needs no listener and no port, and the app it builds is the one `start` serves.
+pub async fn request_json(state: unipept_api::AppState, request: Request<Body>) -> (StatusCode, serde_json::Value) {
+    let (status, body) = request_raw(state, request).await;
+    let json = serde_json::from_str(&body).unwrap_or_else(|err| panic!("body was not JSON ({err}): {body}"));
+    (status, json)
+}
+
+/// As [`request_json`], but hands back the body untouched — for the endpoints that answer with
+/// HTML, and for asserting on a rejection's plain-text message.
+pub async fn request_raw(state: unipept_api::AppState, request: Request<Body>) -> (StatusCode, String) {
+    let response = create_app(state).oneshot(request).await.expect("the app responds");
+    let status = response.status();
+    let bytes = response.into_body().collect().await.expect("a body").to_bytes();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// A GET against an offline state, for the endpoints that never reach OpenSearch.
+pub async fn get_json(path: &str) -> (StatusCode, serde_json::Value) {
+    let (_dir, state) = offline_state();
+    request_json(state, Request::get(path).body(Body::empty()).unwrap()).await
+}
+
+/// The same request as a JSON POST, so both halves of every route are exercised.
+pub async fn post_json(path: &str, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
+    let (_dir, state) = offline_state();
+    let request = Request::post(path)
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    request_json(state, request).await
 }

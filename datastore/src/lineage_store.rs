@@ -160,12 +160,15 @@ impl LineageStore {
                 .parse()
                 .map_err(|_| LineageStoreError::InvalidTaxonId { line: line_number, value: fields[0].to_string() })?;
 
+            // Enumerated for the column number: a lineage row has 28 rank fields, and an error
+            // naming only the offending value leaves the reader counting tabs to find it.
             let mut parts: Vec<Option<i32>> = Vec::with_capacity(LineageStore::AMOUNT_OF_RANKS);
-            for field in &fields[1..] {
+            for (rank, field) in fields[1..].iter().enumerate() {
                 parts.push(match *field {
                     "\\N" => None,
                     value => Some(value.parse::<i32>().map_err(|_| LineageStoreError::InvalidRankId {
                         line: line_number,
+                        column: rank + 2,
                         value: value.to_string()
                     })?)
                 });

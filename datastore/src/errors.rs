@@ -74,8 +74,8 @@ pub enum LineageStoreError {
     UnexpectedColumnCount { line: usize, expected: usize, found: usize },
     #[error("Line {line}: `{value}` is not a taxon id")]
     InvalidTaxonId { line: usize, value: String },
-    #[error("Line {line}: `{value}` is not a rank taxon id")]
-    InvalidRankId { line: usize, value: String }
+    #[error("Line {line}, column {column}: `{value}` is not a rank taxon id")]
+    InvalidRankId { line: usize, column: usize, value: String }
 }
 
 #[derive(Error, Debug)]

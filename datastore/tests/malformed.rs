@@ -77,7 +77,11 @@ fn a_non_numeric_rank_id_is_an_error() {
     fields[9] = "not-a-taxon".to_string();
 
     match rejection(&fields.join("\t")) {
-        LineageStoreError::InvalidRankId { value, .. } => assert_eq!(value, "not-a-taxon"),
+        LineageStoreError::InvalidRankId { column, value, .. } => {
+            assert_eq!(value, "not-a-taxon");
+            // fields[9] is the tenth column of the row, counting the taxon id as the first.
+            assert_eq!(column, 10);
+        }
         other => panic!("expected an InvalidRankId error, got {other:?}")
     }
 }

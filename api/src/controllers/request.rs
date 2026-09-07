@@ -1,5 +1,5 @@
 use axum::{
-    Json, RequestExt, async_trait,
+    Json, RequestExt,
     extract::{FromRequest, FromRequestParts, Multipart, RawForm, Request},
     http::{StatusCode, header::CONTENT_TYPE, request::Parts},
     response::{IntoResponse, Response}
@@ -8,7 +8,6 @@ use serde::de::DeserializeOwned;
 
 pub struct GetContent<T>(pub T);
 
-#[async_trait]
 impl<S, T> FromRequestParts<S> for GetContent<T>
 where
     S: Send + Sync,
@@ -30,7 +29,6 @@ where
 
 pub struct Form<T>(T);
 
-#[async_trait]
 impl<S, T> FromRequest<S> for Form<T>
 where
     S: Send + Sync,
@@ -51,7 +49,6 @@ where
 
 pub struct MultiPart<T>(T);
 
-#[async_trait]
 impl<S, T> FromRequest<S> for MultiPart<T>
 where
     S: Send + Sync,
@@ -97,7 +94,6 @@ where
 
 pub struct PostContent<T>(pub T);
 
-#[async_trait]
 impl<S, T> FromRequest<S> for PostContent<T>
 where
     S: Send + Sync,

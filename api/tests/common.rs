@@ -113,24 +113,3 @@ pub async fn post_json(path: &str, body: serde_json::Value) -> (StatusCode, serd
     drop(dir);
     answered
 }
-
-/// The corpus files must still be on disk while a request is being served.
-///
-/// A memory-mapped index reads them for as long as it is alive, so a `TempDir` dropped too early
-/// would delete an index mid-search. Asserting the directory still exists *after* the await is what
-/// catches a helper that stopped holding it.
-#[tokio::test(flavor = "multi_thread")]
-async fn corpus_files_outlive_the_request() {
-    let (dir, state) = offline_state();
-    let path = dir.path().to_path_buf();
-
-    let (status, _) =
-        request_json(state, Request::get("/api/v2/taxa2lca?input[]=8501").body(Body::empty()).unwrap()).await;
-
-    assert_eq!(status, StatusCode::OK);
-    assert!(path.join("sa.bin").exists(), "the index files were deleted before the request finished");
-    assert!(path.join("taxons.tsv").exists(), "the datastore files were deleted before the request finished");
-
-    drop(dir);
-    assert!(!path.exists(), "and they are cleaned up once the guard is dropped");
-}

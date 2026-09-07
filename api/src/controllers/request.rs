@@ -65,8 +65,10 @@ where
             .map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body").into_response())?;
 
         // Every step here reads client-supplied bytes and every one of them used to unwrap: a
-        // truncated body, a field with no name, or a field whose bytes are not UTF-8 each panicked
-        // the handler rather than returning a status.
+        // truncated body, a field with no name, or a read that fails part-way through a field each
+        // panicked the handler rather than returning a status. Note that `text()` decodes lossily,
+        // so a stray byte is replaced rather than rejected — it fails on the stream, not on
+        // encoding.
         let mut querystring = String::new();
         loop {
             let field = multipart
@@ -84,7 +86,7 @@ where
             let value = field
                 .text()
                 .await
-                .map_err(|_| (StatusCode::BAD_REQUEST, "multipart field is not valid text").into_response())?;
+                .map_err(|_| (StatusCode::BAD_REQUEST, "could not read multipart field").into_response())?;
 
             querystring.push_str(&format!("{}={}&", name, value));
         }

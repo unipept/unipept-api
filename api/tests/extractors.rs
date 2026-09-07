@@ -33,6 +33,10 @@ async fn get(query: &str) -> Result<Parameters, StatusCode> {
 }
 
 async fn post(content_type: &str, body: &'static str) -> Result<Parameters, StatusCode> {
+    post_bytes(content_type, body.as_bytes().to_vec()).await
+}
+
+async fn post_bytes(content_type: &str, body: Vec<u8>) -> Result<Parameters, StatusCode> {
     let request = Request::builder()
         .method("POST")
         .uri("/pept2lca")
@@ -158,4 +162,41 @@ async fn ordinary_percent_encoding_still_decodes() {
     assert_eq!(get("input[]=a%20b").await.expect("parses").input, vec!["a b"]);
     assert_eq!(get("input[]=a+b").await.expect("parses").input, vec!["a b"]);
     assert_eq!(get("input[]=100%25").await.expect("parses").input, vec!["100%"]);
+}
+
+/// Reading a part's data was the fourth panic, and the only one no test reached.
+///
+/// Not through encoding: `Field::text()` decodes lossily, so a stray `0xFF` arrives as U+FFFD and
+/// never errors. It fails when the body ends part-way through a field's data, which is a stream
+/// error rather than a decoding one — and that used to be unwrapped.
+#[tokio::test]
+async fn a_body_truncated_inside_a_field_is_rejected_not_a_panic() {
+    let body = b"--X\r\nContent-Disposition: form-data; name=\"input[]\"\r\n\r\nAALTER".to_vec();
+
+    assert_eq!(post_bytes("multipart/form-data; boundary=X", body).await, Err(StatusCode::UNPROCESSABLE_ENTITY));
+}
+
+/// A stray byte is replaced rather than rejected, which is worth stating since it is not obvious
+/// and it is why the test above reaches for a truncated body instead.
+#[tokio::test]
+async fn a_non_utf8_multipart_field_is_decoded_lossily() {
+    let mut body = b"--X\r\nContent-Disposition: form-data; name=\"input[]\"\r\n\r\n".to_vec();
+    body.push(0xFF);
+    body.extend_from_slice(b"\r\n--X--\r\n");
+
+    let parameters = post_bytes("multipart/form-data; boundary=X", body).await.expect("lossy, not rejected");
+    assert_eq!(parameters.input, vec!["\u{FFFD}"]);
+}
+
+/// A form body that reaches `serde_qs` and cannot be parsed is a rejection, not a panic.
+#[tokio::test]
+async fn a_form_body_that_cannot_be_parsed_is_rejected() {
+    assert_eq!(post("application/x-www-form-urlencoded", "%FF=1").await, Err(StatusCode::UNPROCESSABLE_ENTITY));
+}
+
+/// The same for the query string rebuilt out of multipart parts.
+#[tokio::test]
+async fn a_multipart_field_name_that_cannot_be_parsed_is_rejected() {
+    let body = b"--X\r\nContent-Disposition: form-data; name=\"%FF\"\r\n\r\nv\r\n--X--\r\n".to_vec();
+    assert_eq!(post_bytes("multipart/form-data; boundary=X", body).await, Err(StatusCode::UNPROCESSABLE_ENTITY));
 }

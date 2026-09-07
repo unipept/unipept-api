@@ -8,7 +8,8 @@ use crate::{
     AppState,
     controllers::{
         api::{default_domains, default_extra, default_names},
-        generate_handlers
+        generate_handlers,
+        request::strict_bool
     },
     errors::ApiError,
     helpers::{
@@ -28,11 +29,11 @@ use crate::{
 pub struct Parameters {
     #[serde(default)]
     input: Vec<String>,
-    #[serde(default = "default_extra")]
+    #[serde(default = "default_extra", deserialize_with = "strict_bool")]
     extra: bool,
-    #[serde(default = "default_domains")]
+    #[serde(default = "default_domains", deserialize_with = "strict_bool")]
     domains: bool,
-    #[serde(default = "default_names")]
+    #[serde(default = "default_names", deserialize_with = "strict_bool")]
     names: bool
 }
 

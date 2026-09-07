@@ -9,7 +9,7 @@ use crate::{
     controllers::{
         api::default_link,
         generate_handlers,
-        request::{GetContent, PostContent},
+        request::{GetContent, PostContent, strict_bool},
         response::HtmlTemplate
     },
     errors::ApiError,
@@ -23,7 +23,7 @@ use crate::{
 pub struct GetParameters {
     #[serde(default)]
     input: Vec<u32>,
-    #[serde(default = "default_link")]
+    #[serde(default = "default_link", deserialize_with = "strict_bool")]
     link: bool
 }
 
@@ -31,7 +31,7 @@ pub struct GetParameters {
 pub struct PostParameters {
     #[serde(default)]
     counts: HashMap<u32, usize>,
-    #[serde(default = "default_link")]
+    #[serde(default = "default_link", deserialize_with = "strict_bool")]
     link: bool
 }
 

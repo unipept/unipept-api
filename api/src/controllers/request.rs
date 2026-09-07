@@ -4,7 +4,10 @@ use axum::{
     http::{StatusCode, header::CONTENT_TYPE, request::Parts},
     response::{IntoResponse, Response}
 };
-use serde::de::DeserializeOwned;
+use serde::{
+    Deserializer,
+    de::{self, DeserializeOwned, Visitor}
+};
 use serde_qs::{Config, DuplicateKeyBehavior};
 
 /// The query-string parser every body path shares.
@@ -18,6 +21,44 @@ use serde_qs::{Config, DuplicateKeyBehavior};
 /// Shared by all three paths: parsing that differs by content type lets one request be accepted as
 /// a body and refused as a query string.
 const QS: Config = Config::new().duplicate_key_behavior(DuplicateKeyBehavior::Error).use_form_encoding(true);
+
+/// Reads a boolean parameter, accepting only `true` and `false`.
+///
+/// The query-string parser reads a value-less parameter — `?tryptic=`, or a bare `?tryptic` — as
+/// `true`. On a flag that defaults to false that turns a blank field into an instruction the caller
+/// never gave, and answers 200 rather than telling them. Every boolean parameter goes through this
+/// so the spelling has to be deliberate.
+///
+/// It cannot live in the extractor: `GetContent<T>` is generic and does not know which of `T`'s
+/// fields are booleans. A rule applied to every empty value would refuse `filter=`, which the
+/// private-api filters accept as a real request.
+pub fn strict_bool<'de, D: Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    struct StrictBool;
+
+    impl Visitor<'_> for StrictBool {
+        type Value = bool;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("`true` or `false`")
+        }
+
+        // A JSON body carries a real boolean, and there is nothing to be strict about.
+        fn visit_bool<E: de::Error>(self, value: bool) -> Result<bool, E> {
+            Ok(value)
+        }
+
+        // A query string or a form body carries text, which is where the leniency lives.
+        fn visit_str<E: de::Error>(self, value: &str) -> Result<bool, E> {
+            match value {
+                "true" => Ok(true),
+                "false" => Ok(false),
+                other => Err(E::custom(format!("expected `true` or `false`, got {other:?}")))
+            }
+        }
+    }
+
+    deserializer.deserialize_any(StrictBool)
+}
 
 pub struct GetContent<T>(pub T);
 

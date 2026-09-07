@@ -7,7 +7,8 @@ use crate::{
     AppState,
     controllers::{
         api::{default_cutoff, default_equate_il, default_extra},
-        generate_handlers
+        generate_handlers,
+        request::strict_bool
     },
     errors::ApiError,
     helpers::{
@@ -21,9 +22,9 @@ use crate::{
 pub struct Parameters {
     #[serde(default)]
     input: Vec<String>,
-    #[serde(default = "default_equate_il")]
+    #[serde(default = "default_equate_il", deserialize_with = "strict_bool")]
     equate_il: bool,
-    #[serde(default = "default_extra")]
+    #[serde(default = "default_extra", deserialize_with = "strict_bool")]
     extra: bool,
     #[serde(default = "default_cutoff")]
     cutoff: usize

@@ -7,7 +7,8 @@ use crate::{
     AppState,
     controllers::{
         api::{Either, default_extra, default_names, default_validate_taxa},
-        generate_handlers
+        generate_handlers,
+        request::strict_bool
     },
     helpers::{
         lca_helper::calculate_lca,
@@ -23,11 +24,11 @@ use crate::{
 pub struct Parameters {
     #[serde(default)]
     input: Vec<Either<u32, String>>,
-    #[serde(default = "default_extra")]
+    #[serde(default = "default_extra", deserialize_with = "strict_bool")]
     extra: bool,
-    #[serde(default = "default_names")]
+    #[serde(default = "default_names", deserialize_with = "strict_bool")]
     names: bool,
-    #[serde(default = "default_validate_taxa")]
+    #[serde(default = "default_validate_taxa", deserialize_with = "strict_bool")]
     validate_taxa: bool
 }
 

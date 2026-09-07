@@ -7,7 +7,8 @@ use crate::{
     AppState,
     controllers::{
         api::{default_compact, default_cutoff, default_equate_il, default_extra, default_names, default_tryptic},
-        generate_handlers
+        generate_handlers,
+        request::strict_bool
     },
     errors::ApiError,
     helpers::{
@@ -24,15 +25,15 @@ use crate::{
 pub struct Parameters {
     #[serde(default)]
     input: Vec<String>,
-    #[serde(default = "default_equate_il")]
+    #[serde(default = "default_equate_il", deserialize_with = "strict_bool")]
     equate_il: bool,
-    #[serde(default = "default_extra")]
+    #[serde(default = "default_extra", deserialize_with = "strict_bool")]
     extra: bool,
-    #[serde(default = "default_names")]
+    #[serde(default = "default_names", deserialize_with = "strict_bool")]
     names: bool,
-    #[serde(default = "default_tryptic")]
+    #[serde(default = "default_tryptic", deserialize_with = "strict_bool")]
     tryptic: bool,
-    #[serde(default = "default_compact")]
+    #[serde(default = "default_compact", deserialize_with = "strict_bool")]
     compact: bool,
     #[serde(default = "default_cutoff")]
     cutoff: usize

@@ -8,7 +8,8 @@ use crate::{
     AppState,
     controllers::{
         api::{default_descendants, default_descendants_ranks, default_extra, default_names},
-        generate_handlers
+        generate_handlers,
+        request::strict_bool
     },
     errors::{ApiError, ApiError::UnknownRankError},
     helpers::lineage_helper::{
@@ -22,11 +23,11 @@ use crate::{
 pub struct Parameters {
     #[serde(default)]
     input: Vec<u32>,
-    #[serde(default = "default_extra")]
+    #[serde(default = "default_extra", deserialize_with = "strict_bool")]
     extra: bool,
-    #[serde(default = "default_names")]
+    #[serde(default = "default_names", deserialize_with = "strict_bool")]
     names: bool,
-    #[serde(default = "default_descendants")]
+    #[serde(default = "default_descendants", deserialize_with = "strict_bool")]
     descendants: bool,
     #[serde(default = "default_descendants_ranks")]
     descendants_ranks: Vec<String>

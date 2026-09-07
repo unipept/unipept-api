@@ -3,7 +3,10 @@ use std::convert::Infallible;
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
-use crate::{AppState, controllers::generate_handlers};
+use crate::{
+    AppState,
+    controllers::{generate_handlers, request::strict_bool}
+};
 
 fn default_filter() -> String {
     String::from("")
@@ -23,7 +26,7 @@ pub struct ReferenceProteomeFilterParameters {
     end: usize,
     #[serde(default)]
     sort_by: String, // Can be "id", "name", or "rank"
-    #[serde(default)]
+    #[serde(default, deserialize_with = "strict_bool")]
     sort_descending: bool
 }
 

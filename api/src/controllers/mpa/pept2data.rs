@@ -10,7 +10,8 @@ use crate::{
     controllers::{
         api::{default_cutoff, default_validate_taxa},
         generate_handlers,
-        mpa::{default_equate_il, default_report_taxa, default_tryptic}
+        mpa::{default_equate_il, default_report_taxa, default_tryptic},
+        request::strict_bool
     },
     errors::ApiError,
     helpers::{
@@ -29,15 +30,15 @@ use crate::{
 pub struct Parameters {
     #[serde(default)]
     peptides: Vec<String>,
-    #[serde(default = "default_equate_il")]
+    #[serde(default = "default_equate_il", deserialize_with = "strict_bool")]
     equate_il: bool,
-    #[serde(default = "default_tryptic")]
+    #[serde(default = "default_tryptic", deserialize_with = "strict_bool")]
     tryptic: bool,
     #[serde(default = "default_cutoff")]
     cutoff: usize,
-    #[serde(default = "default_report_taxa")]
+    #[serde(default = "default_report_taxa", deserialize_with = "strict_bool")]
     report_taxa: bool,
-    #[serde(default = "default_validate_taxa")]
+    #[serde(default = "default_validate_taxa", deserialize_with = "strict_bool")]
     validate_taxa: bool,
     filter: Option<Filter>
 }

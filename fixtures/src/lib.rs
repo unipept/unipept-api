@@ -180,3 +180,123 @@ fn write(dir: &Path, name: &str, contents: &str) -> PathBuf {
     fs::write(&path, contents).unwrap_or_else(|err| panic!("could not write {}: {}", path.display(), err));
     path
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::*;
+
+    /// `(accession, taxon, sequence)` for every row of the protein corpus.
+    fn proteins() -> Vec<(&'static str, u32, &'static str)> {
+        PROTEINS_TSV
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| {
+                let mut fields = line.split('\t');
+                let accession = fields.next().expect("a protein row starts with an accession");
+                let taxon = fields.next().expect("a protein row has a taxon column");
+                let sequence = fields.next().expect("a protein row has a sequence column");
+                (accession, taxon.parse().expect("the taxon column is numeric"), sequence)
+            })
+            .collect()
+    }
+
+    /// The taxon id of every row in a taxonomy table.
+    fn row_ids(tsv: &'static str) -> BTreeSet<u32> {
+        tsv.lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| line.split('\t').next().unwrap().parse().expect("a taxonomy row starts with a taxon id"))
+            .collect()
+    }
+
+    /// Which taxa each peptide's proteins belong to.
+    fn taxa_containing(peptide: &str) -> BTreeSet<u32> {
+        proteins().iter().filter(|(_, _, seq)| seq.contains(peptide)).map(|(_, taxon, _)| *taxon).collect()
+    }
+
+    /// `ACCESSIONS` is written out by hand beside the file it describes, so nothing but this stops
+    /// the two drifting when a protein is added.
+    #[test]
+    fn accessions_match_the_protein_corpus() {
+        let from_file: Vec<&str> = proteins().iter().map(|(accession, _, _)| *accession).collect();
+        assert_eq!(ACCESSIONS.to_vec(), from_file);
+    }
+
+    #[test]
+    fn every_named_taxon_has_a_row_in_the_taxon_table() {
+        let ids = row_ids(TAXONS_TSV);
+        for taxon in [
+            taxa::ROOT,
+            taxa::AZORHIZOBIUM_CAULINODANS,
+            taxa::BUCHNERA_APHIDICOLA,
+            taxa::SARCOPTERYGII,
+            taxa::CROCODYLIDAE,
+            taxa::CROCODYLUS,
+            taxa::CROCODYLUS_NILOTICUS,
+            taxa::CROCODYLUS_POROSUS,
+            taxa::CROCODYLUS_NOVAEGUINEAE,
+            taxa::SPHENODONTIA,
+            taxa::ALOUATTA_SENICULUS
+        ] {
+            assert!(ids.contains(&taxon), "taxa:: names {taxon}, which has no row in taxons.tsv");
+        }
+    }
+
+    /// The invariant the whole corpus rests on. If the protein and taxonomy halves stop agreeing,
+    /// searches return taxa that cannot be named and the suite goes vacuous rather than red.
+    #[test]
+    fn every_protein_taxon_has_both_a_taxon_and_a_lineage_row() {
+        let taxons = row_ids(TAXONS_TSV);
+        let lineages = row_ids(LINEAGES_TSV);
+
+        for (accession, taxon, _) in proteins() {
+            assert!(taxons.contains(&taxon), "{accession} names taxon {taxon}, absent from taxons.tsv");
+            assert!(lineages.contains(&taxon), "{accession} names taxon {taxon}, absent from lineages.tsv");
+        }
+    }
+
+    #[test]
+    fn the_two_taxonomy_tables_describe_the_same_taxa() {
+        assert_eq!(row_ids(TAXONS_TSV), row_ids(LINEAGES_TSV));
+    }
+
+    /// Each marker peptide's documentation states which taxa it reaches, and those claims are the
+    /// corpus's actual specification — a peptide that stops reaching two species silently turns the
+    /// genus scenario into the species scenario without any test mentioning peptides failing.
+    #[test]
+    fn marker_peptides_reach_the_taxa_their_documentation_claims() {
+        use taxa::*;
+
+        assert_eq!(taxa_containing(peptides::UNIQUE), BTreeSet::from([CROCODYLUS_NILOTICUS]));
+        assert_eq!(taxa_containing(peptides::GENUS_SHARED), BTreeSet::from([CROCODYLUS_NILOTICUS, CROCODYLUS_POROSUS]));
+        assert_eq!(
+            taxa_containing(peptides::SUPERCLASS_SHARED),
+            BTreeSet::from([CROCODYLUS_NILOTICUS, ALOUATTA_SENICULUS])
+        );
+        assert_eq!(
+            taxa_containing(peptides::ROOT_SHARED),
+            BTreeSet::from([CROCODYLUS_NILOTICUS, AZORHIZOBIUM_CAULINODANS])
+        );
+        assert_eq!(taxa_containing(peptides::IL_ISOLEUCINE), BTreeSet::from([CROCODYLUS_POROSUS]));
+        assert_eq!(taxa_containing(peptides::IL_LEUCINE), BTreeSet::from([CROCODYLUS_NOVAEGUINEAE]));
+        assert!(taxa_containing(peptides::ABSENT).is_empty());
+
+        // The doc comment claims seven of the twelve proteins, which is the count a low cutoff has
+        // to bite against — the taxa alone would not catch a protein being dropped.
+        let common = proteins().iter().filter(|(_, _, seq)| seq.contains(peptides::COMMON)).count();
+        assert_eq!(common, 7);
+    }
+
+    /// The I/L pair must differ at exactly one position, or `equate_il` proves nothing.
+    #[test]
+    fn the_isoleucine_and_leucine_markers_differ_only_in_i_and_l() {
+        let differences = peptides::IL_ISOLEUCINE
+            .chars()
+            .zip(peptides::IL_LEUCINE.chars())
+            .filter(|(left, right)| left != right)
+            .collect::<Vec<_>>();
+
+        assert_eq!(differences, vec![('I', 'L')]);
+    }
+}

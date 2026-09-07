@@ -14,9 +14,17 @@ use serde_qs::{Config, DuplicateKeyBehavior};
 /// would silently resolve to one of the two. A request that states a flag both ways states no
 /// intention worth guessing at, and is refused.
 ///
+/// `use_form_encoding` decides when a key is decoded. With it on, `input%5B%5D` is decoded before
+/// the brackets are read and is therefore the array `input[]`; with it off the brackets are read
+/// first, the key is a name with two odd characters in it, it matches no field and the value is
+/// dropped. `URLSearchParams`, a browser form and `$.param` all encode brackets, so off means
+/// answering those clients with an empty result and a 200. It is spelled out rather than left to
+/// `Config::new`, which reads it from a Cargo feature — `default_to_form_encoding`, enabled by any
+/// crate in the graph, would otherwise flip all three paths at once.
+///
 /// Shared by all three paths deliberately. Parsing that differs by content type is a way for the
 /// same request to be accepted as a form body and refused as a query string.
-const QS: Config = Config::new().duplicate_key_behavior(DuplicateKeyBehavior::Error);
+const QS: Config = Config::new().duplicate_key_behavior(DuplicateKeyBehavior::Error).use_form_encoding(true);
 
 pub struct GetContent<T>(pub T);
 

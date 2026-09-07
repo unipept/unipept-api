@@ -170,6 +170,54 @@ async fn an_encoded_separator_in_a_form_body_does_not_become_a_parameter() {
     assert!(!parameters.equate_il);
 }
 
+/// A bracket the client encoded is still an array.
+///
+/// `URLSearchParams`, a browser `<form>` and `$.param` all percent-encode `[` and `]`, so
+/// `input[]` leaves a standard client as `input%5B%5D`. Read with query encoding the brackets are
+/// looked at before the key is decoded, so that key names no field, the peptides are dropped, and
+/// the caller gets `200` with an empty result rather than an error. This is the assertion that the
+/// parser is configured to decode first.
+#[tokio::test]
+async fn an_encoded_bracket_is_still_an_array() {
+    let parameters = get("input%5B%5D=AALTER&input%5B%5D=AAKNER").await.expect("parses");
+
+    assert_eq!(parameters.input, vec!["AALTER", "AAKNER"]);
+}
+
+/// The same for a single value, which no version of this ever rejected outright.
+///
+/// Worth its own case: with two values the duplicate-key check used to turn this into a `400`, so
+/// the shape was at least visible. With one value it has always been a silent empty result.
+#[tokio::test]
+async fn a_single_encoded_bracket_value_is_still_an_array() {
+    let parameters = get("input%5B%5D=AALTER").await.expect("parses");
+
+    assert_eq!(parameters.input, vec!["AALTER"]);
+}
+
+/// Encoded brackets reach the same place through a form body.
+#[tokio::test]
+async fn an_encoded_bracket_in_a_form_body_is_still_an_array() {
+    let parameters = post("application/x-www-form-urlencoded", "input%5B%5D=AALTER&input%5B%5D=AAKNER")
+        .await
+        .expect("parses");
+
+    assert_eq!(parameters.input, vec!["AALTER", "AAKNER"]);
+}
+
+/// Decoding the key first does not decode the *value* first.
+///
+/// The two are separate steps, and only the second one is what keeps a separator inside a value.
+/// `an_encoded_separator_does_not_become_a_parameter` covers the literal-bracket spelling; this is
+/// the encoded one, so the guard is pinned in the configuration this parser actually runs with.
+#[tokio::test]
+async fn an_encoded_separator_survives_an_encoded_bracket() {
+    let parameters = get("input%5B%5D=A%26equate_il%3Dtrue").await.expect("parses");
+
+    assert_eq!(parameters.input, vec!["A&equate_il=true"]);
+    assert!(!parameters.equate_il, "a flag the request never sent must not be set");
+}
+
 /// Ordinary encodings are unaffected: `%20` and `+` are still spaces, `%25` still a percent sign.
 #[tokio::test]
 async fn ordinary_percent_encoding_still_decodes() {

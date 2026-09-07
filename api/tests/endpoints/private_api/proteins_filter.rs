@@ -22,24 +22,38 @@ async fn the_protein_count_is_the_cluster_total() {
     assert_eq!(body["count"], 4321);
 }
 
-/// The count and the listing are built by two separate query builders that have drifted — one
-/// sends a `match` clause for a numeric filter, the other a `term`. This drives both through the
-/// endpoints that expose them, so a change to either is visible from outside.
+/// The count and the listing are built by two separate query builders, and they have drifted: a
+/// numeric filter becomes a `match` clause on one side and a `term` on the other. Both mocks name
+/// the clause they expect, so neither can change without this failing — and so a controller that
+/// dropped the filter altogether would match neither.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_filtered_count_and_listing_both_reach_the_cluster() {
     let server = MockServer::start_async().await;
     let count = server
         .mock_async(|when, then| {
-            when.method(POST)
-                .path("/uniprot_entries/_search")
-                .query_param("size", "0")
-                .json_body_partial(r#"{ "track_total_hits": true }"#);
+            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0").json_body_partial(
+                r#"{ "track_total_hits": true, "query": { "bool": { "minimum_should_match": 1, "should": [
+                           { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
+                           { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
+                           { "match": { "taxon_id": { "query": 8501 } } }
+                         ] } } }"#
+            );
             then.status(200).json_body(json!({ "hits": { "total": { "value": 2 } } }));
         })
         .await;
     let list = server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_search").query_param("from", "0").query_param("size", "2");
+            when.method(POST)
+                .path("/uniprot_entries/_search")
+                .query_param("from", "0")
+                .query_param("size", "2")
+                .json_body_partial(
+                    r#"{ "query": { "bool": { "minimum_should_match": 1, "should": [
+                           { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
+                           { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
+                           { "term": { "taxon_id": 8501 } }
+                         ] } } }"#
+                );
             then.status(200).json_body(json!({ "hits": { "hits": [
                 { "_source": { "uniprot_accession_number": "P00001" } },
                 { "_source": { "uniprot_accession_number": "P00003" } }

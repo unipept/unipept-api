@@ -9,12 +9,12 @@
 //!
 //! Two layers make up the corpus:
 //!
-//! - **Taxonomy** — `data/taxons.tsv` and `data/lineages.tsv`: twenty-one real NCBI rows, copied
+//! - **Taxonomy** — `data/taxons.tsv` and `data/lineages.tsv`: twenty-six real NCBI rows, copied
 //!   verbatim out of the 10,000-taxon pair under the repository's own `data/`. The set is closed
 //!   under ancestry — every taxon a protein names, every ancestor those taxa's lineages record, and
 //!   root — so it is small enough to read in full, which is what makes an expected LCA checkable by
 //!   eye rather than by rerunning the code.
-//! - **Proteins** — `data/proteins.tsv`: twelve rows referencing only taxa from that subset.
+//! - **Proteins** — `data/proteins.tsv`: thirteen rows referencing only taxa from that subset.
 //!
 //! To regenerate the taxonomy after changing the proteins: take the taxon column of
 //! `proteins.tsv`, union it with every non-`\N` rank id on those taxa's rows in
@@ -68,9 +68,9 @@ pub const LINEAGES_TSV: &str = include_str!("../data/lineages.tsv");
 ///
 /// Database mocks key their canned responses on these, so that an index built from the corpus and
 /// a mocked OpenSearch agree about which proteins exist.
-pub const ACCESSIONS: [&str; 12] = [
+pub const ACCESSIONS: [&str; 13] = [
     "P00001", "P00002", "P00003", "P00004", "P00005", "P00006", "P00007", "P00008", "P00009", "P00010", "P00011",
-    "P00012"
+    "P00012", "P00013"
 ];
 
 /// Taxa the corpus references, all present in `data/taxons.tsv`.
@@ -101,6 +101,12 @@ pub mod taxa {
     pub const SPHENODONTIA: u32 = 8505;
     /// `Alouatta seniculus`, a mammal; diverges from the crocodiles at class.
     pub const ALOUATTA_SENICULUS: u32 = 9503;
+    /// `Heloderma sp.`, and the only taxon here the taxonomy marks **invalid**.
+    ///
+    /// Without one, `TaxonStore::is_valid` has no counterexample and `calculate_lca`'s
+    /// `only_valid_taxa` filter is a no-op against this corpus — so `validate_taxa`, a real
+    /// `pept2lca` parameter, could not be exercised at all.
+    pub const HELODERMA: u32 = 8553;
 }
 
 /// Marker peptides, each placed to make one branch fire.
@@ -124,9 +130,15 @@ pub mod peptides {
     pub const IL_ISOLEUCINE: &str = "IPTLNAGVK";
     /// The leucine counterpart of [`IL_ISOLEUCINE`], in `C. novaeguineae`.
     pub const IL_LEUCINE: &str = "LPTLNAGVK";
-    /// Present in seven of the twelve proteins, spanning both domains — enough occurrences for a
+    /// Present in seven of the thirteen proteins, spanning both domains — enough occurrences for a
     /// low cutoff to bite and set `cutoff_used`.
     pub const COMMON: &str = "AAGGK";
+    /// Shared by a protein of `C. niloticus` and one of the invalid `Heloderma sp.`
+    ///
+    /// The pair `validate_taxa` is visible through: with the filter off both taxa survive and the
+    /// LCA is their common ancestor; with it on the invalid one is dropped and the LCA collapses to
+    /// `C. niloticus` alone.
+    pub const VALIDATION_SHARED: &str = "VALIDATEKR";
     /// In no protein. Distinguishes an empty result from an error.
     pub const ABSENT: &str = "WWWWWWWWWW";
 }
@@ -237,7 +249,8 @@ mod tests {
             taxa::CROCODYLUS_POROSUS,
             taxa::CROCODYLUS_NOVAEGUINEAE,
             taxa::SPHENODONTIA,
-            taxa::ALOUATTA_SENICULUS
+            taxa::ALOUATTA_SENICULUS,
+            taxa::HELODERMA
         ] {
             assert!(ids.contains(&taxon), "taxa:: names {taxon}, which has no row in taxons.tsv");
         }
@@ -280,12 +293,29 @@ mod tests {
         );
         assert_eq!(taxa_containing(peptides::IL_ISOLEUCINE), BTreeSet::from([CROCODYLUS_POROSUS]));
         assert_eq!(taxa_containing(peptides::IL_LEUCINE), BTreeSet::from([CROCODYLUS_NOVAEGUINEAE]));
+        assert_eq!(taxa_containing(peptides::VALIDATION_SHARED), BTreeSet::from([CROCODYLUS_NILOTICUS, HELODERMA]));
         assert!(taxa_containing(peptides::ABSENT).is_empty());
 
         // The doc comment claims seven of the twelve proteins, which is the count a low cutoff has
         // to bite against — the taxa alone would not catch a protein being dropped.
         let common = proteins().iter().filter(|(_, _, seq)| seq.contains(peptides::COMMON)).count();
         assert_eq!(common, 7);
+    }
+
+    /// Exactly one taxon is marked invalid, and it is the one the validation marker reaches.
+    ///
+    /// The fifth column is a raw byte, so this also fails if a copy through a text editor ever
+    /// turns it into something printable.
+    #[test]
+    fn the_corpus_contains_exactly_one_invalid_taxon() {
+        let invalid: Vec<u32> = TAXONS_TSV
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .filter(|line| line.split('\t').nth(4) != Some("\u{1}"))
+            .map(|line| line.split('\t').next().unwrap().parse().unwrap())
+            .collect();
+
+        assert_eq!(invalid, vec![taxa::HELODERMA]);
     }
 
     /// The I/L pair must differ at exactly one position, or `equate_il` proves nothing.

@@ -1,4 +1,4 @@
-//! `/api/v2/…` — the public endpoints that need no index search.
+//! `/api/v2/…` — the public endpoints.
 
 mod protinfo;
 mod taxa2lca;

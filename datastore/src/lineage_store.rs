@@ -133,16 +133,46 @@ impl LineageStore {
             index_references.push(HashMap::new());
         }
 
-        for line in BufReader::new(file).lines() {
+        for (index, line) in BufReader::new(file).lines().enumerate() {
             let line = line?;
-            let mut splitted_line = line.split('\t');
+            let line_number = index + 1;
 
-            let taxon_id: u32 = splitted_line.next().unwrap().parse().unwrap();
-            let parts: Vec<Option<i32>> =
-                splitted_line.map(|x| if x == "\\N" { None } else { Some(x.parse::<i32>().unwrap()) }).collect();
+            // A blank line is not a malformed row: `lines()` yields one for every empty line in
+            // the file, including the one a file ending in two newlines produces. Only a truly
+            // empty line, though — `trim()` would also erase a row of nothing but tabs, and a row
+            // of delimiters is malformed input, not an absence of input.
+            if line.is_empty() {
+                continue;
+            }
 
-            // All lines in the input should be of equal length. If, for some reason, this is not the case, panic and inform the user!
-            assert_eq!(parts.len(), LineageStore::AMOUNT_OF_RANKS, "Input lineage has not the correct dimension.");
+            // Counted before anything is parsed, so a row of the wrong width is reported as such
+            // rather than as whichever of its fields happens to fail parsing first.
+            let fields: Vec<&str> = line.split('\t').collect();
+            if fields.len() != LineageStore::AMOUNT_OF_RANKS + 1 {
+                return Err(LineageStoreError::UnexpectedColumnCount {
+                    line: line_number,
+                    expected: LineageStore::AMOUNT_OF_RANKS + 1,
+                    found: fields.len()
+                });
+            }
+
+            let taxon_id: u32 = fields[0]
+                .parse()
+                .map_err(|_| LineageStoreError::InvalidTaxonId { line: line_number, value: fields[0].to_string() })?;
+
+            // Enumerated for the column number: a lineage row has 28 rank fields, and an error
+            // naming only the offending value leaves the reader counting tabs to find it.
+            let mut parts: Vec<Option<i32>> = Vec::with_capacity(LineageStore::AMOUNT_OF_RANKS);
+            for (rank, field) in fields[1..].iter().enumerate() {
+                parts.push(match *field {
+                    "\\N" => None,
+                    value => Some(value.parse::<i32>().map_err(|_| LineageStoreError::InvalidRankId {
+                        line: line_number,
+                        column: rank + 2,
+                        value: value.to_string()
+                    })?)
+                });
+            }
 
             let lin = Arc::new(Lineage {
                 domain: parts[0],
@@ -177,13 +207,11 @@ impl LineageStore {
 
             mapper.insert(taxon_id, Arc::clone(&lin));
 
-            for (i, part) in parts.iter().enumerate().take(LineageStore::AMOUNT_OF_RANKS) {
+            // Zipped rather than indexed: both sides are `AMOUNT_OF_RANKS` long, and pairing them
+            // this way says so without a bounds check that could fail.
+            for (rank_map, part) in index_references.iter_mut().zip(parts.iter()) {
                 if let Some(id) = part {
-                    let rank_map = index_references.get_mut(i).unwrap();
-                    let id: u32 = id.unsigned_abs();
-                    rank_map.entry(id).or_insert_with(Vec::new);
-                    let vec = rank_map.get_mut(&id).unwrap();
-                    vec.push(Arc::clone(&lin));
+                    rank_map.entry(id.unsigned_abs()).or_default().push(Arc::clone(&lin));
                 }
             }
         }
@@ -206,5 +234,95 @@ impl LineageStore {
         LineageStore::rank_to_idx(rank)
             .and_then(|idx| self.index_references.get(idx))
             .map(|map| map.keys().cloned().collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const RANK_KEYS: [&str; 28] = [
+        "domain",
+        "realm",
+        "kingdom",
+        "subkingdom",
+        "superphylum",
+        "phylum",
+        "subphylum",
+        "superclass",
+        "class",
+        "subclass",
+        "superorder",
+        "order",
+        "suborder",
+        "infraorder",
+        "superfamily",
+        "family",
+        "subfamily",
+        "tribe",
+        "subtribe",
+        "genus",
+        "subgenus",
+        "species_group",
+        "species_subgroup",
+        "species",
+        "subspecies",
+        "strain",
+        "varietas",
+        "forma"
+    ];
+
+    /// The rank names index the lineage columns in order, and each one reads back its own column.
+    ///
+    /// `rank_to_idx` and `get_taxon_id_at_rank` are two hand-written tables over the same 28 ranks,
+    /// listed in the same order, and nothing else checks that they agree with each other or with
+    /// the column order the parser fills.
+    #[test]
+    fn every_rank_key_addresses_its_own_column() {
+        let mut lineage = Lineage::default();
+        let fields: [&mut Option<i32>; 28] = [
+            &mut lineage.domain,
+            &mut lineage.realm,
+            &mut lineage.kingdom,
+            &mut lineage.subkingdom,
+            &mut lineage.superphylum,
+            &mut lineage.phylum,
+            &mut lineage.subphylum,
+            &mut lineage.superclass,
+            &mut lineage.class,
+            &mut lineage.subclass,
+            &mut lineage.superorder,
+            &mut lineage.order,
+            &mut lineage.suborder,
+            &mut lineage.infraorder,
+            &mut lineage.superfamily,
+            &mut lineage.family,
+            &mut lineage.subfamily,
+            &mut lineage.tribe,
+            &mut lineage.subtribe,
+            &mut lineage.genus,
+            &mut lineage.subgenus,
+            &mut lineage.species_group,
+            &mut lineage.species_subgroup,
+            &mut lineage.species,
+            &mut lineage.subspecies,
+            &mut lineage.strain,
+            &mut lineage.varietas,
+            &mut lineage.forma
+        ];
+        for (position, field) in fields.into_iter().enumerate() {
+            *field = Some(position as i32 + 1000);
+        }
+
+        for (position, key) in RANK_KEYS.iter().enumerate() {
+            assert_eq!(LineageStore::rank_to_idx(key), Some(position), "rank_to_idx({key})");
+            assert_eq!(lineage.get_taxon_id_at_rank(key), Some(position as i32 + 1000), "get_taxon_id_at_rank({key})");
+        }
+    }
+
+    #[test]
+    fn an_unknown_rank_key_addresses_nothing() {
+        assert_eq!(LineageStore::rank_to_idx("nonsense"), None);
+        assert_eq!(Lineage::default().get_taxon_id_at_rank("nonsense"), None);
     }
 }

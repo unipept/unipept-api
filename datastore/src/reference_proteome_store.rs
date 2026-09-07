@@ -19,19 +19,34 @@ impl ReferenceProteomeStore {
             std::fs::File::open(file).map_err(|_| ReferenceProteomeStoreError::FileNotFound(file.to_string()))?;
 
         let mut mapper = HashMap::new();
-        for line in BufReader::new(file).lines() {
+        for (index, line) in BufReader::new(file).lines().enumerate() {
             let line = line?;
-            let parts: Vec<&str> = line.split('\t').collect();
-            if parts.len() == 5 {
-                let taxon_id = parts[2].parse::<u32>().map_err(|_| {
-                    ReferenceProteomeStoreError::ParseError(format!("Could not parse taxon ID: {}", parts[2]))
-                })?;
-                let protein_count = parts[3].parse::<u32>().map_err(|_| {
-                    ReferenceProteomeStoreError::ParseError(format!("Could not parse protein count: {}", parts[3]))
-                })?;
-                let proteins = parts[4].to_string();
-                mapper.insert(parts[1].to_string(), (taxon_id, protein_count, proteins));
+            let line_number = index + 1;
+
+            // Only a truly empty line: `trim()` would also erase a row of nothing but tabs, and
+            // a row of delimiters is malformed input rather than an absence of input.
+            if line.is_empty() {
+                continue;
             }
+
+            let parts: Vec<&str> = line.split('\t').collect();
+            if parts.len() != 5 {
+                return Err(ReferenceProteomeStoreError::UnexpectedColumnCount {
+                    line: line_number,
+                    expected: 5,
+                    found: parts.len()
+                });
+            }
+
+            let taxon_id = parts[2].parse::<u32>().map_err(|_| ReferenceProteomeStoreError::InvalidTaxonId {
+                line: line_number,
+                value: parts[2].to_string()
+            })?;
+            let protein_count = parts[3].parse::<u32>().map_err(|_| {
+                ReferenceProteomeStoreError::InvalidProteinCount { line: line_number, value: parts[3].to_string() }
+            })?;
+            let proteins = parts[4].to_string();
+            mapper.insert(parts[1].to_string(), (taxon_id, protein_count, proteins));
         }
 
         Ok(ReferenceProteomeStore { mapper })

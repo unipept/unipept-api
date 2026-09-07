@@ -57,16 +57,39 @@ impl TaxonStore {
         let file = std::fs::File::open(file).map_err(|_| TaxonStoreError::FileNotFound(file.to_string()))?;
 
         let mut mapper = HashMap::new();
-        for line in BufReader::new(file).lines() {
+        for (index, line) in BufReader::new(file).lines().enumerate() {
             let line = line?;
+            let line_number = index + 1;
 
-            let parts: Vec<&str> = line.trim_end().split('\t').collect();
-            if parts.len() == 5 {
-                mapper.insert(
-                    parts[0].parse()?,
-                    (parts[1].to_string(), parts[2].parse::<LineageRank>()?, matches!(parts[4], "\x01"))
-                );
+            // Only a truly empty line: `trim()` would also erase a row of nothing but tabs, and
+            // a row of delimiters is malformed input rather than an absence of input.
+            if line.is_empty() {
+                continue;
             }
+
+            // Not trimmed before splitting: `trim_end` would eat a trailing delimiter and let a
+            // six-column row pass as five. `lines()` has already removed the newline, CRLF
+            // included, and neither validity byte is whitespace, so there is nothing left to trim.
+            let parts: Vec<&str> = line.split('\t').collect();
+            if parts.len() != 5 {
+                return Err(TaxonStoreError::UnexpectedColumnCount {
+                    line: line_number,
+                    expected: 5,
+                    found: parts.len()
+                });
+            }
+
+            let taxon_id: u32 = parts[0]
+                .parse()
+                .map_err(|_| TaxonStoreError::InvalidTaxonId { line: line_number, value: parts[0].to_string() })?;
+
+            let rank = parts[2]
+                .parse::<LineageRank>()
+                .map_err(|_| TaxonStoreError::InvalidRank { line: line_number, value: parts[2].to_string() })?;
+
+            // The validity flag is a MySQL boolean dump: 0x01 for a valid taxon, 0x00 otherwise.
+            // Neither byte is whitespace, so `trim_end` above leaves the column intact.
+            mapper.insert(taxon_id, (parts[1].to_string(), rank, matches!(parts[4], "\x01")));
         }
 
         Ok(Self { mapper })
@@ -157,5 +180,61 @@ impl From<LineageRank> for String {
             LineageRank::Varietas => "varietas".to_string(),
             LineageRank::Forma => "forma".to_string()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ALL_RANKS: [LineageRank; 29] = [
+        LineageRank::NoRank,
+        LineageRank::Domain,
+        LineageRank::Realm,
+        LineageRank::Kingdom,
+        LineageRank::Subkingdom,
+        LineageRank::Superphylum,
+        LineageRank::Phylum,
+        LineageRank::Subphylum,
+        LineageRank::Superclass,
+        LineageRank::Class,
+        LineageRank::Subclass,
+        LineageRank::Superorder,
+        LineageRank::Order,
+        LineageRank::Suborder,
+        LineageRank::Infraorder,
+        LineageRank::Superfamily,
+        LineageRank::Family,
+        LineageRank::Subfamily,
+        LineageRank::Tribe,
+        LineageRank::Subtribe,
+        LineageRank::Genus,
+        LineageRank::Subgenus,
+        LineageRank::SpeciesGroup,
+        LineageRank::SpeciesSubgroup,
+        LineageRank::Species,
+        LineageRank::Subspecies,
+        LineageRank::Strain,
+        LineageRank::Varietas,
+        LineageRank::Forma
+    ];
+
+    /// Every rank survives a trip through its string form and back.
+    ///
+    /// The two directions are written out as separate 29-arm tables, so nothing but this stops one
+    /// gaining a rank the other does not have — and a rank that fails to round-trip is one the
+    /// taxon table can hold and the parser cannot read back.
+    #[test]
+    fn every_rank_round_trips_through_its_string_form() {
+        for rank in ALL_RANKS {
+            let text: String = rank.clone().into();
+            let parsed: LineageRank = text.parse().unwrap_or_else(|_| panic!("`{text}` does not parse back"));
+            assert_eq!(parsed, rank, "`{text}` parsed as a different rank");
+        }
+    }
+
+    #[test]
+    fn an_unknown_rank_string_is_rejected() {
+        assert!("not a rank".parse::<LineageRank>().is_err());
     }
 }

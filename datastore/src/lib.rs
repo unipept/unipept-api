@@ -8,7 +8,10 @@ mod sample_store;
 mod taxon_store;
 
 pub use ec_store::EcStore;
-pub use errors::DataStoreError;
+pub use errors::{
+    DataStoreError, EcStoreError, GoStoreError, InterproStoreError, LineageStoreError, ReferenceProteomeStoreError,
+    TaxonStoreError
+};
 pub use go_store::GoStore;
 pub use interpro_store::InterproStore;
 pub use lineage_store::{Lineage, LineageStore};

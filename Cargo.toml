@@ -4,9 +4,18 @@
 resolver = "3"
 
 members = [
-    "api", 
-    "database", 
-    "datastore", 
+    "api",
+    "database",
+    "datastore",
+    "fixtures",
+    "index"
+]
+
+# fixtures is test-only: kept out of the default set so a release build never compiles it.
+default-members = [
+    "api",
+    "database",
+    "datastore",
     "index"
 ]
 

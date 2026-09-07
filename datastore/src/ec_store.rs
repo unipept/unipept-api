@@ -15,12 +15,21 @@ impl EcStore {
         let file = std::fs::File::open(file).map_err(|_| EcStoreError::FileNotFound(file.to_string()))?;
 
         let mut mapper = HashMap::new();
-        for line in BufReader::new(file).lines() {
+        for (index, line) in BufReader::new(file).lines().enumerate() {
             let line = line?;
-            let parts: Vec<&str> = line.split('\t').collect();
-            if parts.len() == 3 {
-                mapper.insert(parts[1].to_string(), parts[2].to_string());
+
+            // Only a truly empty line: `trim()` would also erase a row of nothing but tabs, and
+            // a row of delimiters is malformed input rather than an absence of input.
+            if line.is_empty() {
+                continue;
             }
+
+            let parts: Vec<&str> = line.split('\t').collect();
+            if parts.len() != 3 {
+                return Err(EcStoreError::UnexpectedColumnCount { line: index + 1, expected: 3, found: parts.len() });
+            }
+
+            mapper.insert(parts[1].to_string(), parts[2].to_string());
         }
 
         Ok(EcStore { mapper })

@@ -1,9 +1,9 @@
 use std::{
     fs::File,
+    hint::black_box,
     io::{BufReader, prelude::*}
 };
 
-use criterion::black_box;
 use datastore::{LineageStore, TaxonStore};
 use unipept_api::helpers::{lca_helper::calculate_lca, lineage_helper::LineageVersion};
 

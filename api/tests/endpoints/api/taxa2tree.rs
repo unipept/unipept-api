@@ -104,10 +104,15 @@ async fn the_html_route_renders_a_document() {
 }
 
 /// Pulls the value the page assigns to `data` back out of the rendered document.
+///
+/// The terminator is the semicolon at the end of a line, not the first semicolon: taxon names are
+/// free text and JSON escapes newlines but not semicolons, so a bare `;` could sit inside the data
+/// itself. Both line endings are accepted — the repository sets no `.gitattributes`, so a checkout
+/// with `core.autocrlf` on renders the template with CRLF.
 fn rendered_data(body: &str) -> &str {
     let start = body.find("const data = ").expect("the page assigns const data") + "const data = ".len();
     let rest = &body[start..];
-    let end = rest.find(";\n").expect("the assignment is terminated");
+    let end = rest.find(";\r\n").or_else(|| rest.find(";\n")).expect("the assignment is terminated");
     &rest[..end]
 }
 
@@ -140,7 +145,7 @@ fn sorted_children(value: &mut serde_json::Value) {
         for child in children.iter_mut() {
             sorted_children(child);
         }
-        children.sort_by_key(|child| child["id"].as_i64().unwrap_or_default());
+        children.sort_by_key(|child| child["id"].as_i64().expect("every node carries a numeric id"));
     }
 }
 

@@ -97,11 +97,27 @@ fn the_error_names_the_line_it_came_from() {
     assert!(error.to_string().starts_with("Line 3:"), "got {error}");
 }
 
+/// A row of nothing but delimiters is malformed input, not a blank line.
+///
+/// It is the case a `trim()` before the emptiness check silently swallows: 28 tabs trim to nothing
+/// and the row disappears, which is the behaviour this policy exists to remove.
+#[test]
+fn a_row_of_only_delimiters_is_an_error() {
+    // 28 tabs is 29 fields, so this row is the right width and fails on its empty taxon id. A
+    // shorter run of tabs fails on the width. Either way it is rejected rather than skipped, which
+    // is the property that matters.
+    assert!(matches!(rejection(&"\t".repeat(28)), LineageStoreError::InvalidTaxonId { .. }));
+    assert!(matches!(rejection("\t\t\t"), LineageStoreError::UnexpectedColumnCount { .. }));
+}
+
 /// A blank line is not a malformed row. `lines()` yields one for a file that ends in two newlines,
 /// and refusing to load such a file would turn an invisible whitespace difference into an outage.
+///
+/// `lines()` also strips a CRLF pair, so a Windows-authored file needs no separate handling: the
+/// blank line arrives as `""` rather than `"\r"`, and no field carries a trailing `\r`.
 #[test]
 fn blank_lines_are_skipped() {
-    let contents = format!("{}\n\n{}\n\n", valid_row(1), valid_row(8501));
+    let contents = format!("{}\r\n\r\n{}\n\n", valid_row(1), valid_row(8501));
     let (_dir, result) = load_lineages(&contents);
 
     let store = result.expect("blank lines should be skipped, not rejected");

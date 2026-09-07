@@ -137,9 +137,11 @@ impl LineageStore {
             let line = line?;
             let line_number = index + 1;
 
-            // A blank line is not a malformed row. `lines()` yields one for every empty line in the
-            // file, including the one a file ending in two newlines produces.
-            if line.trim().is_empty() {
+            // A blank line is not a malformed row: `lines()` yields one for every empty line in
+            // the file, including the one a file ending in two newlines produces. Only a truly
+            // empty line, though — `trim()` would also erase a row of nothing but tabs, and a row
+            // of delimiters is malformed input, not an absence of input.
+            if line.is_empty() {
                 continue;
             }
 

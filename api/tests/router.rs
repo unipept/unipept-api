@@ -75,3 +75,13 @@ async fn an_endpoint_answers_with_the_corpus_behind_it() {
     assert!(body.contains("AWDIQNGK"), "the peptide should be echoed back: {body}");
     assert!(body.contains("Crocodylus niloticus"), "its LCA should be named: {body}");
 }
+
+/// Installing the subscriber twice is a no-op, not a panic.
+///
+/// `start` calls this once, so nothing in this repository hits the second call today — but a test
+/// that boots two servers, or anything embedding the crate as a library, would.
+#[test]
+fn the_tracing_subscriber_can_be_installed_more_than_once() {
+    unipept_api::middleware::tracing::init_tracing_subscriber();
+    unipept_api::middleware::tracing::init_tracing_subscriber();
+}

@@ -8,6 +8,7 @@
 mod common;
 
 mod api;
+mod database;
 mod datasets;
 mod private_api;
 mod routing;

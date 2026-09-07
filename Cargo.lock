@@ -3430,6 +3430,7 @@ dependencies = [
  "fixtures",
  "http 1.4.0",
  "http-body-util",
+ "httpmock",
  "index",
  "itertools 0.13.0",
  "paste",

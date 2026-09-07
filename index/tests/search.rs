@@ -248,3 +248,101 @@ fn every_accession_the_index_returns_is_declared_by_the_corpus() {
         );
     }
 }
+
+// ── The k-mer table ─────────────────────────────────────────────────────────────────────────────
+//
+// Everything above runs without one. That is the deployed-with-no-table configuration and the
+// fallback `try_from_files` documents, but it left the whole loading branch — and the cross-file
+// check that guards it — unreached.
+
+/// `k = 3` keeps the table to a few hundred kilobytes; the production default of 5 is over a
+/// hundred megabytes, since the size follows the alphabet rather than the corpus.
+const FIXTURE_KMER_SIZE: usize = 3;
+
+fn index_from(paths: &fixtures::IndexPaths) -> Result<Index, IndexError> {
+    Index::try_from_files(
+        paths.suffix_array.to_str().unwrap(),
+        paths.proteins.to_str().unwrap(),
+        paths.mapping.to_str().unwrap(),
+        paths.kmer_table.to_str().unwrap()
+    )
+}
+
+#[test]
+fn an_index_loads_with_a_kmer_table() {
+    let dir = TempDir::new().unwrap();
+    let paths = fixtures::build_index_files_with_kmer_table(dir.path(), FIXTURE_KMER_SIZE);
+
+    assert!(paths.kmer_table.exists(), "this builder must write the table");
+    let index = index_from(&paths).expect("an index with a table should load");
+
+    assert_eq!(search(&index, UNIQUE, false), vec![("P00001".to_string(), fixtures::taxa::CROCODYLUS_NILOTICUS)]);
+}
+
+/// The table is an accelerator, so it must not change a single answer.
+///
+/// A differential rather than a fixed expectation: whatever the searches return, the two builds
+/// have to agree, and a table that narrows the wrong bounds would show up here as a missing hit
+/// rather than as an error.
+#[test]
+fn a_kmer_table_changes_no_results() {
+    let plain_dir = TempDir::new().unwrap();
+    let table_dir = TempDir::new().unwrap();
+    let plain = index_from(&fixtures::build_index_files(plain_dir.path())).expect("loads");
+    let accelerated =
+        index_from(&fixtures::build_index_files_with_kmer_table(table_dir.path(), FIXTURE_KMER_SIZE)).expect("loads");
+
+    for peptide in [UNIQUE, GENUS_SHARED, SUPERCLASS_SHARED, ROOT_SHARED, IL_ISOLEUCINE, COMMON, ABSENT] {
+        for equate_il in [false, true] {
+            assert_eq!(
+                search(&plain, peptide, equate_il),
+                search(&accelerated, peptide, equate_il),
+                "{peptide} disagrees between the plain and accelerated builds (equate_il={equate_il})"
+            );
+        }
+    }
+}
+
+/// A table built over a larger text is refused, because its bounds run past this suffix array.
+#[test]
+fn a_kmer_table_from_a_larger_index_is_rejected() {
+    let corpus_dir = TempDir::new().unwrap();
+    let larger_dir = TempDir::new().unwrap();
+
+    let corpus = fixtures::build_index_files(corpus_dir.path());
+
+    // Enough extra protein to push the suffix array well past the corpus's, so the table's bounds
+    // cannot fit inside it.
+    let mut larger_tsv = String::from(fixtures::PROTEINS_TSV);
+    for n in 0..40 {
+        let filler = "AGKTNDSVEQ".repeat(n % 5 + 1);
+        larger_tsv.push_str(&format!("Z{n:05}\t8501\tMKWQNPFSAHTVGEDLYCR{filler}\t\n"));
+    }
+    let larger = fixtures::build_index_files_from_with_kmer_table(larger_dir.path(), &larger_tsv, FIXTURE_KMER_SIZE);
+
+    let mixed = Index::try_from_files(
+        corpus.suffix_array.to_str().unwrap(),
+        corpus.proteins.to_str().unwrap(),
+        corpus.mapping.to_str().unwrap(),
+        larger.kmer_table.to_str().unwrap()
+    );
+
+    match mixed {
+        Err(error) => assert!(
+            matches!(error, IndexError::LoadError(LoadIndexError::MismatchedIndexFiles(_))),
+            "expected the table to be rejected as mismatched, got {error:?}"
+        ),
+        Ok(_) => panic!("a k-mer table built over a larger text must not load")
+    }
+}
+
+/// The line the server prints at startup, and the only way to tell which backend a binary was
+/// compiled for. `README.md` quotes its shape, so it is worth one assertion that it keeps it.
+#[test]
+fn the_backend_summary_names_each_structure() {
+    let summary = Index::backend_summary();
+
+    for structure in ["sa=", "text=", "proteins=", "mapping="] {
+        assert!(summary.contains(structure), "`{structure}` missing from `{summary}`");
+    }
+}

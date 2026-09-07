@@ -4,14 +4,12 @@
 
 //! One `AppState` over the shared corpus, for the endpoint tests to drive.
 //!
-//! All three of its pieces come from the same corpus, which is what makes a result mean anything:
-//! the index finds a protein, the datastore can name its taxon, and the mocked database knows its
-//! accession. Assembled from separate fixtures they would disagree, every endpoint would answer
-//! with nothing, and every test would pass.
+//! Index, datastore and database all come from the same corpus, so a result means something:
+//! built from separate fixtures every endpoint would answer with nothing and every test would
+//! still pass.
 //!
-//! Note the runtime: the handlers call `tokio::task::block_in_place`, which panics on the
-//! current-thread runtime `#[tokio::test]` gives you by default. Every test driving an endpoint
-//! needs `#[tokio::test(flavor = "multi_thread")]`.
+//! Endpoint tests need `#[tokio::test(flavor = "multi_thread")]` — the handlers call
+//! `block_in_place`, which panics on the default current-thread runtime.
 
 use std::sync::Arc;
 
@@ -26,11 +24,8 @@ use unipept_api::{AppState, routes::create_app};
 
 /// Builds the corpus into a temporary directory and returns state over it.
 ///
-/// The `TempDir` comes back because dropping it deletes the files, and a memory-mapped index keeps
-/// reading them for as long as it is alive.
-///
-/// `database_url` is only parsed — `Database::try_from_url` performs no I/O — so a test that never
-/// reaches OpenSearch can pass any address and one that does can pass a mock server's.
+/// The `TempDir` comes back because dropping it deletes the files, and a memory-mapped index reads
+/// them for as long as it is alive. `database_url` is only parsed, never connected to.
 pub fn test_state(database_url: &str) -> (TempDir, AppState) {
     let dir = TempDir::new().expect("could not create a temporary directory");
 
@@ -70,17 +65,14 @@ pub fn offline_state() -> (TempDir, AppState) {
     test_state("http://127.0.0.1:1")
 }
 
-/// Drives one request through the whole stack and returns the status with the body as JSON.
-///
-/// `oneshot` needs no listener and no port, and the app it builds is the one `start` serves.
+/// Drives one request through the whole stack — the same one `start` serves — and parses the body.
 pub async fn request_json(state: unipept_api::AppState, request: Request<Body>) -> (StatusCode, serde_json::Value) {
     let (status, body) = request_raw(state, request).await;
     let json = serde_json::from_str(&body).unwrap_or_else(|err| panic!("body was not JSON ({err}): {body}"));
     (status, json)
 }
 
-/// As [`request_json`], but hands back the body untouched — for the endpoints that answer with
-/// HTML, and for asserting on a rejection's plain-text message.
+/// As [`request_json`], but leaves the body untouched: HTML routes, and plain-text rejections.
 pub async fn request_raw(state: unipept_api::AppState, request: Request<Body>) -> (StatusCode, String) {
     let response = create_app(state).oneshot(request).await.expect("the app responds");
     let status = response.status();
@@ -90,11 +82,8 @@ pub async fn request_raw(state: unipept_api::AppState, request: Request<Body>) -
 
 /// A GET against an offline state, for the endpoints that never reach OpenSearch.
 ///
-/// The `TempDir` is bound to a name and dropped explicitly after the request, rather than left to
-/// fall out of scope. A named binding already lives to the end of the block — only a bare `_`
-/// pattern would drop immediately — but the difference between `_dir` and `_` is one character,
-/// invisible in review, and deletes the corpus out from under a running request if anyone gets it
-/// wrong. `corpus_files_outlive_the_request` in this module fails if that ever happens.
+/// `dir` is dropped explicitly rather than at end of scope; `corpus_files_outlive_the_request`
+/// fails if that stops happening.
 pub async fn get_json(path: &str) -> (StatusCode, serde_json::Value) {
     let (dir, state) = offline_state();
     let answered = request_json(state, Request::get(path).body(Body::empty()).unwrap()).await;

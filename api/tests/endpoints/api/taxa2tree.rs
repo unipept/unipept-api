@@ -102,3 +102,67 @@ async fn the_html_route_renders_a_document() {
         &body[..body.len().min(120)]
     );
 }
+
+/// Pulls the value the page assigns to `data` back out of the rendered document.
+///
+/// The terminator is the semicolon at the end of a line, not the first semicolon: taxon names are
+/// free text and JSON escapes newlines but not semicolons, so a bare `;` could sit inside the data
+/// itself. Both line endings are accepted — the repository sets no `.gitattributes`, so a checkout
+/// with `core.autocrlf` on renders the template with CRLF.
+fn rendered_data(body: &str) -> &str {
+    let start = body.find("const data = ").expect("the page assigns const data") + "const data = ".len();
+    let rest = &body[start..];
+    let end = rest.find(";\r\n").or_else(|| rest.find(";\n")).expect("the assignment is terminated");
+    &rest[..end]
+}
+
+/// The tree reaches the page as JSON the browser can parse.
+///
+/// The document is otherwise static, so `<html>` being present says only that a file was read from
+/// disk: the page would still contain it with the tree missing, empty, or HTML-escaped into
+/// `&quot;` sequences that no browser can `JSON.parse`. This is the assertion that the one value
+/// the template interpolates actually arrives, and arrives intact.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_html_route_embeds_the_tree_as_parseable_json() {
+    let (_, body) = get_raw("/api/v2/taxa2tree.html?input[]=8501&input[]=8502").await;
+
+    let data = rendered_data(&body);
+    assert!(!data.is_empty(), "the page embedded no tree at all");
+
+    let embedded: serde_json::Value =
+        serde_json::from_str(data).unwrap_or_else(|err| panic!("embedded data was not JSON ({err}): {data}"));
+
+    assert_eq!(embedded["id"], 1, "the embedded tree should be rooted at the organism");
+    assert_eq!(embedded["name"], "Organism");
+}
+
+/// Sorts every `children` array by `id`, so two trees can be compared by content.
+///
+/// Siblings come out in whatever order the handler's map iterated, which differs between calls.
+/// That is not what this test is about, so it is normalised away rather than asserted.
+fn sorted_children(value: &mut serde_json::Value) {
+    if let Some(children) = value.get_mut("children").and_then(serde_json::Value::as_array_mut) {
+        for child in children.iter_mut() {
+            sorted_children(child);
+        }
+        children.sort_by_key(|child| child["id"].as_i64().expect("every node carries a numeric id"));
+    }
+}
+
+/// The embedded tree is the same one the JSON route serves.
+///
+/// Two routes, one handler: the HTML half differs only in wrapping the tree in a template. Pinning
+/// them equal means a change to either the serialisation or the interpolation shows up here rather
+/// than as a page that renders and quietly draws something else.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_embedded_tree_matches_the_json_route() {
+    let (_, mut from_json) = get_json("/api/v2/taxa2tree?input[]=8501&input[]=8502").await;
+    let (_, page) = get_raw("/api/v2/taxa2tree.html?input[]=8501&input[]=8502").await;
+
+    let mut embedded: serde_json::Value = serde_json::from_str(rendered_data(&page)).expect("embedded data is JSON");
+
+    sorted_children(&mut embedded);
+    sorted_children(&mut from_json);
+
+    assert_eq!(embedded, from_json);
+}

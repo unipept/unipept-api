@@ -205,10 +205,8 @@ async fn an_encoded_separator_survives_an_encoded_bracket() {
 
 /// A separator inside a multipart value stays inside that value.
 ///
-/// The multipart branch rebuilds a query string out of its parts, and `text()` has already decoded
-/// them, so an `&` in a value used to become a real separator: one field arrived and two
-/// parameters came out. This is the same failure `an_encoded_separator_does_not_become_a_parameter`
-/// covers on the other two paths, which is why it belongs beside them.
+/// The multipart branch rebuilds a query string from parts `text()` has already decoded, so an `&`
+/// in a value used to become a real separator: one field in, two parameters out.
 #[tokio::test]
 async fn an_encoded_separator_in_a_multipart_body_does_not_become_a_parameter() {
     let body = b"--X\r\nContent-Disposition: form-data; name=\"input[]\"\r\n\r\nA&equate_il=true\r\n--X--\r\n".to_vec();
@@ -229,12 +227,10 @@ async fn a_plus_in_a_multipart_value_is_not_a_space() {
     assert_eq!(parameters.filter, "a+b");
 }
 
-/// The characters a query string gives meaning to survive the rebuild.
+/// The characters a query string gives meaning survive the rebuild.
 ///
-/// `%41` earns its place: it is a *valid* escape, so the raw string used to be decoded on the way
-/// back in and a filter reading `%41` silently became `A`. Nothing errored and nothing told the
-/// caller. `%FF` is the same shape with an invalid escape, which failed loudly instead — the two
-/// are worth pinning together, because only one of them was ever visible.
+/// `%41` is the quiet one: a valid escape, so it used to be decoded on the way back in and a filter
+/// reading `%41` silently became `A`. `%FF` is the same shape invalid, and failed loudly instead.
 #[tokio::test]
 async fn multipart_values_survive_the_querystring_rebuild() {
     for value in ["a b", "100%", "a=b", "a&b", "é", "a[0]", "a+b", "%41", "%FF", "%"] {
@@ -249,7 +245,7 @@ async fn multipart_values_survive_the_querystring_rebuild() {
     }
 }
 
-/// A field name carrying a separator cannot introduce a parameter either.
+/// A name carrying a separator cannot introduce a parameter either.
 #[tokio::test]
 async fn a_multipart_field_name_cannot_inject_a_parameter() {
     let body = b"--X\r\nContent-Disposition: form-data; name=\"filter&equate_il\"\r\n\r\nx\r\n--X--\r\n".to_vec();
@@ -259,10 +255,8 @@ async fn a_multipart_field_name_cannot_inject_a_parameter() {
     assert!(!parameters.equate_il, "a flag the request never sent must not be set");
 }
 
-/// `input[]` still spells a repeated value.
-///
-/// The encoder percent-encodes the brackets, so this is the assertion that `QS` reads them back as
-/// array syntax rather than as a name with two odd characters in it.
+/// `input[]` still spells a repeated value: the encoder writes the brackets percent-encoded, and
+/// `QS` reads them back as array syntax.
 #[tokio::test]
 async fn a_multipart_bracket_name_is_still_an_array() {
     let mut body = b"--X\r\nContent-Disposition: form-data; name=\"input[]\"\r\n\r\nAALTER\r\n".to_vec();
@@ -273,13 +267,10 @@ async fn a_multipart_bracket_name_is_still_an_array() {
     assert_eq!(parameters.input, vec!["AALTER", "MKAAGGK"]);
 }
 
-/// A map key survives the rebuild too, which is the shape taxa2tree actually posts.
+/// The same for a map key, which is what taxa2tree's POST half sends.
 ///
-/// `PostParameters::counts` is a `HashMap<u32, usize>`, spelled `counts[8501]=3`. The encoder
-/// writes that key as `counts%5B8501%5D`, so it reaches the map only because the parser decodes a
-/// key before reading its brackets. Without that it names no field, `counts` deserialises empty,
-/// and the caller is answered `200` with a tree built from nothing. The `input[]` test above pins
-/// the same mechanism for a sequence; this pins it for the endpoint that depends on it.
+/// `counts[8501]=3` reaches its `HashMap` only because the key is decoded before its brackets are
+/// read. Without that, `counts` deserialises empty and the caller gets a tree built from nothing.
 #[tokio::test]
 async fn a_multipart_map_key_survives_the_querystring_rebuild() {
     #[derive(Debug, serde::Deserialize)]
@@ -346,13 +337,9 @@ async fn a_form_body_that_cannot_be_parsed_is_rejected() {
 
 /// A multipart name that looks like an escape is a name, not an escape.
 ///
-/// The form body above genuinely carries `%FF`, which is not a valid escape in that encoding and
-/// is refused. A multipart part is different: the name arrives already decoded, so `%FF` is five
-/// characters a client chose, and encoding it on the way into the rebuilt query string is what
-/// keeps it five characters. It matches no field and is ignored, like any unknown parameter.
-///
-/// This used to be a 422. That rejection was the bug rather than the contract — the raw name went
-/// into the query string and was read back as an escape that could not decode.
+/// A part's name arrives already decoded, so `%FF` is five characters a client chose: it matches no
+/// field and is ignored. The form body above is refused instead, because there the client really
+/// did send an invalid escape. This used to be a 422, which was the bug rather than the contract.
 #[tokio::test]
 async fn a_multipart_field_name_that_looks_like_an_escape_is_taken_literally() {
     let body = b"--X\r\nContent-Disposition: form-data; name=\"%FF\"\r\n\r\nv\r\n--X--\r\n".to_vec();

@@ -98,17 +98,14 @@ where
                 .await
                 .map_err(|_| (StatusCode::BAD_REQUEST, "could not read multipart field").into_response())?;
 
-            // Encoded here rather than concatenated, in the dialect `QS` reads. `text()` has
-            // already decoded this part, so appending it raw let a value carrying `&` become
-            // parameters of its own — a field holding `AALTER&equate_il=true` arrived as an input
-            // *and* a flag the request never sent — and let a `+` come back as a space. That is
-            // the bug `GetContent` describes above, reached from the other side: there by decoding
-            // too early, here by never encoding at all.
+            // Encoded rather than concatenated: `text()` has already decoded this part, so
+            // appending it raw let a value carrying `&` become parameters of its own and a `+`
+            // come back as a space. Same bug as `GetContent` describes above, from the other
+            // side — there by decoding too early, here by never encoding.
             //
-            // A serializer per field, rather than one over the loop: it is not `Send`, so holding
-            // one across the `await` above would make the whole future `!Send`. It takes the
-            // string it is given as encoded content already and appends to it, so the peak stays
-            // the size of one query string rather than that plus a vector of every part.
+            // One serializer per field: it is not `Send`, so holding one across the `await` above
+            // would make the whole future `!Send`. It appends to what it is given, so nothing is
+            // buffered twice.
             form_urlencoded::Serializer::new(&mut querystring).append_pair(&name, &value);
         }
 

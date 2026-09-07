@@ -230,9 +230,14 @@ async fn a_plus_in_a_multipart_value_is_not_a_space() {
 }
 
 /// The characters a query string gives meaning to survive the rebuild.
+///
+/// `%41` earns its place: it is a *valid* escape, so the raw string used to be decoded on the way
+/// back in and a filter reading `%41` silently became `A`. Nothing errored and nothing told the
+/// caller. `%FF` is the same shape with an invalid escape, which failed loudly instead — the two
+/// are worth pinning together, because only one of them was ever visible.
 #[tokio::test]
 async fn multipart_values_survive_the_querystring_rebuild() {
-    for value in ["a b", "100%", "a=b", "a&b", "é", "a[0]", "a+b"] {
+    for value in ["a b", "100%", "a=b", "a&b", "é", "a[0]", "a+b", "%41", "%FF", "%"] {
         let body =
             format!("--X\r\nContent-Disposition: form-data; name=\"filter\"\r\n\r\n{value}\r\n--X--\r\n").into_bytes();
 

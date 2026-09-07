@@ -79,7 +79,9 @@ where
         // panicked the handler rather than returning a status. Note that `text()` decodes lossily,
         // so a stray byte is replaced rather than rejected — it fails on the stream, not on
         // encoding.
-        let mut querystring = String::new();
+        // Collected rather than encoded as they arrive: `form_urlencoded::Serializer` is not
+        // `Send`, and holding one across the `await` below makes the whole future `!Send`.
+        let mut pairs: Vec<(String, String)> = Vec::new();
         loop {
             let field = multipart
                 .next_field()
@@ -98,8 +100,16 @@ where
                 .await
                 .map_err(|_| (StatusCode::BAD_REQUEST, "could not read multipart field").into_response())?;
 
-            querystring.push_str(&format!("{}={}&", name, value));
+            pairs.push((name, value));
         }
+
+        // Encoded rather than concatenated, in the dialect `QS` reads. `text()` has already
+        // decoded each part, so a value
+        // carrying `&` used to end up as parameters of its own — a field holding
+        // `AALTER&equate_il=true` arrived as an input *and* a flag the request never sent — and a
+        // `+` came back as a space. That is the bug `GetContent` describes above, reached from the
+        // other side: there by decoding too early, here by never encoding at all.
+        let querystring = form_urlencoded::Serializer::new(String::new()).extend_pairs(pairs).finish();
 
         Ok(Self(QS.deserialize_str(&querystring).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
     }

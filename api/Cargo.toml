@@ -10,6 +10,7 @@ axum = { version = "0.8.9", features = ["macros", "form", "multipart"] }
 clap = { version = "4.5.1", features = ["derive"] }
 database = { path = "../database" }
 datastore = { path = "../datastore" }
+form_urlencoded = "1.2.2"
 http-body-util = "0.1.2"
 index = { path = "../index" }
 paste = "1.0.15"

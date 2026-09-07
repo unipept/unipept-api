@@ -203,6 +203,71 @@ async fn an_encoded_separator_survives_an_encoded_bracket() {
     assert!(!parameters.equate_il, "a flag the request never sent must not be set");
 }
 
+/// A separator inside a multipart value stays inside that value.
+///
+/// The multipart branch rebuilds a query string out of its parts, and `text()` has already decoded
+/// them, so an `&` in a value used to become a real separator: one field arrived and two
+/// parameters came out. This is the same failure `an_encoded_separator_does_not_become_a_parameter`
+/// covers on the other two paths, which is why it belongs beside them.
+#[tokio::test]
+async fn an_encoded_separator_in_a_multipart_body_does_not_become_a_parameter() {
+    let body = b"--X\r\nContent-Disposition: form-data; name=\"input[]\"\r\n\r\nA&equate_il=true\r\n--X--\r\n".to_vec();
+
+    let parameters = post_bytes("multipart/form-data; boundary=X", body).await.expect("the value parses");
+
+    assert_eq!(parameters.input, vec!["A&equate_il=true"]);
+    assert!(!parameters.equate_il, "a flag the request never sent must not be set");
+}
+
+/// A `+` in a multipart value is a plus, not a space.
+#[tokio::test]
+async fn a_plus_in_a_multipart_value_is_not_a_space() {
+    let body = b"--X\r\nContent-Disposition: form-data; name=\"filter\"\r\n\r\na+b\r\n--X--\r\n".to_vec();
+
+    let parameters = post_bytes("multipart/form-data; boundary=X", body).await.expect("the value parses");
+
+    assert_eq!(parameters.filter, "a+b");
+}
+
+/// The characters a query string gives meaning to survive the rebuild.
+#[tokio::test]
+async fn multipart_values_survive_the_querystring_rebuild() {
+    for value in ["a b", "100%", "a=b", "a&b", "é", "a[0]", "a+b"] {
+        let body =
+            format!("--X\r\nContent-Disposition: form-data; name=\"filter\"\r\n\r\n{value}\r\n--X--\r\n").into_bytes();
+
+        let parameters = post_bytes("multipart/form-data; boundary=X", body)
+            .await
+            .unwrap_or_else(|status| panic!("{value:?} was rejected: {status}"));
+
+        assert_eq!(parameters.filter, value, "{value:?} did not survive the rebuild");
+    }
+}
+
+/// A field name carrying a separator cannot introduce a parameter either.
+#[tokio::test]
+async fn a_multipart_field_name_cannot_inject_a_parameter() {
+    let body = b"--X\r\nContent-Disposition: form-data; name=\"filter&equate_il\"\r\n\r\nx\r\n--X--\r\n".to_vec();
+
+    let parameters = post_bytes("multipart/form-data; boundary=X", body).await.expect("an odd name is not an error");
+
+    assert!(!parameters.equate_il, "a flag the request never sent must not be set");
+}
+
+/// `input[]` still spells a repeated value.
+///
+/// The encoder percent-encodes the brackets, so this is the assertion that `QS_FORM` reads them
+/// back as array syntax rather than as a name with two odd characters in it.
+#[tokio::test]
+async fn a_multipart_bracket_name_is_still_an_array() {
+    let mut body = b"--X\r\nContent-Disposition: form-data; name=\"input[]\"\r\n\r\nAALTER\r\n".to_vec();
+    body.extend_from_slice(b"--X\r\nContent-Disposition: form-data; name=\"input[]\"\r\n\r\nMKAAGGK\r\n--X--\r\n");
+
+    let parameters = post_bytes("multipart/form-data; boundary=X", body).await.expect("parses");
+
+    assert_eq!(parameters.input, vec!["AALTER", "MKAAGGK"]);
+}
+
 /// Ordinary encodings are unaffected: `%20` and `+` are still spaces, `%25` still a percent sign.
 #[tokio::test]
 async fn ordinary_percent_encoding_still_decodes() {
@@ -241,11 +306,22 @@ async fn a_form_body_that_cannot_be_parsed_is_rejected() {
     assert_eq!(post("application/x-www-form-urlencoded", "%FF=1").await, Err(StatusCode::UNPROCESSABLE_ENTITY));
 }
 
-/// The same for the query string rebuilt out of multipart parts.
+/// A multipart name that looks like an escape is a name, not an escape.
+///
+/// The form body above genuinely carries `%FF`, which is not a valid escape in that encoding and
+/// is refused. A multipart part is different: the name arrives already decoded, so `%FF` is five
+/// characters a client chose, and encoding it on the way into the rebuilt query string is what
+/// keeps it five characters. It matches no field and is ignored, like any unknown parameter.
+///
+/// This used to be a 422. That rejection was the bug rather than the contract — the raw name went
+/// into the query string and was read back as an escape that could not decode.
 #[tokio::test]
-async fn a_multipart_field_name_that_cannot_be_parsed_is_rejected() {
+async fn a_multipart_field_name_that_looks_like_an_escape_is_taken_literally() {
     let body = b"--X\r\nContent-Disposition: form-data; name=\"%FF\"\r\n\r\nv\r\n--X--\r\n".to_vec();
-    assert_eq!(post_bytes("multipart/form-data; boundary=X", body).await, Err(StatusCode::UNPROCESSABLE_ENTITY));
+
+    let parameters = post_bytes("multipart/form-data; boundary=X", body).await.expect("an odd name is not an error");
+
+    assert_eq!(parameters, Parameters { input: vec![], equate_il: false, filter: String::new() });
 }
 
 // The tests above only send well-formed input. These cover the boundary: query strings that parse

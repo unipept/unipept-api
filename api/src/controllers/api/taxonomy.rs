@@ -9,7 +9,7 @@ use crate::{
     controllers::{
         api::{default_descendants, default_descendants_ranks, default_extra, default_names},
         generate_handlers,
-        request::strict_bool
+        request::Flag
     },
     errors::{ApiError, ApiError::UnknownRankError},
     helpers::lineage_helper::{
@@ -23,12 +23,12 @@ use crate::{
 pub struct Parameters {
     #[serde(default)]
     input: Vec<u32>,
-    #[serde(default = "default_extra", deserialize_with = "strict_bool")]
-    extra: bool,
-    #[serde(default = "default_names", deserialize_with = "strict_bool")]
-    names: bool,
-    #[serde(default = "default_descendants", deserialize_with = "strict_bool")]
-    descendants: bool,
+    #[serde(default = "default_extra")]
+    extra: Flag,
+    #[serde(default = "default_names")]
+    names: Flag,
+    #[serde(default = "default_descendants")]
+    descendants: Flag,
     #[serde(default = "default_descendants_ranks")]
     descendants_ranks: Vec<String>
 }
@@ -83,7 +83,13 @@ fn get_children_at_rank(
 
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
-    Parameters { input, extra, names, descendants, descendants_ranks }: Parameters,
+    Parameters {
+        input,
+        extra: Flag(extra),
+        names: Flag(names),
+        descendants: Flag(descendants),
+        descendants_ranks
+    }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<TaxaInformation>, ApiError> {
     if input.is_empty() {

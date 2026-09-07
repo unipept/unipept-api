@@ -6,7 +6,7 @@ use crate::{
     controllers::{
         api::{default_cutoff, default_equate_il, default_extra, default_names, default_validate_taxa},
         generate_handlers,
-        request::strict_bool
+        request::Flag
     },
     errors::ApiError,
     helpers::{
@@ -24,14 +24,14 @@ use crate::{
 pub struct Parameters {
     #[serde(default)]
     input: Vec<String>,
-    #[serde(default = "default_equate_il", deserialize_with = "strict_bool")]
-    equate_il: bool,
-    #[serde(default = "default_extra", deserialize_with = "strict_bool")]
-    extra: bool,
-    #[serde(default = "default_names", deserialize_with = "strict_bool")]
-    names: bool,
-    #[serde(default = "default_validate_taxa", deserialize_with = "strict_bool")]
-    validate_taxa: bool,
+    #[serde(default = "default_equate_il")]
+    equate_il: Flag,
+    #[serde(default = "default_extra")]
+    extra: Flag,
+    #[serde(default = "default_names")]
+    names: Flag,
+    #[serde(default = "default_validate_taxa")]
+    validate_taxa: Flag,
     #[serde(default = "default_cutoff")]
     cutoff: usize
 }
@@ -55,7 +55,14 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, names, validate_taxa, cutoff }: Parameters,
+    Parameters {
+        input,
+        equate_il: Flag(equate_il),
+        extra: Flag(extra),
+        names: Flag(names),
+        validate_taxa: Flag(validate_taxa),
+        cutoff
+    }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<LcaInformation>, ApiError> {
     let input = sanitize_peptides(input);

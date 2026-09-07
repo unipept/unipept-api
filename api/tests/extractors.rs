@@ -12,7 +12,7 @@ use axum::{
     response::IntoResponse
 };
 use serde::Deserialize;
-use unipept_api::controllers::request::{GetContent, PostContent, strict_bool};
+use unipept_api::controllers::request::{Flag, GetContent, PostContent};
 
 // Shaped like a real controller's `Parameters`, `strict_bool` included. Without that attribute
 // this struct would be more permissive than any endpoint the API actually serves, and the tests
@@ -20,12 +20,16 @@ use unipept_api::controllers::request::{GetContent, PostContent, strict_bool};
 //
 // `filter` mirrors the private-api filters, which take a `String` where an empty one is a real
 // request. It is here so the empty-value rule can be pinned on both a boolean and a string.
+fn unset() -> Flag {
+    Flag(false)
+}
+
 #[derive(Debug, Deserialize, PartialEq)]
 struct Parameters {
     #[serde(default)]
     input: Vec<String>,
-    #[serde(default, deserialize_with = "strict_bool")]
-    equate_il: bool,
+    #[serde(default = "unset")]
+    equate_il: Flag,
     #[serde(default)]
     filter: String
 }
@@ -63,7 +67,7 @@ async fn a_query_string_parses() {
     let parameters = get("input[]=AALTER&input[]=AAKNER&equate_il=true").await.expect("a valid query string parses");
 
     assert_eq!(parameters.input, vec!["AALTER", "AAKNER"]);
-    assert!(parameters.equate_il);
+    assert!(parameters.equate_il.0);
 }
 
 /// The panic this change removes.
@@ -82,7 +86,7 @@ async fn an_empty_query_string_yields_the_defaults() {
     let parameters = get("").await.expect("an empty query string is not an error");
 
     assert!(parameters.input.is_empty());
-    assert!(!parameters.equate_il);
+    assert!(!parameters.equate_il.0);
 }
 
 /// All three body encodings, with more than one peptide.
@@ -94,7 +98,7 @@ async fn an_empty_query_string_yields_the_defaults() {
 async fn json_form_and_multipart_bodies_all_parse_to_the_same_parameters() {
     let expected = Parameters {
         input: vec!["AALTER".to_string(), "MKAAGGK".to_string()],
-        equate_il: true,
+        equate_il: Flag(true),
         filter: String::new()
     };
 
@@ -160,7 +164,7 @@ async fn an_encoded_separator_does_not_become_a_parameter() {
     let parameters = get("input[]=A%26equate_il%3Dtrue").await.expect("the value parses");
 
     assert_eq!(parameters.input, vec!["A&equate_il=true"]);
-    assert!(!parameters.equate_il, "a flag the request never sent must not be set");
+    assert!(!parameters.equate_il.0, "a flag the request never sent must not be set");
 }
 
 /// The same, on the form-encoded body path, which decoded its bytes the same way.
@@ -171,7 +175,7 @@ async fn an_encoded_separator_in_a_form_body_does_not_become_a_parameter() {
         .expect("the value parses");
 
     assert_eq!(parameters.input, vec!["A&equate_il=true"]);
-    assert!(!parameters.equate_il);
+    assert!(!parameters.equate_il.0);
 }
 
 /// Brackets a client encoded still spell an array.
@@ -204,7 +208,7 @@ async fn an_encoded_separator_survives_an_encoded_bracket() {
     let parameters = get("input%5B%5D=A%26equate_il%3Dtrue").await.expect("parses");
 
     assert_eq!(parameters.input, vec!["A&equate_il=true"]);
-    assert!(!parameters.equate_il, "a flag the request never sent must not be set");
+    assert!(!parameters.equate_il.0, "a flag the request never sent must not be set");
 }
 
 /// Ordinary encodings are unaffected: `%20` and `+` are still spaces, `%25` still a percent sign.
@@ -307,7 +311,7 @@ async fn a_flag_with_a_value_that_is_not_a_boolean_is_rejected() {
 async fn a_json_body_may_spell_a_boolean_as_a_string() {
     let parameters = post("application/json", r#"{"equate_il":"true"}"#).await.expect("a string spelling is taken");
 
-    assert!(parameters.equate_il);
+    assert!(parameters.equate_il.0);
 }
 
 #[tokio::test]
@@ -345,7 +349,7 @@ async fn an_empty_value_on_a_string_field_stays_empty() {
     let parameters = get("filter=").await.expect("an empty filter is a real request");
 
     assert_eq!(parameters.filter, "");
-    assert!(!parameters.equate_il, "an unrelated flag is untouched");
+    assert!(!parameters.equate_il.0, "an unrelated flag is untouched");
 }
 
 /// `input=A` repeated reaches the same list as `input[]=A`, so both spellings work.

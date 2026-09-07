@@ -9,7 +9,7 @@ use crate::{
     controllers::{
         api::default_link,
         generate_handlers,
-        request::{GetContent, PostContent, strict_bool},
+        request::{Flag, GetContent, PostContent},
         response::HtmlTemplate
     },
     errors::ApiError,
@@ -23,16 +23,16 @@ use crate::{
 pub struct GetParameters {
     #[serde(default)]
     input: Vec<u32>,
-    #[serde(default = "default_link", deserialize_with = "strict_bool")]
-    link: bool
+    #[serde(default = "default_link")]
+    link: Flag
 }
 
 #[derive(Deserialize)]
 pub struct PostParameters {
     #[serde(default)]
     counts: HashMap<u32, usize>,
-    #[serde(default = "default_link", deserialize_with = "strict_bool")]
-    link: bool
+    #[serde(default = "default_link")]
+    link: Flag
 }
 
 #[derive(Deserialize)]
@@ -69,8 +69,8 @@ fn handler(
     let lineage_store = datastore.lineage_store();
 
     let (frequencies, link) = match params {
-        Parameters::Get(GetParameters { input, link }) => (FrequencyTable::from_data(&input), link),
-        Parameters::Post(PostParameters { counts, link }) => (FrequencyTable::from_counts(counts), link)
+        Parameters::Get(GetParameters { input, link: Flag(link) }) => (FrequencyTable::from_data(&input), link),
+        Parameters::Post(PostParameters { counts, link: Flag(link) }) => (FrequencyTable::from_counts(counts), link)
     };
 
     let root = build_tree(frequencies, version, lineage_store, taxon_store);

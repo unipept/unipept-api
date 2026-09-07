@@ -11,7 +11,7 @@ use crate::{
         api::{default_cutoff, default_validate_taxa},
         generate_handlers,
         mpa::{default_equate_il, default_report_taxa, default_tryptic},
-        request::strict_bool
+        request::Flag
     },
     errors::ApiError,
     helpers::{
@@ -30,16 +30,16 @@ use crate::{
 pub struct Parameters {
     #[serde(default)]
     peptides: Vec<String>,
-    #[serde(default = "default_equate_il", deserialize_with = "strict_bool")]
-    equate_il: bool,
-    #[serde(default = "default_tryptic", deserialize_with = "strict_bool")]
-    tryptic: bool,
+    #[serde(default = "default_equate_il")]
+    equate_il: Flag,
+    #[serde(default = "default_tryptic")]
+    tryptic: Flag,
     #[serde(default = "default_cutoff")]
     cutoff: usize,
-    #[serde(default = "default_report_taxa", deserialize_with = "strict_bool")]
-    report_taxa: bool,
-    #[serde(default = "default_validate_taxa", deserialize_with = "strict_bool")]
-    validate_taxa: bool,
+    #[serde(default = "default_report_taxa")]
+    report_taxa: Flag,
+    #[serde(default = "default_validate_taxa")]
+    validate_taxa: Flag,
     filter: Option<Filter>
 }
 
@@ -74,11 +74,11 @@ async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters {
         mut peptides,
-        equate_il,
-        tryptic,
+        equate_il: Flag(equate_il),
+        tryptic: Flag(tryptic),
         cutoff,
-        report_taxa,
-        validate_taxa,
+        report_taxa: Flag(report_taxa),
+        validate_taxa: Flag(validate_taxa),
         filter
     }: Parameters
 ) -> Result<Data, ApiError> {

@@ -5,7 +5,7 @@ use axum::{
     response::{IntoResponse, Response}
 };
 use serde::{
-    Deserializer,
+    Deserialize, Deserializer, Serialize, Serializer,
     de::{self, DeserializeOwned, Visitor}
 };
 use serde_qs::{Config, DuplicateKeyBehavior};
@@ -22,6 +22,28 @@ use serde_qs::{Config, DuplicateKeyBehavior};
 /// a body and refused as a query string.
 const QS: Config = Config::new().duplicate_key_behavior(DuplicateKeyBehavior::Error).use_form_encoding(true);
 
+/// A boolean request parameter.
+///
+/// The strictness lives on the type rather than on 45 `deserialize_with` attributes. Every
+/// `default_*` function returns a `Flag`, so a parameter field declared `bool` does not compile.
+///
+/// No `Default` impl, deliberately. A bare `#[serde(default)]` would otherwise accept a `bool`
+/// field and lose that check, so every `Flag` field has to name a function that returns one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Flag(pub bool);
+
+impl<'de> Deserialize<'de> for Flag {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        strict_bool(deserializer).map(Flag)
+    }
+}
+
+impl Serialize for Flag {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_bool(self.0)
+    }
+}
+
 /// Reads a boolean parameter, accepting only `true` and `false`.
 ///
 /// The query-string parser reads `?tryptic=` and a bare `?tryptic` as `true`, which on a flag
@@ -30,7 +52,7 @@ const QS: Config = Config::new().duplicate_key_behavior(DuplicateKeyBehavior::Er
 /// Per field rather than in the extractor: `GetContent<T>` is generic and cannot know which of
 /// `T`'s fields are booleans, and refusing every empty value would refuse `filter=`, which the
 /// private-api filters take as a real request.
-pub fn strict_bool<'de, D: Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+fn strict_bool<'de, D: Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
     struct StrictBool;
 
     impl Visitor<'_> for StrictBool {

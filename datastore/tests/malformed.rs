@@ -231,16 +231,23 @@ fn blank_lines_are_skipped_by_every_store() {
     assert!(with_file("proteomes.tsv", "\n1\tUP1\t8501\t1\tP1\n\n", ReferenceProteomeStore::try_from_file).is_ok());
 }
 
+/// The proteome store reports its position the same way every other store does: as data on the
+/// variant, not formatted into a string a caller would have to parse back out.
 #[test]
-fn reference_proteome_parse_errors_name_their_line() {
+fn reference_proteome_parse_errors_carry_their_line() {
     let contents = "1\tUP1\t8501\t1\tP1\n2\tUP2\tnot-a-taxon\t1\tP2\n";
-    let result = outcome(with_file("proteomes.tsv", contents, ReferenceProteomeStore::try_from_file));
-
-    match result {
-        Err(error @ ReferenceProteomeStoreError::ParseError(_)) => {
-            assert!(error.to_string().contains("Line 2"), "got {error}");
+    match outcome(with_file("proteomes.tsv", contents, ReferenceProteomeStore::try_from_file)) {
+        Err(ReferenceProteomeStoreError::InvalidTaxonId { line, value }) => {
+            assert_eq!(line, 2);
+            assert_eq!(value, "not-a-taxon");
         }
-        other => panic!("expected a ParseError, got {other:?}")
+        other => panic!("expected InvalidTaxonId, got {other:?}")
+    }
+
+    let counts = "1\tUP1\t8501\tmany\tP1\n";
+    match outcome(with_file("proteomes.tsv", counts, ReferenceProteomeStore::try_from_file)) {
+        Err(ReferenceProteomeStoreError::InvalidProteinCount { value, .. }) => assert_eq!(value, "many"),
+        other => panic!("expected InvalidProteinCount, got {other:?}")
     }
 }
 

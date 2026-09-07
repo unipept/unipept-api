@@ -69,7 +69,11 @@ pub enum ReferenceProteomeStoreError {
     #[error("Error while parsing: {0}")]
     ParseError(String),
     #[error("Line {line}: expected {expected} columns, found {found}")]
-    UnexpectedColumnCount { line: usize, expected: usize, found: usize }
+    UnexpectedColumnCount { line: usize, expected: usize, found: usize },
+    #[error("Line {line}: `{value}` is not a taxon id")]
+    InvalidTaxonId { line: usize, value: String },
+    #[error("Line {line}: `{value}` is not a protein count")]
+    InvalidProteinCount { line: usize, value: String }
 }
 
 #[derive(Error, Debug)]
@@ -92,9 +96,7 @@ pub enum TaxonStoreError {
     IoError(#[from] std::io::Error),
     #[error("File not found: {0}")]
     FileNotFound(String),
-    #[error("Taxon id `{0}` not found in taxon store")]
-    InvalidTaxonError(#[from] std::num::ParseIntError),
-    #[error("Lineage rank `{0}` not found in lineage store")]
+    #[error("Unknown lineage rank `{0}`")]
     InvalidRankError(String),
     #[error("Line {line}: expected {expected} columns, found {found}")]
     UnexpectedColumnCount { line: usize, expected: usize, found: usize },

@@ -38,17 +38,12 @@ impl ReferenceProteomeStore {
                 });
             }
 
-            let taxon_id = parts[2].parse::<u32>().map_err(|_| {
-                ReferenceProteomeStoreError::ParseError(format!(
-                    "Line {line_number}: could not parse taxon ID: {}",
-                    parts[2]
-                ))
+            let taxon_id = parts[2].parse::<u32>().map_err(|_| ReferenceProteomeStoreError::InvalidTaxonId {
+                line: line_number,
+                value: parts[2].to_string()
             })?;
             let protein_count = parts[3].parse::<u32>().map_err(|_| {
-                ReferenceProteomeStoreError::ParseError(format!(
-                    "Line {line_number}: could not parse protein count: {}",
-                    parts[3]
-                ))
+                ReferenceProteomeStoreError::InvalidProteinCount { line: line_number, value: parts[3].to_string() }
             })?;
             let proteins = parts[4].to_string();
             mapper.insert(parts[1].to_string(), (taxon_id, protein_count, proteins));

@@ -171,8 +171,8 @@ async fn a_text_filter_matches_on_name_and_accession() {
     let server = MockServer::start_async().await;
     let mock = server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_search").json_body_partial(
-                r#"{ "query": { "bool": { "minimum_should_match": 1, "should": [
+            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0").json_body_partial(
+                r#"{ "track_total_hits": true, "query": { "bool": { "minimum_should_match": 1, "should": [
                    { "wildcard": { "name": { "value": "*croc*", "case_insensitive": true } } },
                    { "prefix": { "uniprot_accession_number": { "value": "croc", "case_insensitive": true } } }
                  ] } } }"#
@@ -199,8 +199,8 @@ async fn a_numeric_filter_also_matches_the_taxon_id() {
             // The whole `should` array is spelled out: a partial match compares arrays as a unit, and
             // the point of this test is that the numeric clause is *added* to the two text clauses
             // rather than replacing them.
-            when.method(POST).path("/uniprot_entries/_search").json_body_partial(
-                r#"{ "query": { "bool": { "minimum_should_match": 1, "should": [
+            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0").json_body_partial(
+                r#"{ "track_total_hits": true, "query": { "bool": { "minimum_should_match": 1, "should": [
                    { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
                    { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
                    { "match": { "taxon_id": { "query": 8501 } } }

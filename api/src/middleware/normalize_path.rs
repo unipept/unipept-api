@@ -88,8 +88,6 @@ where
 }
 
 fn normalize_uris(uri: &mut Uri) {
-    println!("{}", uri);
-
     // Normalize the path by removing consecutive slashes
     let normalized_path = uri.path().split('/').filter(|&segment| !segment.is_empty()).collect::<Vec<&str>>().join("/");
 

@@ -37,6 +37,9 @@ preloaded-mapping = ["index/preloaded-mapping"]
 
 [dev-dependencies]
 criterion = "0.5.1"
+fixtures = { path = "../fixtures", features = ["index-builder"] }
+tempfile = "3"
+tower = { version = "0.4.13", features = ["util"] }
 
 [[bench]]
 opt-level = 0

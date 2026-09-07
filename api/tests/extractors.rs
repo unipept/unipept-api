@@ -77,19 +77,28 @@ async fn an_empty_query_string_yields_the_defaults() {
     assert!(!parameters.equate_il);
 }
 
+/// All three body encodings, with more than one peptide.
+///
+/// Two values matter here rather than one: `input[]` repeats, and the multipart branch rebuilds a
+/// query string by concatenating parts, so a repeated name is the case where that reconstruction
+/// could collapse two values into one.
 #[tokio::test]
 async fn json_form_and_multipart_bodies_all_parse_to_the_same_parameters() {
-    let expected = Parameters { input: vec!["AALTER".to_string()], equate_il: true };
+    let expected = Parameters {
+        input: vec!["AALTER".to_string(), "MKAAGGK".to_string()],
+        equate_il: true
+    };
 
-    let json = post("application/json", r#"{"input":["AALTER"],"equate_il":true}"#).await;
+    let json = post("application/json", r#"{"input":["AALTER","MKAAGGK"],"equate_il":true}"#).await;
     assert_eq!(json.expect("json parses"), expected);
 
-    let form = post("application/x-www-form-urlencoded", "input[]=AALTER&equate_il=true").await;
+    let form = post("application/x-www-form-urlencoded", "input[]=AALTER&input[]=MKAAGGK&equate_il=true").await;
     assert_eq!(form.expect("urlencoded parses"), expected);
 
     let multipart = post(
         "multipart/form-data; boundary=X",
         "--X\r\nContent-Disposition: form-data; name=\"input[]\"\r\n\r\nAALTER\r\n\
+         --X\r\nContent-Disposition: form-data; name=\"input[]\"\r\n\r\nMKAAGGK\r\n\
          --X\r\nContent-Disposition: form-data; name=\"equate_il\"\r\n\r\ntrue\r\n\
          --X--\r\n"
     )

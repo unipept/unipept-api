@@ -209,3 +209,49 @@ async fn a_multipart_field_name_that_cannot_be_parsed_is_rejected() {
     let body = b"--X\r\nContent-Disposition: form-data; name=\"%FF\"\r\n\r\nv\r\n--X--\r\n".to_vec();
     assert_eq!(post_bytes("multipart/form-data; boundary=X", body).await, Err(StatusCode::UNPROCESSABLE_ENTITY));
 }
+
+// A parameter the API refuses is part of its contract just as much as one it accepts, and the
+// tests above only ever send well-formed input. These cover the boundary: query strings that
+// parse structurally but do not describe a request this API serves.
+
+/// A flag with an empty value is refused rather than treated as set.
+///
+/// `equate_il`, `tryptic` and `extra` are booleans, and `?equate_il=` names one without saying
+/// what to set it to. Reading that as `true` would switch on behaviour the caller never asked
+/// for, so it is a bad request instead.
+#[tokio::test]
+async fn a_flag_with_an_empty_value_is_rejected() {
+    assert_eq!(get("equate_il=").await, Err(StatusCode::BAD_REQUEST));
+}
+
+/// The same for a bare key, which carries no `=` at all.
+#[tokio::test]
+async fn a_flag_with_no_value_is_rejected() {
+    assert_eq!(get("equate_il").await, Err(StatusCode::BAD_REQUEST));
+}
+
+/// A repeated key without brackets is refused rather than collected into the list.
+///
+/// `input[]=A&input[]=B` is how several peptides are sent, and it is covered above. `input=A`
+/// repeated is a different query, and accepting it as the same list would make the bracket
+/// syntax optional — a wider contract than the API means to offer.
+#[tokio::test]
+async fn a_repeated_key_without_brackets_is_rejected() {
+    assert_eq!(get("input=AALTER&input=AAKNER").await, Err(StatusCode::BAD_REQUEST));
+}
+
+/// A flag sent twice is refused rather than resolved to one of the two.
+///
+/// A request that sets `equate_il` both ways states no intention worth guessing at, and either
+/// choice would be silent. It is refused so the caller hears about it.
+#[tokio::test]
+async fn a_flag_sent_twice_is_rejected() {
+    assert_eq!(get("equate_il=true&equate_il=false").await, Err(StatusCode::BAD_REQUEST));
+}
+
+/// The form-encoded body is parsed from bytes rather than from the URI, so it gets its own
+/// assertion: the same input must not be accepted on one path and refused on another.
+#[tokio::test]
+async fn a_flag_with_an_empty_value_is_rejected_in_a_form_body() {
+    assert_eq!(post("application/x-www-form-urlencoded", "equate_il=").await, Err(StatusCode::UNPROCESSABLE_ENTITY));
+}

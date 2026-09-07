@@ -18,7 +18,9 @@ impl EcStore {
         for (index, line) in BufReader::new(file).lines().enumerate() {
             let line = line?;
 
-            if line.trim().is_empty() {
+            // Only a truly empty line: `trim()` would also erase a row of nothing but tabs, and
+            // a row of delimiters is malformed input rather than an absence of input.
+            if line.is_empty() {
                 continue;
             }
 

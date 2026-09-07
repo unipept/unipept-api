@@ -243,3 +243,46 @@ fn reference_proteome_parse_errors_name_their_line() {
         other => panic!("expected a ParseError, got {other:?}")
     }
 }
+
+/// A row of delimiters is a row, not a blank line.
+///
+/// This is the case a `trim()` before the emptiness check swallowed: tabs trim to nothing, the row
+/// vanished, and the silent drop this policy exists to remove came back. Each loader keeps its own
+/// copy of the carve-out, so each is checked.
+///
+/// The rows below are one delimiter short of each store's width, so they fail the width check. A
+/// delimiter row of the *right* width is a separate matter: `taxons` and `proteomes` still reject
+/// it because their numeric columns are empty, while `ec`, `go` and `interpro` parse no fields and
+/// accept it as a row with an empty key.
+#[test]
+fn a_row_of_only_delimiters_is_rejected_by_every_store() {
+    let taxons = outcome(with_file("taxons.tsv", "\t\t\t\n", TaxonStore::try_from_file));
+    assert!(matches!(taxons, Err(TaxonStoreError::UnexpectedColumnCount { found: 4, .. })), "taxons: {taxons:?}");
+
+    let ec = outcome(with_file("ec.tsv", "\t\n", EcStore::try_from_file));
+    assert!(matches!(ec, Err(EcStoreError::UnexpectedColumnCount { found: 2, .. })), "ec: {ec:?}");
+
+    let go = outcome(with_file("go.tsv", "\t\t\n", GoStore::try_from_file));
+    assert!(matches!(go, Err(GoStoreError::UnexpectedColumnCount { found: 3, .. })), "go: {go:?}");
+
+    let ipr = outcome(with_file("ipr.tsv", "\t\t\n", InterproStore::try_from_file));
+    assert!(matches!(ipr, Err(InterproStoreError::UnexpectedColumnCount { found: 3, .. })), "interpro: {ipr:?}");
+
+    let prot = outcome(with_file("proteomes.tsv", "\t\t\t\n", ReferenceProteomeStore::try_from_file));
+    assert!(matches!(prot, Err(ReferenceProteomeStoreError::UnexpectedColumnCount { found: 4, .. })), "{prot:?}");
+}
+
+/// A trailing delimiter is a sixth, empty column — not whitespace to be trimmed away.
+///
+/// The loader used to `trim_end()` the line before splitting it, and a tab is whitespace, so a row
+/// with one delimiter too many arrived looking exactly like a well-formed one.
+#[test]
+fn a_trailing_delimiter_is_counted_as_a_column() {
+    let row = format!("{}\t\n", taxon_row(1, "root", "no rank", true));
+    let result = outcome(with_file("taxons.tsv", &row, TaxonStore::try_from_file));
+
+    match result {
+        Err(TaxonStoreError::UnexpectedColumnCount { found, .. }) => assert_eq!(found, 6),
+        other => panic!("expected UnexpectedColumnCount with six columns, got {other:?}")
+    }
+}

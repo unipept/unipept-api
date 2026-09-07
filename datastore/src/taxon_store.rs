@@ -61,11 +61,16 @@ impl TaxonStore {
             let line = line?;
             let line_number = index + 1;
 
-            if line.trim().is_empty() {
+            // Only a truly empty line: `trim()` would also erase a row of nothing but tabs, and
+            // a row of delimiters is malformed input rather than an absence of input.
+            if line.is_empty() {
                 continue;
             }
 
-            let parts: Vec<&str> = line.trim_end().split('\t').collect();
+            // Not trimmed before splitting: `trim_end` would eat a trailing delimiter and let a
+            // six-column row pass as five. `lines()` has already removed the newline, CRLF
+            // included, and neither validity byte is whitespace, so there is nothing left to trim.
+            let parts: Vec<&str> = line.split('\t').collect();
             if parts.len() != 5 {
                 return Err(TaxonStoreError::UnexpectedColumnCount {
                     line: line_number,

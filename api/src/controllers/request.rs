@@ -5,6 +5,18 @@ use axum::{
     response::{IntoResponse, Response}
 };
 use serde::de::DeserializeOwned;
+use serde_qs::{Config, DuplicateKeyBehavior};
+
+/// The query-string parser every body path shares.
+///
+/// `DuplicateKeyBehavior::Error` is the whole reason this is a `Config` rather than the free
+/// functions: the default takes the last of a repeated scalar, so `?tryptic=true&tryptic=false`
+/// would silently resolve to one of the two. A request that states a flag both ways states no
+/// intention worth guessing at, and is refused.
+///
+/// Shared by all three paths deliberately. Parsing that differs by content type is a way for the
+/// same request to be accepted as a form body and refused as a query string.
+const QS: Config = Config::new().duplicate_key_behavior(DuplicateKeyBehavior::Error);
 
 pub struct GetContent<T>(pub T);
 
@@ -24,7 +36,7 @@ where
         // that value. Decoding the whole string first turned `filter=A%26equate_il%3Dtrue` into two
         // parameters and let a request set a flag it never sent. Invalid UTF-8 comes back as a
         // deserialisation error rather than a panic, which is what the unwrap here used to be.
-        Ok(Self(serde_qs::from_str(query).map_err(|_| (StatusCode::BAD_REQUEST, "invalid query string"))?))
+        Ok(Self(QS.deserialize_str(query).map_err(|_| (StatusCode::BAD_REQUEST, "invalid query string"))?))
     }
 }
 
@@ -45,7 +57,7 @@ where
             .map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body").into_response())?;
 
         // Undecoded, for the same reason as `GetContent` above.
-        Ok(Self(serde_qs::from_bytes(&form).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
+        Ok(Self(QS.deserialize_bytes(&form).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
     }
 }
 
@@ -91,7 +103,7 @@ where
             querystring.push_str(&format!("{}={}&", name, value));
         }
 
-        Ok(Self(serde_qs::from_str(&querystring).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
+        Ok(Self(QS.deserialize_str(&querystring).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
     }
 }
 

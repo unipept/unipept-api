@@ -127,3 +127,35 @@ async fn a_content_type_the_extractor_does_not_handle_is_unsupported_media_type(
     assert_eq!(post("text/plain", "input[]=AALTER").await, Err(StatusCode::UNSUPPORTED_MEDIA_TYPE));
     assert_eq!(post("", "input[]=AALTER").await, Err(StatusCode::UNSUPPORTED_MEDIA_TYPE));
 }
+
+/// A separator encoded inside a value stays inside that value.
+///
+/// The query string used to be percent-decoded in full before `serde_qs` split it, so an encoded
+/// `&` became a real one and everything after it turned into parameters of its own. A request
+/// sending a single value could set flags it never mentioned.
+#[tokio::test]
+async fn an_encoded_separator_does_not_become_a_parameter() {
+    let parameters = get("input[]=A%26equate_il%3Dtrue").await.expect("the value parses");
+
+    assert_eq!(parameters.input, vec!["A&equate_il=true"]);
+    assert!(!parameters.equate_il, "a flag the request never sent must not be set");
+}
+
+/// The same, on the form-encoded body path, which decoded its bytes the same way.
+#[tokio::test]
+async fn an_encoded_separator_in_a_form_body_does_not_become_a_parameter() {
+    let parameters = post("application/x-www-form-urlencoded", "input[]=A%26equate_il%3Dtrue")
+        .await
+        .expect("the value parses");
+
+    assert_eq!(parameters.input, vec!["A&equate_il=true"]);
+    assert!(!parameters.equate_il);
+}
+
+/// Ordinary encodings are unaffected: `%20` and `+` are still spaces, `%25` still a percent sign.
+#[tokio::test]
+async fn ordinary_percent_encoding_still_decodes() {
+    assert_eq!(get("input[]=a%20b").await.expect("parses").input, vec!["a b"]);
+    assert_eq!(get("input[]=a+b").await.expect("parses").input, vec!["a b"]);
+    assert_eq!(get("input[]=100%25").await.expect("parses").input, vec!["100%"]);
+}

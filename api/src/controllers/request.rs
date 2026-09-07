@@ -19,12 +19,12 @@ where
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let query = parts.uri.query().unwrap_or_default();
 
-        // A percent escape that does not decode to UTF-8 — `%FF`, say — is client input, not an
-        // impossible state: this used to unwrap, so the request took the handler down with it.
-        let decoded =
-            urlencoding::decode(query).map_err(|_| (StatusCode::BAD_REQUEST, "invalid query string encoding"))?;
-
-        Ok(Self(serde_qs::from_str(&decoded).map_err(|_| (StatusCode::BAD_REQUEST, "invalid query string"))?))
+        // Handed to `serde_qs` still encoded, deliberately. It percent-decodes each key and value
+        // *after* splitting on `&` and `=`, so a separator encoded inside a value stays part of
+        // that value. Decoding the whole string first turned `filter=A%26equate_il%3Dtrue` into two
+        // parameters and let a request set a flag it never sent. Invalid UTF-8 comes back as a
+        // deserialisation error rather than a panic, which is what the unwrap here used to be.
+        Ok(Self(serde_qs::from_str(query).map_err(|_| (StatusCode::BAD_REQUEST, "invalid query string"))?))
     }
 }
 
@@ -44,10 +44,8 @@ where
             .await
             .map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body").into_response())?;
 
-        let form_bytes = form.to_vec();
-        let decoded_bytes = urlencoding::decode_binary(&form_bytes);
-
-        Ok(Self(serde_qs::from_bytes(&decoded_bytes).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
+        // Undecoded, for the same reason as `GetContent` above.
+        Ok(Self(serde_qs::from_bytes(&form).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
     }
 }
 

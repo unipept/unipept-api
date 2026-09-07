@@ -261,8 +261,8 @@ async fn a_multipart_field_name_cannot_inject_a_parameter() {
 
 /// `input[]` still spells a repeated value.
 ///
-/// The encoder percent-encodes the brackets, so this is the assertion that `QS_FORM` reads them
-/// back as array syntax rather than as a name with two odd characters in it.
+/// The encoder percent-encodes the brackets, so this is the assertion that `QS` reads them back as
+/// array syntax rather than as a name with two odd characters in it.
 #[tokio::test]
 async fn a_multipart_bracket_name_is_still_an_array() {
     let mut body = b"--X\r\nContent-Disposition: form-data; name=\"input[]\"\r\n\r\nAALTER\r\n".to_vec();
@@ -271,6 +271,39 @@ async fn a_multipart_bracket_name_is_still_an_array() {
     let parameters = post_bytes("multipart/form-data; boundary=X", body).await.expect("parses");
 
     assert_eq!(parameters.input, vec!["AALTER", "MKAAGGK"]);
+}
+
+/// A map key survives the rebuild too, which is the shape taxa2tree actually posts.
+///
+/// `PostParameters::counts` is a `HashMap<u32, usize>`, spelled `counts[8501]=3`. The encoder
+/// writes that key as `counts%5B8501%5D`, so it reaches the map only because the parser decodes a
+/// key before reading its brackets. Without that it names no field, `counts` deserialises empty,
+/// and the caller is answered `200` with a tree built from nothing. The `input[]` test above pins
+/// the same mechanism for a sequence; this pins it for the endpoint that depends on it.
+#[tokio::test]
+async fn a_multipart_map_key_survives_the_querystring_rebuild() {
+    #[derive(Debug, serde::Deserialize)]
+    struct Counted {
+        #[serde(default)]
+        counts: std::collections::HashMap<u32, usize>
+    }
+
+    let mut body = b"--X\r\nContent-Disposition: form-data; name=\"counts[8501]\"\r\n\r\n3\r\n".to_vec();
+    body.extend_from_slice(b"--X\r\nContent-Disposition: form-data; name=\"counts[8502]\"\r\n\r\n5\r\n--X--\r\n");
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/taxa2tree")
+        .header(CONTENT_TYPE, "multipart/form-data; boundary=X")
+        .body(Body::from(body))
+        .unwrap();
+
+    let PostContent(parameters) = PostContent::<Counted>::from_request(request, &())
+        .await
+        .unwrap_or_else(|_| panic!("the counts parse"));
+
+    assert_eq!(parameters.counts.get(&8501), Some(&3));
+    assert_eq!(parameters.counts.get(&8502), Some(&5));
 }
 
 /// Ordinary encodings are unaffected: `%20` and `+` are still spaces, `%25` still a percent sign.

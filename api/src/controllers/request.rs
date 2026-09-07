@@ -79,9 +79,7 @@ where
         // panicked the handler rather than returning a status. Note that `text()` decodes lossily,
         // so a stray byte is replaced rather than rejected — it fails on the stream, not on
         // encoding.
-        // Collected rather than encoded as they arrive: `form_urlencoded::Serializer` is not
-        // `Send`, and holding one across the `await` below makes the whole future `!Send`.
-        let mut pairs: Vec<(String, String)> = Vec::new();
+        let mut querystring = String::new();
         loop {
             let field = multipart
                 .next_field()
@@ -100,16 +98,19 @@ where
                 .await
                 .map_err(|_| (StatusCode::BAD_REQUEST, "could not read multipart field").into_response())?;
 
-            pairs.push((name, value));
+            // Encoded here rather than concatenated, in the dialect `QS` reads. `text()` has
+            // already decoded this part, so appending it raw let a value carrying `&` become
+            // parameters of its own — a field holding `AALTER&equate_il=true` arrived as an input
+            // *and* a flag the request never sent — and let a `+` come back as a space. That is
+            // the bug `GetContent` describes above, reached from the other side: there by decoding
+            // too early, here by never encoding at all.
+            //
+            // A serializer per field, rather than one over the loop: it is not `Send`, so holding
+            // one across the `await` above would make the whole future `!Send`. It takes the
+            // string it is given as encoded content already and appends to it, so the peak stays
+            // the size of one query string rather than that plus a vector of every part.
+            form_urlencoded::Serializer::new(&mut querystring).append_pair(&name, &value);
         }
-
-        // Encoded rather than concatenated, in the dialect `QS` reads. `text()` has already
-        // decoded each part, so a value
-        // carrying `&` used to end up as parameters of its own — a field holding
-        // `AALTER&equate_il=true` arrived as an input *and* a flag the request never sent — and a
-        // `+` came back as a space. That is the bug `GetContent` describes above, reached from the
-        // other side: there by decoding too early, here by never encoding at all.
-        let querystring = form_urlencoded::Serializer::new(String::new()).extend_pairs(pairs).finish();
 
         Ok(Self(QS.deserialize_str(&querystring).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
     }

@@ -11,6 +11,14 @@ members = [
     "index"
 ]
 
+# fixtures is test-only: kept out of the default set so a release build never compiles it.
+default-members = [
+    "api",
+    "database",
+    "datastore",
+    "index"
+]
+
 # The floor the unipept-index dependency already imposes; 1.87 is refused outright.
 [workspace.package]
 edition = "2024"

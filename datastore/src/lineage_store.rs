@@ -208,3 +208,93 @@ impl LineageStore {
             .map(|map| map.keys().cloned().collect())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const RANK_KEYS: [&str; 28] = [
+        "domain",
+        "realm",
+        "kingdom",
+        "subkingdom",
+        "superphylum",
+        "phylum",
+        "subphylum",
+        "superclass",
+        "class",
+        "subclass",
+        "superorder",
+        "order",
+        "suborder",
+        "infraorder",
+        "superfamily",
+        "family",
+        "subfamily",
+        "tribe",
+        "subtribe",
+        "genus",
+        "subgenus",
+        "species_group",
+        "species_subgroup",
+        "species",
+        "subspecies",
+        "strain",
+        "varietas",
+        "forma"
+    ];
+
+    /// The rank names index the lineage columns in order, and each one reads back its own column.
+    ///
+    /// `rank_to_idx` and `get_taxon_id_at_rank` are two hand-written tables over the same 28 ranks,
+    /// listed in the same order, and nothing else checks that they agree with each other or with
+    /// the column order the parser fills.
+    #[test]
+    fn every_rank_key_addresses_its_own_column() {
+        let mut lineage = Lineage::default();
+        let fields: [&mut Option<i32>; 28] = [
+            &mut lineage.domain,
+            &mut lineage.realm,
+            &mut lineage.kingdom,
+            &mut lineage.subkingdom,
+            &mut lineage.superphylum,
+            &mut lineage.phylum,
+            &mut lineage.subphylum,
+            &mut lineage.superclass,
+            &mut lineage.class,
+            &mut lineage.subclass,
+            &mut lineage.superorder,
+            &mut lineage.order,
+            &mut lineage.suborder,
+            &mut lineage.infraorder,
+            &mut lineage.superfamily,
+            &mut lineage.family,
+            &mut lineage.subfamily,
+            &mut lineage.tribe,
+            &mut lineage.subtribe,
+            &mut lineage.genus,
+            &mut lineage.subgenus,
+            &mut lineage.species_group,
+            &mut lineage.species_subgroup,
+            &mut lineage.species,
+            &mut lineage.subspecies,
+            &mut lineage.strain,
+            &mut lineage.varietas,
+            &mut lineage.forma
+        ];
+        for (position, field) in fields.into_iter().enumerate() {
+            *field = Some(position as i32 + 1000);
+        }
+
+        for (position, key) in RANK_KEYS.iter().enumerate() {
+            assert_eq!(LineageStore::rank_to_idx(key), Some(position), "rank_to_idx({key})");
+            assert_eq!(lineage.get_taxon_id_at_rank(key), Some(position as i32 + 1000), "get_taxon_id_at_rank({key})");
+        }
+    }
+
+    #[test]
+    fn an_unknown_rank_key_addresses_nothing() {
+        assert_eq!(LineageStore::rank_to_idx("nonsense"), None);
+        assert_eq!(Lineage::default().get_taxon_id_at_rank("nonsense"), None);
+    }
+}

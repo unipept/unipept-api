@@ -159,3 +159,59 @@ impl From<LineageRank> for String {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ALL_RANKS: [LineageRank; 29] = [
+        LineageRank::NoRank,
+        LineageRank::Domain,
+        LineageRank::Realm,
+        LineageRank::Kingdom,
+        LineageRank::Subkingdom,
+        LineageRank::Superphylum,
+        LineageRank::Phylum,
+        LineageRank::Subphylum,
+        LineageRank::Superclass,
+        LineageRank::Class,
+        LineageRank::Subclass,
+        LineageRank::Superorder,
+        LineageRank::Order,
+        LineageRank::Suborder,
+        LineageRank::Infraorder,
+        LineageRank::Superfamily,
+        LineageRank::Family,
+        LineageRank::Subfamily,
+        LineageRank::Tribe,
+        LineageRank::Subtribe,
+        LineageRank::Genus,
+        LineageRank::Subgenus,
+        LineageRank::SpeciesGroup,
+        LineageRank::SpeciesSubgroup,
+        LineageRank::Species,
+        LineageRank::Subspecies,
+        LineageRank::Strain,
+        LineageRank::Varietas,
+        LineageRank::Forma
+    ];
+
+    /// Every rank survives a trip through its string form and back.
+    ///
+    /// The two directions are written out as separate 29-arm tables, so nothing but this stops one
+    /// gaining a rank the other does not have — and a rank that fails to round-trip is one the
+    /// taxon table can hold and the parser cannot read back.
+    #[test]
+    fn every_rank_round_trips_through_its_string_form() {
+        for rank in ALL_RANKS {
+            let text: String = rank.clone().into();
+            let parsed: LineageRank = text.parse().unwrap_or_else(|_| panic!("`{text}` does not parse back"));
+            assert_eq!(parsed, rank, "`{text}` parsed as a different rank");
+        }
+    }
+
+    #[test]
+    fn an_unknown_rank_string_is_rejected() {
+        assert!("not a rank".parse::<LineageRank>().is_err());
+    }
+}

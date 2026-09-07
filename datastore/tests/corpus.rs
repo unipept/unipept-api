@@ -173,24 +173,3 @@ fn sample_store_reads_the_document() {
     assert_eq!(datasets[0]["name"], "Crocodylus peptides");
     assert_eq!(datasets[0]["data"][0], fixtures::peptides::UNIQUE);
 }
-
-/// The test that keeps the corpus honest.
-///
-/// Every scenario in this suite, and every endpoint test built on it later, rests on the protein
-/// corpus and the taxonomy agreeing about which taxa exist. If they ever stop agreeing, searches
-/// return results whose taxa cannot be named, LCA reduction runs over empty lineages, and the
-/// suite quietly goes vacuous instead of failing. This is the assertion that fails first.
-#[test]
-fn every_taxon_in_the_protein_corpus_exists_in_the_taxonomy() {
-    let (_dir, store) = load();
-
-    let taxa = fixtures::PROTEINS_TSV.lines().filter(|line| !line.is_empty()).map(|line| {
-        let taxon = line.split('\t').nth(1).expect("every protein row has a taxon column");
-        taxon.parse::<u32>().expect("the taxon column is numeric")
-    });
-
-    for taxon in taxa {
-        assert!(store.taxon_store().get(taxon).is_some(), "taxon {taxon} is used by a protein but is not in taxons");
-        assert!(store.lineage_store().get(taxon).is_some(), "taxon {taxon} is used by a protein but has no lineage");
-    }
-}

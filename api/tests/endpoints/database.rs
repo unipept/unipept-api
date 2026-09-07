@@ -34,3 +34,20 @@ pub async fn get_against(server: &MockServer, path: &str) -> (StatusCode, Value)
     drop(dir);
     answered
 }
+
+/// The taxon the corpus gives an accession.
+///
+/// Mocks that invent a taxon assert over the corpus rather than against it: a row attributing one
+/// species' protein to another would look correct.
+pub fn taxon_of(accession: &str) -> u32 {
+    fixtures::PROTEINS_TSV
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .find_map(|line| {
+            let mut fields = line.split('\t');
+            (fields.next() == Some(accession)).then(|| fields.next().expect("a taxon column"))
+        })
+        .unwrap_or_else(|| panic!("{accession} is not in the corpus"))
+        .parse()
+        .expect("the taxon column is numeric")
+}

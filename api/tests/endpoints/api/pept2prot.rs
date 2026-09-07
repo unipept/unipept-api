@@ -16,7 +16,7 @@ use serde_json::json;
 
 use crate::{
     common::{request_raw, test_state},
-    database::{get_against, source}
+    database::{get_against, source, taxon_of}
 };
 
 /// A cluster that answers for every accession the corpus declares.
@@ -26,10 +26,17 @@ async fn cluster_holding_the_corpus() -> MockServer {
         .mock_async(|when, then| {
             when.method(POST).path("/uniprot_entries/_mget");
             then.status(200).json_body(json!({
+                // The taxon comes from the corpus rather than a constant, so a row attributing
+                // one species' protein to another cannot pass.
                 "docs": fixtures::ACCESSIONS
                     .iter()
                     .map(|accession| json!({
-                        "_source": source(accession, 8501, "Corpus protein", "EC:1.1.1.1;GO:0009279;IPR:IPR016364")
+                        "_source": source(
+                            accession,
+                            taxon_of(accession),
+                            "Corpus protein",
+                            "EC:1.1.1.1;GO:0009279;IPR:IPR016364"
+                        )
                     }))
                     .collect::<Vec<_>>()
             }));
@@ -70,7 +77,8 @@ async fn extra_names_the_taxon_and_separates_the_annotations() {
     assert_eq!(body[0]["interpro_references"], "IPR016364", "prefix dropped, unlike the other two");
 }
 
-/// A peptide reaching two proteins gets a row for each.
+/// A peptide reaching two proteins gets a row for each, and each row carries that protein's own
+/// taxon — P00001 belongs to *C. niloticus* and P00003 to *C. porosus*.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_shared_peptide_returns_a_row_per_protein() {
     let server = cluster_holding_the_corpus().await;
@@ -78,14 +86,15 @@ async fn a_shared_peptide_returns_a_row_per_protein() {
 
     assert_eq!(status, StatusCode::OK);
 
-    let mut accessions: Vec<&str> = body
+    let mut rows: Vec<(&str, u64)> = body
         .as_array()
         .expect("rows")
         .iter()
-        .map(|row| row["uniprot_id"].as_str().expect("an id"))
+        .map(|row| (row["uniprot_id"].as_str().expect("an id"), row["taxon_id"].as_u64().expect("a taxon")))
         .collect();
-    accessions.sort_unstable();
-    assert_eq!(accessions, vec!["P00001", "P00003"]);
+    rows.sort_unstable();
+
+    assert_eq!(rows, vec![("P00001", 8501), ("P00003", 8502)], "each row keeps its own taxon");
 }
 
 /// A protein the index knows and the cluster does not is left out rather than failing the request.
@@ -149,8 +158,9 @@ async fn a_failing_cluster_fails_the_request() {
 async fn tryptic_results_are_a_subset_of_untryptic_ones() {
     let server = cluster_holding_the_corpus().await;
 
-    let (_, all) = get_against(&server, &format!("/api/v2/pept2prot?input[]={COMMON}")).await;
+    let (unfiltered_status, all) = get_against(&server, &format!("/api/v2/pept2prot?input[]={COMMON}")).await;
     let (status, tryptic) = get_against(&server, &format!("/api/v2/pept2prot?input[]={COMMON}&tryptic=true")).await;
+    assert_eq!(unfiltered_status, StatusCode::OK);
     assert_eq!(status, StatusCode::OK);
 
     let accessions = |value: &serde_json::Value| -> std::collections::BTreeSet<String> {
@@ -172,9 +182,10 @@ async fn tryptic_results_are_a_subset_of_untryptic_ones() {
 async fn a_cutoff_is_reported_on_every_row() {
     let server = cluster_holding_the_corpus().await;
 
-    let (_, uncapped) = get_against(&server, &format!("/api/v2/pept2prot?input[]={COMMON}")).await;
+    let (uncapped_status, uncapped) = get_against(&server, &format!("/api/v2/pept2prot?input[]={COMMON}")).await;
     let (status, capped) = get_against(&server, &format!("/api/v2/pept2prot?input[]={COMMON}&cutoff=2")).await;
 
+    assert_eq!(uncapped_status, StatusCode::OK);
     assert_eq!(status, StatusCode::OK);
     assert!(uncapped.as_array().expect("rows").iter().all(|row| row["cutoff_used"] == false));
     assert!(capped.as_array().expect("rows").iter().all(|row| row["cutoff_used"] == true));
@@ -189,10 +200,12 @@ async fn a_cutoff_is_reported_on_every_row() {
 async fn equate_il_reaches_a_second_protein() {
     let server = cluster_holding_the_corpus().await;
 
-    let (_, apart) = get_against(&server, &format!("/api/v2/pept2prot?input[]={IL_ISOLEUCINE}&equate_il=false")).await;
+    let (apart_status, apart) =
+        get_against(&server, &format!("/api/v2/pept2prot?input[]={IL_ISOLEUCINE}&equate_il=false")).await;
     let (status, together) =
         get_against(&server, &format!("/api/v2/pept2prot?input[]={IL_ISOLEUCINE}&equate_il=true")).await;
 
+    assert_eq!(apart_status, StatusCode::OK);
     assert_eq!(status, StatusCode::OK);
     assert_eq!(apart.as_array().map(Vec::len), Some(1));
     assert_eq!(together.as_array().map(Vec::len), Some(2));

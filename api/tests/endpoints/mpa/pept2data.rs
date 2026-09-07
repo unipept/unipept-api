@@ -62,3 +62,118 @@ async fn a_cutoff_is_reported_on_the_result() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(capped["peptides"][0]["cutoff_used"], true);
 }
+
+// ── the filter parameter ─────────────────────────────────────────────────────────────────────────
+//
+// `filter` picks one of three `UniprotFilter` implementations, or none. It is the only parameter
+// here that changes which *proteins* contribute rather than how they are reported, so its effect
+// shows up twice: in the taxa a peptide reports, and in the LCA those taxa reduce to.
+//
+// `COMMON` is the peptide with something to filter — seven proteins across six taxa.
+
+/// The taxa a peptide reports under a given filter, sorted.
+async fn taxa_under(filter: serde_json::Value) -> Vec<u64> {
+    let mut body = json!({ "peptides": [COMMON], "report_taxa": true });
+    if !filter.is_null() {
+        body["filter"] = filter;
+    }
+
+    let (status, answered) = post_json("/mpa/pept2data", body).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let mut taxa: Vec<u64> = answered["peptides"][0]["taxa"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no taxa in {}", answered["peptides"][0]))
+        .iter()
+        .map(|taxon| taxon.as_u64().expect("an id"))
+        .collect();
+    taxa.sort_unstable();
+    taxa
+}
+
+/// No filter keeps every protein the search found.
+#[tokio::test(flavor = "multi_thread")]
+async fn without_a_filter_every_taxon_is_reported() {
+    assert_eq!(taxa_under(serde_json::Value::Null).await, vec![7, 9, 8501, 8502, 8503, 9503]);
+}
+
+/// A taxon filter matches on the whole lineage, not on the protein's own taxon: asking for the
+/// genus keeps the three *Crocodylus* species beneath it and drops everything else.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_taxon_filter_keeps_the_descendants_of_what_it_names() {
+    assert_eq!(taxa_under(json!({ "taxa": [8500] })).await, vec![8501, 8502, 8503]);
+}
+
+/// Narrowing the filter narrows the answer, and the LCA follows it down.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_narrower_taxon_filter_moves_the_lca_deeper() {
+    let genus = post_json("/mpa/pept2data", json!({ "peptides": [COMMON], "filter": { "taxa": [8500] } })).await;
+    let species = post_json("/mpa/pept2data", json!({ "peptides": [COMMON], "filter": { "taxa": [8501] } })).await;
+
+    assert_eq!(genus.0, StatusCode::OK);
+    assert_eq!(species.0, StatusCode::OK);
+    assert_eq!(genus.1["peptides"][0]["lca"], 8500, "three species of one genus reduce to it");
+    assert_eq!(species.1["peptides"][0]["lca"], 8501, "one species is its own ancestor");
+}
+
+/// Root is the special case: a filter naming taxon 1 would keep everything anyway, and the handler
+/// short-circuits to the empty filter rather than walking every lineage to prove it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_filter_naming_root_keeps_everything() {
+    assert_eq!(taxa_under(json!({ "taxa": [1] })).await, taxa_under(serde_json::Value::Null).await);
+}
+
+/// A proteome filter is a protein filter one step removed: the accessions come from the proteome's
+/// own list, so `UP000000001` keeps P00001 and P00002 — both *C. niloticus* — and nothing else.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_proteome_filter_keeps_only_that_proteome_s_proteins() {
+    assert_eq!(taxa_under(json!({ "proteomes": ["UP000000001"] })).await, vec![8501]);
+}
+
+/// Two proteomes union rather than intersect.
+#[tokio::test(flavor = "multi_thread")]
+async fn several_proteomes_are_taken_together() {
+    let taxa = taxa_under(json!({ "proteomes": ["UP000000001", "UP000000003"] })).await;
+
+    assert_eq!(taxa, vec![7, 8501], "C. niloticus from the first, the bacterium from the third");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_protein_filter_keeps_only_the_accessions_it_names() {
+    assert_eq!(taxa_under(json!({ "proteins": ["P00005"] })).await, vec![9503]);
+    assert_eq!(taxa_under(json!({ "proteins": ["P00001", "P00006"] })).await, vec![7, 8501]);
+}
+
+/// A filter that matches nothing drops the peptide from the answer entirely, rather than reporting
+/// it with an empty taxa list — the same shape an absent peptide produces.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_filter_matching_nothing_drops_the_peptide() {
+    for filter in
+        [json!({ "taxa": [999999999] }), json!({ "proteomes": ["UP999999999"] }), json!({ "proteins": ["P99999"] })]
+    {
+        let (status, body) =
+            post_json("/mpa/pept2data", json!({ "peptides": [COMMON], "filter": filter.clone() })).await;
+
+        assert_eq!(status, StatusCode::OK, "{filter}");
+        assert_eq!(body["peptides"].as_array().map(Vec::len), Some(0), "{filter} should drop the peptide");
+    }
+}
+
+/// An unknown proteome is skipped rather than failing the request, so one bad accession alongside
+/// a good one still answers.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unknown_proteome_alongside_a_known_one_is_ignored() {
+    assert_eq!(taxa_under(json!({ "proteomes": ["UP000000001", "UP999999999"] })).await, vec![8501]);
+}
+
+/// Filtering happens before the annotations are aggregated, so a narrower filter cannot report an
+/// annotation carried only by a protein it excluded.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_annotations_come_from_the_surviving_proteins_only() {
+    let (status, filtered) =
+        post_json("/mpa/pept2data", json!({ "peptides": [COMMON], "filter": { "proteins": ["P00007"] } })).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let fa = &filtered["peptides"][0]["fa"];
+    assert_eq!(fa["counts"]["all"], 1, "one protein survived the filter");
+}

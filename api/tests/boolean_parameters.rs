@@ -1,15 +1,10 @@
 //! Every boolean parameter, driven through the router with a value it must refuse.
 //!
-//! `strict_bool` is applied per field, so the guarantee is only as complete as the annotations:
-//! one `Parameters` field missing `deserialize_with` is a flag that silently reads `?flag=` as
-//! `true` again, and nothing about that fails to compile. This walks the endpoints instead.
+//! `strict_bool` goes on each field, so the guarantee is only as complete as the annotations and a
+//! missing one still compiles. Both halves of every route are walked because `taxa2tree` has two
+//! structs, `GetParameters` and `PostParameters`, each with their own `link`.
 //!
-//! The extractor rejects before any handler runs, so none of these requests reach the index or
-//! OpenSearch: every case is a parse, and the app is built once per test and cloned per request.
-//!
-//! Both halves of every route are walked. `taxa2tree` is why: its GET and POST handlers take two
-//! different structs, `GetParameters` and `PostParameters`, each with their own `link` field. A
-//! GET-only pass leaves the POST one unannotated and green.
+//! Nothing here reaches the index or OpenSearch: the extractor refuses before any handler runs.
 
 mod common;
 
@@ -23,14 +18,11 @@ use unipept_api::{middleware::normalize_path::NormalizePath, routes::create_app}
 
 /// Every boolean an endpoint accepts: the route, the flag, and whatever else that route requires.
 ///
-/// The third column matters. The filter endpoints take a mandatory `start` and `end`, and without
-/// them every request is a 400 regardless of the flag — which would let the refusal tests below
-/// pass without ever reaching `strict_bool`.
+/// The third column carries the filter endpoints' mandatory `start` and `end`. Without them those
+/// requests are refused for the missing parameter and never reach `strict_bool` at all.
 ///
-/// This list is maintained by hand. It was seeded by reading the `deserialize_with =
-/// "strict_bool"` annotations out of `controllers`, but nothing regenerates it and nothing checks
-/// it is complete: a new boolean parameter has to be added here as well as to its struct, or it
-/// simply is not covered.
+/// Maintained by hand: a new boolean parameter belongs here as well as on its struct, and nothing
+/// checks that it is.
 const BOOLEAN_PARAMETERS: &[(&str, &str, &str)] = &[
     ("/mpa/pept2data", "equate_il", ""),
     ("/mpa/pept2data", "report_taxa", ""),
@@ -100,10 +92,8 @@ async fn status_of(app: &NormalizePath<Router>, path: &str) -> StatusCode {
         .status()
 }
 
-/// The same query, sent as a form body so the POST handler's own struct is the one parsed.
-///
-/// The status differs from the GET half: `PostContent` maps a `Form` rejection to `422`, where
-/// `GetContent` answers `400`. Both are refusals; only the code differs.
+/// The same query as a form body, so the POST handler's own struct is the one parsed. `PostContent`
+/// maps a `Form` rejection to `422` where `GetContent` answers `400`; both are refusals.
 async fn post_status_of(app: &NormalizePath<Router>, path: &str, query: &str) -> StatusCode {
     let request = Request::post(path)
         .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
@@ -113,11 +103,8 @@ async fn post_status_of(app: &NormalizePath<Router>, path: &str, query: &str) ->
     app.clone().oneshot(request).await.expect("the app responds").status()
 }
 
-/// `?flag=` is refused everywhere.
-///
-/// This is the case the parser reads as `true`. On a flag defaulting to false it would switch on
-/// behaviour the caller never spelled out and answer 200, which is the whole reason `strict_bool`
-/// exists.
+/// `?flag=` is refused everywhere. This is the case the parser reads as `true`, and on a flag
+/// defaulting to false it would switch on behaviour the caller never spelled out.
 #[tokio::test(flavor = "multi_thread")]
 async fn every_boolean_refuses_an_empty_value() {
     let (dir, state) = common::offline_state();
@@ -134,7 +121,6 @@ async fn every_boolean_refuses_an_empty_value() {
     assert!(accepted.is_empty(), "these read an empty value as a flag: {accepted:#?}");
 }
 
-/// A bare key carries no `=` at all, and is refused the same way.
 #[tokio::test(flavor = "multi_thread")]
 async fn every_boolean_refuses_a_bare_key() {
     let (dir, state) = common::offline_state();
@@ -151,7 +137,6 @@ async fn every_boolean_refuses_a_bare_key() {
     assert!(accepted.is_empty(), "these read a bare key as a flag: {accepted:#?}");
 }
 
-/// A value that is neither `true` nor `false` is refused rather than guessed at.
 #[tokio::test(flavor = "multi_thread")]
 async fn every_boolean_refuses_a_value_that_is_not_a_boolean() {
     let (dir, state) = common::offline_state();
@@ -168,11 +153,9 @@ async fn every_boolean_refuses_a_value_that_is_not_a_boolean() {
     assert!(accepted.is_empty(), "these accepted a non-boolean: {accepted:#?}");
 }
 
-/// The spellings that are meant to work still do.
-///
-/// Without this the suite would pass just as well if `strict_bool` refused everything. These are
-/// not asserted to be `OK` — several of these endpoints reach OpenSearch, which is not running —
-/// only to have got past the extractor.
+/// The spellings that are meant to work still do — without this the suite would pass just as well
+/// if `strict_bool` refused everything. Only that they got past the extractor is asserted; several
+/// of these endpoints reach OpenSearch, which is not running.
 #[tokio::test(flavor = "multi_thread")]
 async fn every_boolean_still_accepts_true_and_false() {
     let (dir, state) = common::offline_state();
@@ -191,11 +174,8 @@ async fn every_boolean_still_accepts_true_and_false() {
     assert!(refused.is_empty(), "these refused a valid boolean: {refused:#?}");
 }
 
-/// Every boolean refuses an empty value on the POST half too.
-///
-/// `taxa2tree` has a separate `PostParameters`, so the GET pass above never touches its `link`.
-/// Without this, dropping `strict_bool` from that field leaves the whole suite green while
-/// `POST /api/v2/taxa2tree` with `counts[1]=1&link=` answers `200` and reads `link` as `true`.
+/// The POST half too: `taxa2tree`'s `PostParameters::link` is a field the GET pass never touches,
+/// and without this, dropping its annotation leaves the whole suite green.
 #[tokio::test(flavor = "multi_thread")]
 async fn every_boolean_refuses_an_empty_value_on_the_post_half() {
     let (dir, state) = common::offline_state();
@@ -213,12 +193,8 @@ async fn every_boolean_refuses_an_empty_value_on_the_post_half() {
     assert!(accepted.is_empty(), "these read an empty value as a flag on POST: {accepted:#?}");
 }
 
-/// A JSON body carries a real boolean, and it is read as one.
-///
-/// The two body encodings reach different parsers: a query string and a form body carry text, a
-/// JSON body carries a typed `true`. An implementation that only understood the text form refused
-/// every JSON request in the suite — this is the assertion that says so directly rather than
-/// leaving it to be rediscovered from thirteen failing endpoint tests.
+/// A JSON body carries a typed boolean where the other encodings carry text. An implementation
+/// that understood only text refused every JSON request in the suite.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_json_body_carries_a_real_boolean() {
     let (dir, state) = common::offline_state();
@@ -230,7 +206,6 @@ async fn a_json_body_carries_a_real_boolean() {
     assert_eq!(status, StatusCode::OK);
 }
 
-/// An empty string in a JSON body is still refused, so the two encodings agree.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_json_body_still_refuses_an_empty_string() {
     let (dir, state) = common::offline_state();

@@ -24,14 +24,12 @@ const QS: Config = Config::new().duplicate_key_behavior(DuplicateKeyBehavior::Er
 
 /// Reads a boolean parameter, accepting only `true` and `false`.
 ///
-/// The query-string parser reads a value-less parameter — `?tryptic=`, or a bare `?tryptic` — as
-/// `true`. On a flag that defaults to false that turns a blank field into an instruction the caller
-/// never gave, and answers 200 rather than telling them. Every boolean parameter goes through this
-/// so the spelling has to be deliberate.
+/// The query-string parser reads `?tryptic=` and a bare `?tryptic` as `true`, which on a flag
+/// defaulting to false is an instruction the caller never gave, answered 200.
 ///
-/// It cannot live in the extractor: `GetContent<T>` is generic and does not know which of `T`'s
-/// fields are booleans. A rule applied to every empty value would refuse `filter=`, which the
-/// private-api filters accept as a real request.
+/// Per field rather than in the extractor: `GetContent<T>` is generic and cannot know which of
+/// `T`'s fields are booleans, and refusing every empty value would refuse `filter=`, which the
+/// private-api filters take as a real request.
 pub fn strict_bool<'de, D: Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
     struct StrictBool;
 

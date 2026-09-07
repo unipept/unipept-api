@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 
 use fixtures::peptides::*;
-use index::Index;
+use index::{Index, IndexError, LoadIndexError};
 use tempfile::TempDir;
 
 /// Builds the corpus index. The `TempDir` is returned because dropping it removes the files, and
@@ -15,6 +15,10 @@ use tempfile::TempDir;
 fn corpus_index() -> (TempDir, Index) {
     let dir = TempDir::new().expect("could not create a temporary directory");
     let paths = fixtures::build_index_files(dir.path());
+
+    // Several tests here are about the no-table fallback, and none of them would fail if the
+    // builder quietly started writing one — they would just stop covering the path they name.
+    assert!(!paths.kmer_table.exists(), "the fixture builder must not write a k-mer table");
 
     let index = Index::try_from_files(
         paths.suffix_array.to_str().unwrap(),
@@ -210,13 +214,24 @@ fn a_mapping_from_a_different_index_is_rejected() {
         corpus_paths.kmer_table.to_str().unwrap()
     );
 
-    assert!(mixed.is_err(), "a mapping built from different proteins must not load");
+    match mixed {
+        Err(error) => assert!(
+            matches!(error, IndexError::LoadError(LoadIndexError::MismatchedIndexFiles(_))),
+            "the files must be rejected as mismatched, not merely fail to load: {error:?}"
+        ),
+        Ok(_) => panic!("a mapping built from different proteins must not load")
+    }
 }
 
-/// Keeps the index and the database mocks talking about the same proteins. If they drift, a
-/// composed `AppState` answers every query with nothing and no single test fails.
+/// Every accession the index hands back is one the corpus declares.
+///
+/// Not the converse: the corpus holds thirteen proteins and only seven carry the common peptide,
+/// so this cannot and does not prove the index contains all of them. What it rules out is the
+/// index returning an accession `ACCESSIONS` has never heard of — which is what would happen if
+/// the index and the database mocks drifted apart and a composed `AppState` started answering
+/// with proteins the mocked database cannot resolve.
 #[test]
-fn the_index_contains_exactly_the_corpus_accessions() {
+fn every_accession_the_index_returns_is_declared_by_the_corpus() {
     let (_dir, index) = corpus_index();
     let peptides = vec![COMMON.to_string()];
 

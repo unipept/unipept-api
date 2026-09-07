@@ -1,7 +1,6 @@
 use std::path::Path;
 
-pub use errors::IndexError;
-use errors::LoadIndexError;
+pub use errors::{IndexError, LoadIndexError};
 /// Re-exported so the API can decode the annotations it is handed without taking its own
 /// dependency on the index repository, and cannot end up on a different version of it.
 pub use fa_compression;

@@ -172,7 +172,7 @@ pub fn write_proteins_tsv(dir: &Path) -> PathBuf {
 }
 
 fn create_dir(dir: &Path) {
-    fs::create_dir_all(dir).expect("could not create the fixture directory");
+    fs::create_dir_all(dir).unwrap_or_else(|err| panic!("could not create {}: {}", dir.display(), err));
 }
 
 fn write(dir: &Path, name: &str, contents: &str) -> PathBuf {

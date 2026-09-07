@@ -4,7 +4,10 @@ use axum::{Json, extract::State};
 use datastore::LineageRank;
 use serde::{Deserialize, Serialize};
 
-use crate::{AppState, controllers::generate_handlers};
+use crate::{
+    AppState,
+    controllers::{generate_handlers, private_api::default_sort_descending, request::Flag}
+};
 
 fn default_filter() -> String {
     String::from("")
@@ -24,8 +27,8 @@ pub struct TaxaFilterParameters {
     end: usize,
     #[serde(default)]
     sort_by: String, // Can be "id", "name", or "rank"
-    #[serde(default)]
-    sort_descending: bool
+    #[serde(default = "default_sort_descending")]
+    sort_descending: Flag
 }
 
 #[derive(Serialize)]
@@ -66,7 +69,13 @@ async fn count_handler(
 
 async fn filter_handler(
     State(AppState { datastore, .. }): State<AppState>,
-    TaxaFilterParameters { filter, start, end, sort_by, sort_descending }: TaxaFilterParameters
+    TaxaFilterParameters {
+        filter,
+        start,
+        end,
+        sort_by,
+        sort_descending: Flag(sort_descending)
+    }: TaxaFilterParameters
 ) -> Result<Vec<u32>, Infallible> {
     let taxon_store = datastore.taxon_store();
 

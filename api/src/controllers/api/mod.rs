@@ -1,5 +1,7 @@
 use serde::Deserialize;
 
+use crate::controllers::request::Flag;
+
 pub mod pept2ec;
 pub mod pept2funct;
 pub mod pept2go;
@@ -29,46 +31,46 @@ impl From<&Either<u32, String>> for u32 {
     }
 }
 
-pub fn default_equate_il() -> bool {
-    true
+pub fn default_equate_il() -> Flag {
+    Flag(true)
 }
 
-pub fn default_extra() -> bool {
-    false
+pub fn default_extra() -> Flag {
+    Flag(false)
 }
 
-pub fn default_tryptic() -> bool {
-    false
+pub fn default_tryptic() -> Flag {
+    Flag(false)
 }
 
-pub fn default_domains() -> bool {
-    false
+pub fn default_domains() -> Flag {
+    Flag(false)
 }
 
-pub fn default_names() -> bool {
-    false
+pub fn default_names() -> Flag {
+    Flag(false)
 }
 
-pub fn default_descendants() -> bool {
-    false
+pub fn default_descendants() -> Flag {
+    Flag(false)
 }
 
 pub fn default_descendants_ranks() -> Vec<String> {
     vec![String::from("species")]
 }
 
-pub fn default_link() -> bool {
-    false
+pub fn default_link() -> Flag {
+    Flag(false)
 }
 
-pub fn default_compact() -> bool {
-    false
+pub fn default_compact() -> Flag {
+    Flag(false)
 }
 
 pub fn default_cutoff() -> usize {
     10000
 }
 
-pub fn default_validate_taxa() -> bool {
-    true
+pub fn default_validate_taxa() -> Flag {
+    Flag(true)
 }

@@ -7,7 +7,8 @@ use crate::{
     AppState,
     controllers::{
         api::{Either, default_extra, default_names, default_validate_taxa},
-        generate_handlers
+        generate_handlers,
+        request::Flag
     },
     helpers::{
         lca_helper::calculate_lca,
@@ -24,11 +25,11 @@ pub struct Parameters {
     #[serde(default)]
     input: Vec<Either<u32, String>>,
     #[serde(default = "default_extra")]
-    extra: bool,
+    extra: Flag,
     #[serde(default = "default_names")]
-    names: bool,
+    names: Flag,
     #[serde(default = "default_validate_taxa")]
-    validate_taxa: bool
+    validate_taxa: Flag
 }
 
 #[derive(Serialize)]
@@ -48,7 +49,12 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
-    Parameters { input, extra, names, validate_taxa }: Parameters,
+    Parameters {
+        input,
+        extra: Flag(extra),
+        names: Flag(names),
+        validate_taxa: Flag(validate_taxa)
+    }: Parameters,
     version: LineageVersion
 ) -> Result<LcaInformation, Infallible> {
     let taxon_store = datastore.taxon_store();

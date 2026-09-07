@@ -210,17 +210,15 @@ async fn a_multipart_field_name_that_cannot_be_parsed_is_rejected() {
     assert_eq!(post_bytes("multipart/form-data; boundary=X", body).await, Err(StatusCode::UNPROCESSABLE_ENTITY));
 }
 
-// The shapes below are not parameters any client is meant to send. They are here because
-// `serde_qs` decides each one, and it decides them differently across major versions: every
-// assertion in this section flips from a rejection to an accepted value in `serde_qs` 1.x. That
-// makes them the tests a bump has to break — without them the parser can start accepting a request
-// the API previously refused, and nothing in the suite would notice.
+// A parameter the API refuses is part of its contract just as much as one it accepts, and the
+// tests above only ever send well-formed input. These cover the boundary: query strings that
+// parse structurally but do not describe a request this API serves.
 
-/// A flag with an empty value is rejected rather than read as `true`.
+/// A flag with an empty value is refused rather than treated as set.
 ///
-/// `serde_qs` 1.x deserialises an empty value as `true`, which would turn `?equate_il=` from a
-/// rejected request into one that silently sets the flag. `tryptic` and `extra` default to `false`,
-/// so on those endpoints the same query would enable behaviour the caller never asked for.
+/// `equate_il`, `tryptic` and `extra` are booleans, and `?equate_il=` names one without saying
+/// what to set it to. Reading that as `true` would switch on behaviour the caller never asked
+/// for, so it is a bad request instead.
 #[tokio::test]
 async fn a_flag_with_an_empty_value_is_rejected() {
     assert_eq!(get("equate_il=").await, Err(StatusCode::BAD_REQUEST));
@@ -232,28 +230,27 @@ async fn a_flag_with_no_value_is_rejected() {
     assert_eq!(get("equate_il").await, Err(StatusCode::BAD_REQUEST));
 }
 
-/// A repeated key without brackets is rejected rather than collected into the list.
+/// A repeated key without brackets is refused rather than collected into the list.
 ///
-/// `input[]=A&input[]=B` is the documented way to send several peptides and is covered above.
-/// `input=A&input=B` is a different request, and `serde_qs` 1.x starts accepting it as the same
-/// list — so a client sending the wrong syntax would begin to work by accident, which is a
-/// compatibility promise nobody decided to make.
+/// `input[]=A&input[]=B` is how several peptides are sent, and it is covered above. `input=A`
+/// repeated is a different query, and accepting it as the same list would make the bracket
+/// syntax optional — a wider contract than the API means to offer.
 #[tokio::test]
 async fn a_repeated_key_without_brackets_is_rejected() {
     assert_eq!(get("input=AALTER&input=AAKNER").await, Err(StatusCode::BAD_REQUEST));
 }
 
-/// A flag sent twice is rejected rather than resolved to one of the two.
+/// A flag sent twice is refused rather than resolved to one of the two.
 ///
-/// `serde_qs` 1.x takes the last occurrence, so `?equate_il=true&equate_il=false` would quietly
-/// become `false`. Which one wins is a choice, and a request that states both is better refused.
+/// A request that sets `equate_il` both ways states no intention worth guessing at, and either
+/// choice would be silent. It is refused so the caller hears about it.
 #[tokio::test]
 async fn a_flag_sent_twice_is_rejected() {
     assert_eq!(get("equate_il=true&equate_il=false").await, Err(StatusCode::BAD_REQUEST));
 }
 
-/// The form-encoded body reaches `serde_qs` through `from_bytes` rather than `from_str`, so it
-/// gets its own assertion: the same input must not be accepted on one path and refused on another.
+/// The form-encoded body is parsed from bytes rather than from the URI, so it gets its own
+/// assertion: the same input must not be accepted on one path and refused on another.
 #[tokio::test]
 async fn a_flag_with_an_empty_value_is_rejected_in_a_form_body() {
     assert_eq!(post("application/x-www-form-urlencoded", "equate_il=").await, Err(StatusCode::UNPROCESSABLE_ENTITY));

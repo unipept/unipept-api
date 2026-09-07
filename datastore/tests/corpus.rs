@@ -7,7 +7,10 @@
 use datastore::{DataStore, LineageRank};
 use tempfile::TempDir;
 
-/// Loads the whole corpus. The `TempDir` is returned because dropping it deletes the files.
+/// Loads the whole corpus from a temporary directory.
+///
+/// All eight files are written there, the taxonomy included, so the `TempDir` really does own
+/// everything the store was built from — and it is returned because dropping it deletes them.
 fn load() -> (TempDir, DataStore) {
     let dir = TempDir::new().expect("could not create a temporary directory");
     let paths = fixtures::write_datastore_files(dir.path());
@@ -45,6 +48,23 @@ fn taxon_store_reads_name_rank_and_validity() {
 
     assert_eq!(taxons.get_name(fixtures::taxa::CROCODYLUS).map(String::as_str), Some("Crocodylus"));
     assert!(taxons.is_valid(fixtures::taxa::CROCODYLUS_NILOTICUS));
+}
+
+/// An invalid taxon is stored like any other and flagged, not dropped.
+///
+/// `calculate_lca` filters on this when `validate_taxa` is set, so a store that either lost the
+/// row or read the flag backwards would turn that parameter into a no-op — silently, since the
+/// only visible effect is an LCA that is one rank too deep.
+#[test]
+fn taxon_store_keeps_an_invalid_taxon_and_marks_it() {
+    let (_dir, store) = load();
+    let taxons = store.taxon_store();
+
+    let (name, _, valid) = taxons.get(fixtures::taxa::HELODERMA).expect("the invalid taxon is still stored");
+    assert_eq!(name, "Heloderma sp.");
+    assert!(!valid);
+    assert!(!taxons.is_valid(fixtures::taxa::HELODERMA));
+    assert!(taxons.is_valid(fixtures::taxa::CROCODYLUS_NILOTICUS), "validity must not read as false for everything");
 }
 
 #[test]

@@ -18,7 +18,7 @@ fn load_lineages(contents: &str) -> (TempDir, Result<LineageStore, LineageStoreE
     let path = dir.path().join("lineages.tsv");
     std::fs::write(&path, contents).expect("could not write the lineage file");
 
-    let result = LineageStore::try_from_file(path.to_str().unwrap());
+    let result = LineageStore::try_from_file(&path.to_string_lossy());
     (dir, result)
 }
 

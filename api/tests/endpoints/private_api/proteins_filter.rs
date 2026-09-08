@@ -1,10 +1,16 @@
 //! `/private_api/proteins/count` and `/proteins/filter` — counting and paging the cluster.
 
-use axum::http::StatusCode;
+use axum::{
+    body::Body,
+    http::{Request, StatusCode}
+};
 use httpmock::{Method::POST, MockServer};
 use serde_json::json;
 
-use crate::database::get_against;
+use crate::{
+    common::{request_raw, test_state},
+    database::get_against
+};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn the_protein_count_is_the_cluster_total() {
@@ -70,4 +76,33 @@ async fn the_filtered_count_and_listing_both_reach_the_cluster() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(listed, json!(["P00001", "P00003"]));
     list.assert_async().await;
+}
+
+/// `end` below `start` is a malformed request, not a server fault.
+///
+/// Both values reach the query unvalidated, and the page size is their difference. Before this was
+/// checked, the ordering panicked the handler task in a debug build and sent a negative `size` to
+/// the cluster in a release one — which came back as a 500, so a bad request was logged and
+/// alerted on as a server error.
+///
+/// The mock is asserted to have gone uncalled: the request is refused before the cluster is asked
+/// anything, which is what makes this a 400 rather than a failure relayed from OpenSearch.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_end_below_start_is_rejected() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST).path("/uniprot_entries/_search");
+            then.status(200).json_body(json!({ "hits": { "hits": [] } }));
+        })
+        .await;
+
+    let (dir, state) = test_state(&server.base_url());
+    let request = Request::get("/private_api/proteins/filter?filter=&start=10&end=0").body(Body::empty()).unwrap();
+    let (status, body) = request_raw(state, request).await;
+    drop(dir);
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body.contains("end"), "the message should name the parameter, got: {body}");
+    mock.assert_hits_async(0).await;
 }

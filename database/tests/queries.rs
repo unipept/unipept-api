@@ -332,3 +332,29 @@ async fn a_text_filter_lists_without_a_taxon_clause() {
     mock.assert_async().await;
     assert!(found.is_empty());
 }
+
+/// An `end` below `start` asks for a negative page, and must not underflow.
+///
+/// `(end - start)` on two `usize` panics in a debug build and wraps to a huge number in a release
+/// one, which then truncates to a negative `size` on the cast to `i64`. The handler rejects this
+/// ordering with a 400 before it reaches here, but the crate cannot assume its caller does.
+#[tokio::test]
+async fn an_end_below_start_is_an_empty_page_not_an_underflow() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/uniprot_entries/_search")
+                .query_param("from", "10")
+                .query_param("size", "0");
+            then.status(200).json_body(json!({ "hits": { "hits": [] } }));
+        })
+        .await;
+
+    let database = database(&server);
+    let accessions =
+        get_accessions_by_filter(database.get_conn(), String::new(), 10, 0).await.expect("the page parses");
+
+    mock.assert_async().await;
+    assert!(accessions.is_empty());
+}

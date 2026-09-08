@@ -289,7 +289,10 @@ pub async fn get_accessions_by_filter(
     let response = client
         .search(SearchParts::Index(&["uniprot_entries"]))
         .from(start as i64)
-        .size((end - start) as i64)
+        // Saturating, so a caller that passes `end` below `start` gets an empty page rather than a
+        // panic in debug and a negative `size` in release. The handler rejects that ordering with
+        // a 400 before it reaches here; this keeps the crate sound on its own terms.
+        .size(end.saturating_sub(start) as i64)
         .body(body)
         .send()
         .await?;

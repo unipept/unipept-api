@@ -1,39 +1,43 @@
-use std::{
-    fs::File,
-    hint::black_box,
-    io::{BufReader, prelude::*}
-};
+//! The LCA reduction, which every peptide-to-taxon endpoint runs once per hit.
+//!
+//! `calculate_lca` looks a taxon up in two stores, then walks 28 ranks over the lineages it
+//! collected, dereferencing a pointer per taxon per rank. What it costs is set by how many taxa a
+//! request carries — `pept2data` and `peptinfo` pass one per matching protein, hundreds of
+//! thousands for a large sample — and by how many of them are distinct, because a wide distinct
+//! set does not fit in cache.
+//!
+//! Both numbers therefore have to be realistic, which is what `fixtures::synthetic` is for. The
+//! taxa it generates span two domains, so the reduction shares no rank, answers root and walks all
+//! 28 of them. That is the worst case.
 
-use datastore::{LineageStore, TaxonStore};
+use std::hint::black_box;
+
+use criterion::Criterion;
+use tempfile::TempDir;
 use unipept_api::helpers::{lca_helper::calculate_lca, lineage_helper::LineageVersion};
 
-fn read_taxa_file() -> Vec<u32> {
-    let filename = "../data/taxa_from_400_peptides.txt";
-    let file = File::open(filename).expect("no such file");
-    let buf = BufReader::new(file);
-    buf.lines().map(|l| l.expect("Could not parse line").parse::<u32>().unwrap()).collect()
-}
+/// Distinct taxa, and the number of times they are drawn, at the scale of a large request.
+const DISTINCT_TAXA: u32 = 26_919;
+const DRAWS: usize = 463_423;
 
-fn generate_arguments() -> (Vec<u32>, LineageVersion, TaxonStore, LineageStore) {
-    let taxa: Vec<u32> = read_taxa_file();
-    let version: LineageVersion = LineageVersion::V2;
-    let taxon_store: TaxonStore =
-        TaxonStore::try_from_file("../data/taxons_subset_10000.tsv").expect("Reading the file failed");
-    let lineage_store: LineageStore =
-        LineageStore::try_from_file("../data/lineages_subset_10000.tsv").expect("Reading the file failed");
+pub fn lca_benchmark(c: &mut Criterion) {
+    // The stores hold everything they read, so the directory is only alive long enough to be
+    // parsed out of.
+    let dir = TempDir::new().expect("could not create a temporary directory");
+    let (taxon_store, lineage_store) = fixtures::synthetic::load_taxonomy(dir.path(), DISTINCT_TAXA);
+    let taxa = fixtures::synthetic::draws(DISTINCT_TAXA, DRAWS);
 
-    (taxa, version, taxon_store, lineage_store)
-}
+    // Checked, not assumed, and not a `debug_assert`: `[profile.bench]` leaves debug assertions
+    // off, so one would never run. This costs a single call outside the timed loop.
+    assert_eq!(
+        calculate_lca(taxa.iter().copied(), LineageVersion::V2, &taxon_store, &lineage_store, true),
+        1,
+        "the taxa must span two domains, so that all 28 ranks are walked"
+    );
 
-pub fn lca_benchmark(c: &mut criterion::Criterion) {
     c.bench_function("calculate_lca", |b| {
-        b.iter_batched(
-            generate_arguments,
-            |arguments| {
-                let (taxa, version, taxon_store, lineage_store) = arguments;
-                black_box(calculate_lca(taxa, version, &taxon_store, &lineage_store, true))
-            },
-            criterion::BatchSize::SmallInput
-        )
+        b.iter(|| {
+            black_box(calculate_lca(taxa.iter().copied(), LineageVersion::V2, &taxon_store, &lineage_store, true))
+        })
     });
 }

@@ -10,18 +10,18 @@
 //! Two layers make up the corpus:
 //!
 //! - **Taxonomy** — `data/taxons.tsv` and `data/lineages.tsv`: twenty-six real NCBI rows, copied
-//!   verbatim out of the 10,000-taxon pair under the repository's own `data/`. The set is closed
-//!   under ancestry — every taxon a protein names, every ancestor those taxa's lineages record, and
-//!   root — so it is small enough to read in full, which is what makes an expected LCA checkable by
-//!   eye rather than by rerunning the code.
+//!   verbatim out of a `taxons.tsv`/`lineages.tsv` pair from a Unipept database build. The set is
+//!   closed under ancestry — every taxon a protein names, every ancestor those taxa's lineages
+//!   record, and root — so it is small enough to read in full, which is what makes an expected LCA
+//!   checkable by eye rather than by rerunning the code.
 //! - **Proteins** — `data/proteins.tsv`: thirteen rows referencing only taxa from that subset.
 //!
 //! To regenerate the taxonomy after changing the proteins: take the taxon column of
-//! `proteins.tsv`, union it with every non-`\N` rank id on those taxa's rows in
-//! `data/lineages_subset_10000.tsv`, add taxon 1, and copy the matching rows out of both
-//! `data/*_subset_10000.tsv` files. Copy them rather than rewriting them — the fifth taxon column
-//! is a raw `0x01`/`0x00` byte, not text, and fifteen of the ancestors have a lineage row but no
-//! taxon row, which is a property of the 10,000-row sample and not an error.
+//! `proteins.tsv`, union it with every non-`\N` rank id on those taxa's rows in the build's
+//! lineage table, add taxon 1, and copy the matching rows out of both tables. Copy them rather
+//! than rewriting them — the fifth taxon column is a raw `0x01`/`0x00` byte, not text, and fifteen
+//! of the ancestors have a lineage row but no taxon row, which is a property of a sampled taxonomy
+//! and not an error.
 //!
 //! Writers panic rather than returning errors. A fixture that cannot be written to a temporary
 //! directory is a broken harness, not a condition a test should handle; this is the opposite of

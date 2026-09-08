@@ -9,7 +9,7 @@
 //!
 //! Two layers make up the corpus:
 //!
-//! - **Taxonomy** — `data/taxons.tsv` and `data/lineages.tsv`: twenty-eight real NCBI rows, copied
+//! - **Taxonomy** — `data/taxons.tsv` and `data/lineages.tsv`: twenty-eight real NCBI taxa, copied
 //!   verbatim out of a `taxons.tsv`/`lineages.tsv` pair from a Unipept database build. The set is
 //!   closed under ancestry — every taxon a protein names, every ancestor those taxa's lineages
 //!   record, and root — so it is small enough to read in full, which is what makes an expected LCA
@@ -72,7 +72,9 @@ pub const VERSION: &str = include_str!("../data/version.txt");
 /// `LineageRank::from_str` accepts, and the fifth column is a raw `0x01`/`0x00` byte.
 pub const TAXONS_TSV: &str = include_str!("../data/taxons.tsv");
 
-/// Lineages: a taxon id followed by 28 rank columns, `\N` where the taxonomy records nothing.
+/// Lineages: a taxon id followed by one column per rank, `\N` where the taxonomy records nothing.
+///
+/// The column count is `LineageStore::AMOUNT_OF_RANKS`, which is unrelated to the number of taxa.
 pub const LINEAGES_TSV: &str = include_str!("../data/lineages.tsv");
 
 /// Every accession in the corpus, in file order.
@@ -160,6 +162,21 @@ pub mod peptides {
     pub const VALIDATION_SHARED: &str = "VALIDATEKR";
     /// In no protein. Distinguishes an empty result from an error.
     pub const ABSENT: &str = "WWWWWWWWWW";
+}
+
+/// How many corpus taxa carry a rank and are marked valid.
+///
+/// Counted from `TAXONS_TSV` rather than written down, so adding a taxon cannot leave a test
+/// asserting a stale total. Root is the only unranked row, [`taxa::HELODERMA`] the only invalid one.
+pub fn ranked_and_valid_taxa() -> usize {
+    TAXONS_TSV
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .filter(|line| {
+            let columns: Vec<&str> = line.split('\t').collect();
+            columns.len() >= 5 && columns[2] != "no rank" && columns[4].as_bytes().first() == Some(&1)
+        })
+        .count()
 }
 
 /// Paths to a written-out set of datastore files, in the order `DataStore::try_from_files` takes.

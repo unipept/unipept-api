@@ -10,10 +10,8 @@ use crate::{
     database::{get_against, post_against, source, taxon_of}
 };
 
-/// Sorts every list in a response before it is compared.
-///
-/// Several controllers build a list by iterating a `HashMap`, so the order of that list differs
-/// between two requests. The comparison is over the elements, not over their order.
+/// Sorts every list in a response before it is compared: several controllers build a list by
+/// iterating a `HashMap`, so element order differs between two identical requests.
 fn canonical(value: Value) -> Value {
     match value {
         Value::Array(items) => {
@@ -43,21 +41,14 @@ fn path_of(query: &str) -> &str {
     query.split('?').next().expect("a path")
 }
 
-/// Every route is registered for GET and POST through one macro, and the two reach the same
-/// handler by different extractors. What differs is the deserialisation of each endpoint's own
-/// `Parameters`: a query string arrives as text, a JSON body carries numbers, booleans and maps.
+/// A query string arrives as text and a JSON body carries real types, so each endpoint's own
+/// `Parameters` deserialises by two different paths.
 ///
-/// Not in this table:
-/// - `/api/v2/pept2prot`, `/api/v2/protinfo`, `/private_api/proteins`, `/private_api/proteins/count`
-///   and `/private_api/proteins/filter` ask OpenSearch something, so they need a mocked cluster.
-///   `get_and_post_answer_alike_against_a_cluster` below covers them.
-/// - `/api/v2/taxa2tree` and `/api/v2/taxa2tree.html` take different parameters per method, so
-///   there is no one body to send. `taxa2tree::counts_answer_like_the_repeats_they_stand_for`
-///   covers them.
-/// - `/` is registered for GET only.
+/// Not here: the cluster-backed routes (`get_and_post_answer_alike_against_a_cluster`), the two
+/// `taxa2tree` routes, whose methods take different parameters
+/// (`taxa2tree::counts_answer_like_the_repeats_they_stand_for`), and `/`, which is GET only.
 #[tokio::test(flavor = "multi_thread")]
 async fn get_and_post_answer_alike() {
-    // Both halves of a peptide row are written from the same constants, so they cannot drift apart.
     let peptides = format!("input[]={UNIQUE}&input[]={GENUS_SHARED}");
     let input = json!([UNIQUE, GENUS_SHARED]);
 
@@ -100,7 +91,6 @@ async fn get_and_post_answer_alike() {
                 "compact": true
             })
         ),
-        // Six flags at once, which is more than any other endpoint carries.
         (
             format!(
                 "/api/v2/peptinfo?{peptides}&equate_il=true&extra=true&domains=true&names=true&validate_taxa=true&\
@@ -188,8 +178,7 @@ async fn get_and_post_answer_alike() {
     }
 }
 
-/// The rest of the table, for the routes that ask OpenSearch something. Same assertion, with the
-/// state pointed at a mocked cluster rather than at nothing.
+/// The same assertion for the routes that ask OpenSearch something.
 #[tokio::test(flavor = "multi_thread")]
 async fn get_and_post_answer_alike_against_a_cluster() {
     let server = MockServer::start_async().await;

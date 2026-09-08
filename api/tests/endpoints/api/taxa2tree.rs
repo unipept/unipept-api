@@ -67,12 +67,10 @@ async fn a_post_carries_counts_per_taxon() {
     assert_eq!(body["data"]["count"], 8, "root aggregates the counts beneath it");
 }
 
-/// The two halves take different parameters, so `routing::get_and_post_answer_alike` has no single
-/// body to send for this route. A count of three is the same request as the taxon repeated three
-/// times, on the JSON route and on the HTML one.
+/// The two methods take different parameters, so this route cannot join the routing table. A count
+/// of three is the same request as the taxon repeated three times.
 ///
-/// One taxon rather than several: the tree is built by iterating a `HashMap`, so the order of the
-/// children of a node is not stable between two requests.
+/// One taxon, because the tree is built by iterating a `HashMap` and child order is not stable.
 #[tokio::test(flavor = "multi_thread")]
 async fn counts_answer_like_the_repeats_they_stand_for() {
     let repeated = "input[]=8501&input[]=8501&input[]=8501";

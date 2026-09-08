@@ -64,7 +64,7 @@ pub struct Taxon {
 fn get_children_at_rank(
     taxon_id: u32,
     rank: LineageRank,
-    descendants_ranks: String,
+    descendants_rank: String,
     lineage_store: &LineageStore
 ) -> Option<HashSet<u32>> {
     // Taken as it arrived: `handler` rejects a rank `rank_to_idx` does not know before any of them
@@ -75,7 +75,7 @@ fn get_children_at_rank(
 
     lineages_at_rank?
         .iter()
-        .filter_map(|lin| lin.get_taxon_id_at_rank(descendants_ranks.as_str()))
+        .filter_map(|lin| lin.get_taxon_id_at_rank(descendants_rank.as_str()))
         .for_each(|id| {
             children_id_set.insert(id.unsigned_abs());
         });

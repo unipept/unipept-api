@@ -7,9 +7,9 @@ use axum::{
 
 use crate::common::{get_json, offline_state, request_raw};
 
-/// Every taxon that is both valid and ranked: the twenty-six corpus rows less the invalid one and
-/// less root, which carries no rank.
-const RANKED_AND_VALID: u64 = 24;
+/// Every taxon that is both valid and ranked: the twenty-eight corpus rows less the invalid one
+/// and less root, which carries no rank.
+const RANKED_AND_VALID: u64 = 26;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn an_empty_filter_counts_every_ranked_valid_taxon() {

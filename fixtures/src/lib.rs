@@ -9,11 +9,13 @@
 //!
 //! Two layers make up the corpus:
 //!
-//! - **Taxonomy** — `data/taxons.tsv` and `data/lineages.tsv`: twenty-six real NCBI rows, copied
+//! - **Taxonomy** — `data/taxons.tsv` and `data/lineages.tsv`: twenty-eight real NCBI rows, copied
 //!   verbatim out of a `taxons.tsv`/`lineages.tsv` pair from a Unipept database build. The set is
 //!   closed under ancestry — every taxon a protein names, every ancestor those taxa's lineages
 //!   record, and root — so it is small enough to read in full, which is what makes an expected LCA
-//!   checkable by eye rather than by rerunning the code.
+//!   checkable by eye rather than by rerunning the code. Two of the rows, the `melanogaster` pair,
+//!   carry the two multi-word ranks and no protein; every other rank in the corpus is a single
+//!   word, so without them nothing exercises a rank name that holds a space.
 //! - **Proteins** — `data/proteins.tsv`: thirteen rows referencing only taxa from that subset.
 //!
 //! To regenerate the taxonomy after changing the proteins: take the taxon column of
@@ -111,6 +113,15 @@ pub mod taxa {
     pub const SPHENODONTIA: u32 = 8505;
     /// `Alouatta seniculus`, a mammal; diverges from the crocodiles at class.
     pub const ALOUATTA_SENICULUS: u32 = 9503;
+    /// The `melanogaster group`, a taxon of rank `species group`.
+    ///
+    /// Its rank name holds a space, which the lineage columns write as an underscore. It is the
+    /// only taxon here whose rank is more than one word, apart from the subgroup below it and
+    /// root, and it has no protein: nothing but a rank name is asked of it.
+    pub const MELANOGASTER_GROUP: u32 = 32346;
+    /// The `melanogaster subgroup`, of rank `species subgroup`, and the only descendant of
+    /// [`MELANOGASTER_GROUP`].
+    pub const MELANOGASTER_SUBGROUP: u32 = 32351;
     /// `Heloderma sp.`, and the only taxon here the taxonomy marks **invalid**.
     ///
     /// Without one, `TaxonStore::is_valid` has no counterexample and `calculate_lca`'s
@@ -260,6 +271,8 @@ mod tests {
             taxa::CROCODYLUS_NOVAEGUINEAE,
             taxa::SPHENODONTIA,
             taxa::ALOUATTA_SENICULUS,
+            taxa::MELANOGASTER_GROUP,
+            taxa::MELANOGASTER_SUBGROUP,
             taxa::HELODERMA
         ] {
             assert!(ids.contains(&taxon), "taxa:: names {taxon}, which has no row in taxons.tsv");
@@ -277,6 +290,22 @@ mod tests {
             assert!(taxons.contains(&taxon), "{accession} names taxon {taxon}, absent from taxons.tsv");
             assert!(lineages.contains(&taxon), "{accession} names taxon {taxon}, absent from lineages.tsv");
         }
+    }
+
+    /// One taxon at each of the two multi-word ranks.
+    ///
+    /// Every other rank in the corpus is a single word, so a rank name that holds a space is only
+    /// reachable through these two rows.
+    #[test]
+    fn the_corpus_holds_a_taxon_at_each_multi_word_rank() {
+        let ranks: BTreeSet<&str> = TAXONS_TSV
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| line.split('\t').nth(2).expect("a taxon row has a rank column"))
+            .collect();
+
+        assert!(ranks.contains("species group"), "{ranks:?}");
+        assert!(ranks.contains("species subgroup"), "{ranks:?}");
     }
 
     #[test]

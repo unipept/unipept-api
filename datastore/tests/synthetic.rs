@@ -12,13 +12,11 @@ use tempfile::TempDir;
 
 const DISTINCT: u32 = 4_096;
 
+/// The `TempDir` is dropped by the caller rather than here, so that a failure leaves the files it
+/// read behind to look at.
 fn load() -> (TempDir, TaxonStore, LineageStore) {
     let dir = TempDir::new().expect("could not create a temporary directory");
-    let paths = synthetic::write_taxonomy(dir.path(), DISTINCT);
-
-    let taxons = TaxonStore::try_from_file(paths.taxons.to_str().unwrap()).expect("the generated taxons should load");
-    let lineages =
-        LineageStore::try_from_file(paths.lineages.to_str().unwrap()).expect("the generated lineages should load");
+    let (taxons, lineages) = synthetic::load_taxonomy(dir.path(), DISTINCT);
 
     (dir, taxons, lineages)
 }

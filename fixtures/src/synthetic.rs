@@ -16,7 +16,7 @@ use std::{
     path::{Path, PathBuf}
 };
 
-use datastore::{LineageRank, LineageStore};
+use datastore::{LineageRank, LineageStore, TaxonStore};
 
 /// Leaf taxon ids start here, clear of the ancestor ids [`ancestor`] hands out.
 pub const LEAF_BASE: u32 = 10_000_000;
@@ -129,6 +129,28 @@ pub fn write_taxonomy(dir: &Path, distinct: u32) -> TaxonomyPaths {
     std::fs::write(&paths.lineages, lineages).expect("could not write the generated lineages");
 
     paths
+}
+
+/// Writes a taxonomy of `distinct` leaves into `dir` and loads it into the two stores.
+///
+/// What a caller almost always wants: the files exist only to be parsed. [`write_taxonomy`] is
+/// still there for a caller that needs the paths themselves.
+///
+/// The stores hold everything they read, so `dir` may be deleted as soon as this returns.
+///
+/// # Panics
+///
+/// If `distinct` is outside the range [`write_taxonomy`] accepts, or if either store rejects what
+/// was written, which is a broken generator rather than a condition to handle.
+pub fn load_taxonomy(dir: &Path, distinct: u32) -> (TaxonStore, LineageStore) {
+    let paths = write_taxonomy(dir, distinct);
+
+    let taxons = TaxonStore::try_from_file(&paths.taxons.to_string_lossy())
+        .unwrap_or_else(|err| panic!("the generated taxons should load: {err:?}"));
+    let lineages = LineageStore::try_from_file(&paths.lineages.to_string_lossy())
+        .unwrap_or_else(|err| panic!("the generated lineages should load: {err:?}"));
+
+    (taxons, lineages)
 }
 
 /// `count` taxon ids drawn from the `distinct` leaves [`write_taxonomy`] wrote.

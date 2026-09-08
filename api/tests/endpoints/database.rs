@@ -35,6 +35,18 @@ pub async fn get_against(server: &MockServer, path: &str) -> (StatusCode, Value)
     answered
 }
 
+/// Runs one JSON POST against a state whose database is `server`.
+pub async fn post_against(server: &MockServer, path: &str, body: Value) -> (StatusCode, Value) {
+    let (dir, state) = test_state(&server.base_url());
+    let request = Request::post(path)
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    let answered = request_json(state, request).await;
+    drop(dir);
+    answered
+}
+
 /// The taxon the corpus gives an accession.
 ///
 /// Mocks that invent a taxon assert over the corpus rather than against it: a row attributing one

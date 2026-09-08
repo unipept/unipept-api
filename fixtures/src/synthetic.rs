@@ -103,19 +103,19 @@ pub fn write_taxonomy(dir: &Path, distinct: u32) -> TaxonomyPaths {
     }
 
     // The fifth column is the validity byte, 0x01 for a valid taxon.
-    let no_rank: String = LineageRank::NoRank.into();
+    let no_rank = LineageRank::NoRank.as_str();
     let mut taxons = format!("1\troot\t{no_rank}\t1\t\u{1}\n");
 
     for (id, rank) in &ancestors {
         // `LineageRank::LINEAGE_ORDER` names the columns in the order they are read, and its
         // string form is the spelling the taxon table's rank column takes.
-        let name: String = LineageRank::LINEAGE_ORDER[*rank].clone().into();
+        let name = LineageRank::LINEAGE_ORDER[*rank].as_str();
         writeln!(taxons, "{id}\tancestor_{id}\t{name}\t1\t\u{1}").expect("writing cannot fail");
     }
 
     for leaf in 0..distinct {
         let id = LEAF_BASE + leaf;
-        let species: String = LineageRank::Species.into();
+        let species = LineageRank::Species.as_str();
         writeln!(taxons, "{id}\ttaxon_{leaf}\t{species}\t1\t\u{1}").expect("writing to a String cannot fail");
     }
 

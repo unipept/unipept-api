@@ -36,35 +36,32 @@ pub struct TaxonCountResult {
     count: u32
 }
 
+/// Whether a taxon belongs in a filtered listing.
+///
+/// `filter` is matched already lowercased, so the caller lowercases it once per request rather than
+/// once per taxon. An empty filter matches every ranked, valid taxon, since `contains("")` holds.
+fn matches(filter: &str, taxon_id: u32, name: &str, rank: &LineageRank, is_valid: bool) -> bool {
+    is_valid
+        && *rank != LineageRank::NoRank
+        && (name.to_lowercase().contains(filter)
+            || taxon_id.to_string().contains(filter)
+            || rank.as_str().contains(filter))
+}
+
 async fn count_handler(
     State(AppState { datastore, .. }): State<AppState>,
     TaxaCountParameters { filter }: TaxaCountParameters
 ) -> Result<TaxonCountResult, Infallible> {
     let taxon_store = datastore.taxon_store();
+    let filter = filter.to_lowercase();
 
-    if filter.is_empty() {
-        Ok(TaxonCountResult {
-            count: taxon_store
-                .mapper
-                .values()
-                .filter(|&(_, rank, is_valid)| *is_valid && *rank != LineageRank::NoRank)
-                .count() as u32
-        })
-    } else {
-        Ok(TaxonCountResult {
-            count: taxon_store
-                .mapper
-                .iter()
-                .filter(|(taxon_id, (name, rank, is_valid))| {
-                    *is_valid
-                        && *rank != LineageRank::NoRank
-                        && (name.to_lowercase().contains(&filter.to_lowercase())
-                            || taxon_id.to_string().to_lowercase().contains(&filter.to_lowercase())
-                            || rank.as_str().contains(&filter.to_lowercase()))
-                })
-                .count() as u32
-        })
-    }
+    Ok(TaxonCountResult {
+        count: taxon_store
+            .mapper
+            .iter()
+            .filter(|(taxon_id, (name, rank, is_valid))| matches(&filter, **taxon_id, name, rank, *is_valid))
+            .count() as u32
+    })
 }
 
 async fn filter_handler(
@@ -79,16 +76,12 @@ async fn filter_handler(
 ) -> Result<Vec<u32>, Infallible> {
     let taxon_store = datastore.taxon_store();
 
+    let filter = filter.to_lowercase();
+
     let mut filtered_taxa: Vec<_> = taxon_store
         .mapper
         .iter()
-        .filter(|(taxon_id, (name, rank, is_valid))| {
-            *is_valid
-                && *rank != LineageRank::NoRank
-                && (name.to_lowercase().contains(&filter.to_lowercase())
-                    || taxon_id.to_string().to_lowercase().contains(&filter.to_lowercase())
-                    || rank.as_str().contains(&filter.to_lowercase()))
-        })
+        .filter(|(taxon_id, (name, rank, is_valid))| matches(&filter, **taxon_id, name, rank, *is_valid))
         .map(|(id, _)| *id)
         .collect();
 

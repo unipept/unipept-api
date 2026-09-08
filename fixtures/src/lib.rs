@@ -74,7 +74,7 @@ pub const TAXONS_TSV: &str = include_str!("../data/taxons.tsv");
 
 /// Lineages: a taxon id followed by one column per rank, `\N` where the taxonomy records nothing.
 ///
-/// The column count is `LineageStore::AMOUNT_OF_RANKS`, which is unrelated to the number of taxa.
+/// The column count is `LineageStore::AMOUNT_OF_RANKS`.
 pub const LINEAGES_TSV: &str = include_str!("../data/lineages.tsv");
 
 /// Every accession in the corpus, in file order.
@@ -168,15 +168,15 @@ pub mod peptides {
 ///
 /// Counted from `TAXONS_TSV` rather than written down, so adding a taxon cannot leave a test
 /// asserting a stale total. Root is the only unranked row, [`taxa::HELODERMA`] the only invalid one.
-pub fn ranked_and_valid_taxa() -> usize {
+pub fn ranked_and_valid_taxa() -> u64 {
     TAXONS_TSV
         .lines()
         .filter(|line| !line.trim().is_empty())
         .filter(|line| {
-            let columns: Vec<&str> = line.split('\t').collect();
-            columns.len() >= 5 && columns[2] != "no rank" && columns[4].as_bytes().first() == Some(&1)
+            let mut columns = line.split('\t').skip(2);
+            columns.next() != Some("no rank") && columns.nth(1) == Some("\u{1}")
         })
-        .count()
+        .count() as u64
 }
 
 /// Paths to a written-out set of datastore files, in the order `DataStore::try_from_files` takes.

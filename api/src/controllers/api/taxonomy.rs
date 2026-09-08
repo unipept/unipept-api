@@ -67,8 +67,7 @@ fn get_children_at_rank(
 ) -> Option<HashSet<u32>> {
     let descendants_rank: String = descendants_ranks.to_string().to_lowercase();
 
-    // The lineage columns spell a rank with an underscore, which is what `lineage_key` writes.
-    let lineages_at_rank = lineage_store.get_lineages_at_rank(rank.lineage_key().as_str(), taxon_id);
+    let lineages_at_rank = lineage_store.get_lineages_at_rank(rank.lineage_key(), taxon_id);
 
     let mut children_id_set = HashSet::new();
 
@@ -123,7 +122,7 @@ async fn handler(
                 if descendants {
                     children = Some(
                         lineage_store
-                            .get_all_taxon_ids_at_rank("domain")?
+                            .get_all_taxon_ids_at_rank(LineageRank::Domain.lineage_key())?
                             .iter()
                             .flat_map(|sk_taxon| {
                                 descendants_ranks
@@ -149,7 +148,7 @@ async fn handler(
                     taxon: Taxon {
                         taxon_id,
                         taxon_name: String::from("root"),
-                        taxon_rank: String::from("no rank")
+                        taxon_rank: String::from(LineageRank::NoRank.as_str())
                     },
                     lineage,
                     descendants: children

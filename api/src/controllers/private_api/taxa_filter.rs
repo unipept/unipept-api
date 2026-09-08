@@ -39,13 +39,17 @@ pub struct TaxonCountResult {
 /// Whether a taxon belongs in a filtered listing.
 ///
 /// `filter` is matched already lowercased, so the caller lowercases it once per request rather than
-/// once per taxon. An empty filter matches every ranked, valid taxon, since `contains("")` holds.
+/// once per taxon. An empty filter takes every ranked, valid taxon without lowercasing its name,
+/// which is the whole taxon table on the counting path.
 fn matches(filter: &str, taxon_id: u32, name: &str, rank: &LineageRank, is_valid: bool) -> bool {
-    is_valid
-        && *rank != LineageRank::NoRank
-        && (name.to_lowercase().contains(filter)
-            || taxon_id.to_string().contains(filter)
-            || rank.as_str().contains(filter))
+    if !is_valid || *rank == LineageRank::NoRank {
+        return false;
+    }
+
+    filter.is_empty()
+        || name.to_lowercase().contains(filter)
+        || taxon_id.to_string().contains(filter)
+        || rank.as_str().contains(filter)
 }
 
 async fn count_handler(

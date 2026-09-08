@@ -21,8 +21,8 @@
 //! `proteins.tsv`, union it with every non-`\N` rank id on those taxa's rows in the build's
 //! lineage table, add taxon 1, and keep the `melanogaster` pair, which no protein names. Copy the
 //! matching rows out of both tables rather than rewriting them — the fifth taxon column is a raw
-//! `0x01`/`0x00` byte, not text. Twenty-eight of the ancestors have a lineage row but no taxon
-//! row, which is a property of a sampled taxonomy and not an error.
+//! `0x01`/`0x00` byte, not text. Twenty-eight ancestors are named in a lineage column without
+//! having a row of their own, which is a property of a sampled taxonomy and not an error.
 //!
 //! Writers panic rather than returning errors. A fixture that cannot be written to a temporary
 //! directory is a broken harness, not a condition a test should handle; this is the opposite of

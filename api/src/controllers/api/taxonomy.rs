@@ -67,7 +67,8 @@ fn get_children_at_rank(
 ) -> Option<HashSet<u32>> {
     let descendants_rank: String = descendants_ranks.to_string().to_lowercase();
 
-    let lineages_at_rank = lineage_store.get_lineages_at_rank(rank.to_string().to_lowercase().as_str(), taxon_id);
+    // The lineage columns spell a rank with an underscore, which is what `lineage_key` writes.
+    let lineages_at_rank = lineage_store.get_lineages_at_rank(rank.lineage_key().as_str(), taxon_id);
 
     let mut children_id_set = HashSet::new();
 

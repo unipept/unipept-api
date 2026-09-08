@@ -144,3 +144,38 @@ async fn an_unknown_taxon_is_omitted_rather_than_failing() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body.as_array().map(Vec::len), Some(1));
 }
+
+/// A taxon whose own rank holds a space finds its descendants.
+///
+/// The rank the taxon carries is spelled `species group`, the lineage column `species_group`, and
+/// the endpoint has to cross between the two to read the column at all. Every other taxon in the
+/// corpus has a single-word rank, where the two spellings are the same string.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_species_group_finds_its_descendants() {
+    let path = format!(
+        "/api/v2/taxonomy?input[]={}&descendants=true&descendants_ranks[]=species_subgroup",
+        fixtures::taxa::MELANOGASTER_GROUP
+    );
+    let (status, body) = get_json(&path).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body[0]["taxon_rank"], "species group");
+    assert_eq!(sorted_ids(&body[0]["descendants"]), vec![fixtures::taxa::MELANOGASTER_SUBGROUP as u64]);
+}
+
+/// The same crossing from the second multi-word rank, `species subgroup`.
+///
+/// A taxon is its own descendant at its own rank, so the subgroup answers with itself. That is
+/// still the whole crossing: a rank the lookup cannot read answers with an empty list instead.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_species_subgroup_is_read_at_its_own_rank() {
+    let path = format!(
+        "/api/v2/taxonomy?input[]={}&descendants=true&descendants_ranks[]=species_subgroup",
+        fixtures::taxa::MELANOGASTER_SUBGROUP
+    );
+    let (status, body) = get_json(&path).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body[0]["taxon_rank"], "species subgroup");
+    assert_eq!(sorted_ids(&body[0]["descendants"]), vec![fixtures::taxa::MELANOGASTER_SUBGROUP as u64]);
+}

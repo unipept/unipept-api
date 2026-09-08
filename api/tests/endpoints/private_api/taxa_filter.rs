@@ -46,6 +46,23 @@ async fn a_numeric_filter_matches_a_taxon_id() {
     assert!(body["count"].as_u64().is_some_and(|n| n >= 1), "got {body}");
 }
 
+/// The filter matches on the rank name, including the two rank names that hold a space.
+///
+/// `species group` is the name the API serialises for that rank, so it is the name a caller has to
+/// type. `species subgroup` is a different rank and must not be swept in with it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_rank_filter_matches_a_multi_word_rank_name() {
+    let (status, group) = get_json("/private_api/taxa/count?filter=species%20group").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(group["count"], 1);
+
+    let (_, subgroup) = get_json("/private_api/taxa/count?filter=species%20subgroup").await;
+    assert_eq!(subgroup["count"], 1);
+
+    let (_, listed) = get_json("/private_api/taxa/filter?filter=species%20group&start=0&end=100").await;
+    assert_eq!(as_set(&listed), std::collections::BTreeSet::from([fixtures::taxa::MELANOGASTER_GROUP as u64]));
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn the_filter_ignores_case() {
     let (_, upper) = get_json("/private_api/taxa/count?filter=CROCODYLUS").await;

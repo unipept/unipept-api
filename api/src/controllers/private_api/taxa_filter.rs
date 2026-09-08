@@ -60,7 +60,7 @@ async fn count_handler(
                         && *rank != LineageRank::NoRank
                         && (name.to_lowercase().contains(&filter.to_lowercase())
                             || taxon_id.to_string().to_lowercase().contains(&filter.to_lowercase())
-                            || rank.to_string().to_lowercase().contains(&filter.to_lowercase()))
+                            || rank.as_str().contains(&filter.to_lowercase()))
                 })
                 .count() as u32
         })
@@ -87,7 +87,7 @@ async fn filter_handler(
                 && *rank != LineageRank::NoRank
                 && (name.to_lowercase().contains(&filter.to_lowercase())
                     || taxon_id.to_string().to_lowercase().contains(&filter.to_lowercase())
-                    || rank.to_string().to_lowercase().contains(&filter.to_lowercase()))
+                    || rank.as_str().contains(&filter.to_lowercase()))
         })
         .map(|(id, _)| *id)
         .collect();

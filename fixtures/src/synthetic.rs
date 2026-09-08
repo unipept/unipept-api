@@ -1,6 +1,6 @@
 //! A generated taxonomy, for measurements that need a realistic working set.
 //!
-//! The corpus in [`crate`] is twenty-six taxa, so that an expected LCA is checkable by eye. That
+//! The corpus in [`crate`] is twenty-eight taxa, so that an expected LCA is checkable by eye. That
 //! is the wrong shape for a benchmark of anything that walks lineages: a handful of them stays in
 //! L1, and a pointer walk over the lineage store costs nothing measurable. This module builds a
 //! taxonomy wide enough for that walk to miss cache, without committing a corpus to the

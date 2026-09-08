@@ -13,17 +13,16 @@
 //!   verbatim out of a `taxons.tsv`/`lineages.tsv` pair from a Unipept database build. The set is
 //!   closed under ancestry — every taxon a protein names, every ancestor those taxa's lineages
 //!   record, and root — so it is small enough to read in full, which is what makes an expected LCA
-//!   checkable by eye rather than by rerunning the code. Two of the rows, the `melanogaster` pair,
-//!   carry the two multi-word ranks and no protein; every other rank in the corpus is a single
-//!   word, so without them nothing exercises a rank name that holds a space.
+//!   checkable by eye rather than by rerunning the code. The `melanogaster` pair carries the two
+//!   multi-word ranks a lineage column spells with an underscore, and carries no protein.
 //! - **Proteins** — `data/proteins.tsv`: thirteen rows referencing only taxa from that subset.
 //!
 //! To regenerate the taxonomy after changing the proteins: take the taxon column of
 //! `proteins.tsv`, union it with every non-`\N` rank id on those taxa's rows in the build's
-//! lineage table, add taxon 1, and copy the matching rows out of both tables. Copy them rather
-//! than rewriting them — the fifth taxon column is a raw `0x01`/`0x00` byte, not text, and fifteen
-//! of the ancestors have a lineage row but no taxon row, which is a property of a sampled taxonomy
-//! and not an error.
+//! lineage table, add taxon 1, and keep the `melanogaster` pair, which no protein names. Copy the
+//! matching rows out of both tables rather than rewriting them — the fifth taxon column is a raw
+//! `0x01`/`0x00` byte, not text. Twenty-eight of the ancestors have a lineage row but no taxon
+//! row, which is a property of a sampled taxonomy and not an error.
 //!
 //! Writers panic rather than returning errors. A fixture that cannot be written to a temporary
 //! directory is a broken harness, not a condition a test should handle; this is the opposite of
@@ -115,9 +114,8 @@ pub mod taxa {
     pub const ALOUATTA_SENICULUS: u32 = 9503;
     /// The `melanogaster group`, a taxon of rank `species group`.
     ///
-    /// Its rank name holds a space, which the lineage columns write as an underscore. It is the
-    /// only taxon here whose rank is more than one word, apart from the subgroup below it and
-    /// root, and it has no protein: nothing but a rank name is asked of it.
+    /// Its rank name holds a space, which the lineage columns write as an underscore. It carries no
+    /// protein: nothing but a rank name is asked of it.
     pub const MELANOGASTER_GROUP: u32 = 32346;
     /// The `melanogaster subgroup`, of rank `species subgroup`, and the only descendant of
     /// [`MELANOGASTER_GROUP`].
@@ -292,10 +290,7 @@ mod tests {
         }
     }
 
-    /// One taxon at each of the two multi-word ranks.
-    ///
-    /// Every other rank in the corpus is a single word, so a rank name that holds a space is only
-    /// reachable through these two rows.
+    /// One taxon at each of the two multi-word ranks a lineage column spells with an underscore.
     #[test]
     fn the_corpus_holds_a_taxon_at_each_multi_word_rank() {
         let ranks: BTreeSet<&str> = TAXONS_TSV

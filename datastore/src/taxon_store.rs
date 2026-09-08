@@ -279,8 +279,8 @@ mod tests {
         }
     }
 
-    /// `Display` writes the rank name itself, so a rendered rank can be read back by `FromStr` and
-    /// compared with a rank column of the taxon table.
+    /// `Display` and `From<LineageRank> for String` write the same name, and it is the name the
+    /// taxon table spells rather than the variant name.
     #[test]
     fn display_writes_the_rank_name() {
         for rank in all_ranks() {
@@ -290,9 +290,10 @@ mod tests {
 
         assert_eq!(LineageRank::NoRank.to_string(), "no rank");
         assert_eq!(LineageRank::SpeciesGroup.to_string(), "species group");
+        assert_eq!(LineageRank::SpeciesSubgroup.to_string(), "species subgroup");
     }
 
-    /// `NoRank` is a rank a taxon can have and not a lineage column, so its key must address none.
+    /// `NoRank` is a rank a taxon can carry but not a lineage column, so its key addresses none.
     #[test]
     fn no_rank_addresses_no_lineage_column() {
         assert_eq!(LineageRank::NoRank.lineage_key(), "no_rank");

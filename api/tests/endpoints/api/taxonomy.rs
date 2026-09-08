@@ -116,8 +116,7 @@ async fn a_rank_nothing_sits_at_is_an_empty_list() {
 
 /// Root does not walk a lineage: it collects every taxon at the requested rank beneath each domain.
 ///
-/// Its own rank, `no rank`, names no lineage column, so this path hardcodes `LineageRank::Domain`
-/// and starts one rank down.
+/// Root's own rank, `no rank`, names no lineage column, so this path starts at domain instead.
 #[tokio::test(flavor = "multi_thread")]
 async fn root_reports_every_taxon_at_the_requested_rank() {
     let (status, body) = get_json("/api/v2/taxonomy?input[]=1&descendants=true&descendants_ranks[]=species").await;
@@ -147,9 +146,8 @@ async fn an_unknown_taxon_is_omitted_rather_than_failing() {
 
 /// A taxon whose own rank holds a space finds its descendants.
 ///
-/// The rank the taxon carries is spelled `species group`, the lineage column `species_group`, and
-/// the endpoint has to cross between the two to read the column at all. Every other taxon in the
-/// corpus has a single-word rank, where the two spellings are the same string.
+/// The taxon carries `species group` and the lineage column is `species_group`, so the endpoint has
+/// to cross between the two spellings to read the column at all.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_species_group_finds_its_descendants() {
     let path = format!(
@@ -165,8 +163,7 @@ async fn a_species_group_finds_its_descendants() {
 
 /// The same crossing from the second multi-word rank, `species subgroup`.
 ///
-/// A taxon is its own descendant at its own rank, so the subgroup answers with itself. That is
-/// still the whole crossing: a rank the lookup cannot read answers with an empty list instead.
+/// A taxon is its own descendant at its own rank, so the subgroup answers with itself.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_species_subgroup_is_read_at_its_own_rank() {
     let path = format!(

@@ -17,6 +17,17 @@ async fn get_raw(path: &str) -> (StatusCode, String) {
     answered
 }
 
+async fn post_raw(path: &str, body: serde_json::Value) -> (StatusCode, String) {
+    let (dir, state) = offline_state();
+    let request = Request::post(path)
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    let answered = request_raw(state, request).await;
+    drop(dir);
+    answered
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn the_tree_is_rooted_at_the_organism() {
     let (status, body) = get_json("/api/v2/taxa2tree?input[]=8501&input[]=8502").await;
@@ -54,6 +65,32 @@ async fn a_post_carries_counts_per_taxon() {
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["data"]["count"], 8, "root aggregates the counts beneath it");
+}
+
+/// The two halves take different parameters, so `routing::get_and_post_answer_alike` has no single
+/// body to send for this route. A count of three is the same request as the taxon repeated three
+/// times, on the JSON route and on the HTML one.
+///
+/// One taxon rather than several: the tree is built by iterating a `HashMap`, so the order of the
+/// children of a node is not stable between two requests.
+#[tokio::test(flavor = "multi_thread")]
+async fn counts_answer_like_the_repeats_they_stand_for() {
+    let repeated = "input[]=8501&input[]=8501&input[]=8501";
+
+    let (get_status, from_get) = get_json(&format!("/api/v2/taxa2tree?{repeated}")).await;
+    let (post_status, from_post) = post_json("/api/v2/taxa2tree", json!({ "counts": { "8501": 3 } })).await;
+
+    assert_eq!(get_status, StatusCode::OK);
+    assert_eq!(post_status, StatusCode::OK);
+    assert_eq!(from_get["data"]["count"], 3);
+    assert_eq!(from_get, from_post);
+
+    let (get_status, from_get) = get_raw(&format!("/api/v2/taxa2tree.html?{repeated}")).await;
+    let (post_status, from_post) = post_raw("/api/v2/taxa2tree.html", json!({ "counts": { "8501": 3 } })).await;
+
+    assert_eq!(get_status, StatusCode::OK);
+    assert_eq!(post_status, StatusCode::OK);
+    assert_eq!(from_get, from_post);
 }
 
 /// `link` does not decorate the tree — it replaces it. The response becomes a different variant

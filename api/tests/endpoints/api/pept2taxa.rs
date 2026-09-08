@@ -45,8 +45,7 @@ async fn pept2taxa_lists_every_taxon_a_peptide_reaches() {
     assert_eq!(from_compact, from_dense, "the two shapes must agree about which taxa were found");
 }
 
-/// The compact `taxa` list is a set of taxa, not a list of matches: a peptide that reaches one
-/// taxon through several proteins names it once. `COMMON` is in two proteins of `C. niloticus`.
+/// `COMMON` is in two proteins of `C. niloticus`, which the compact list must name once.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_compact_shape_names_each_taxon_once() {
     use fixtures::taxa::*;

@@ -83,9 +83,7 @@ async fn handler(
     version: LineageVersion
 ) -> Result<Vec<TaxaInformation>, ApiError> {
     let input = sanitize_peptides(input);
-    // Neither shape reads anything but the taxon of a match, so this takes the lightweight path:
-    // no accession or annotation is retrieved. Each result's `taxa` are sorted and deduplicated,
-    // which is what both shapes below rely on to name a taxon once per peptide.
+    // Neither shape reads anything but the taxon, and `taxa` is already distinct and ascending.
     let result = tokio::task::block_in_place(|| index.analyse_taxa(&input, equate_il, tryptic, Some(cutoff)));
 
     let taxon_store = datastore.taxon_store();

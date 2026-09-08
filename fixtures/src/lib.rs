@@ -32,6 +32,8 @@ use std::{
     path::{Path, PathBuf}
 };
 
+pub mod synthetic;
+
 #[cfg(feature = "index-builder")]
 mod index_builder;
 #[cfg(feature = "index-builder")]

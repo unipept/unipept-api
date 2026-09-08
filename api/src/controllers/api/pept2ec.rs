@@ -61,10 +61,9 @@ async fn handler(
 
     // Repeat each result as many times as its own peptide was asked for.
     //
-    // Keyed on `item.sequence`, not on position: `analyse` drops a peptide that matches nothing,
-    // so `result` is shorter than `unique_peptides` as soon as one misses, and pairing the two by
-    // index gives every later result the count belonging to a different peptide. `sequence` is the
-    // peptide as the caller wrote it, so it addresses `peptide_counts` directly.
+    // Keyed on `item.sequence` rather than on position: `analyse` drops a peptide that matches
+    // nothing, so `result` is shorter than the list that was searched. `sequence` is the peptide as
+    // the caller wrote it, so it addresses `peptide_counts` directly.
     let mut final_results = Vec::new();
     for item in result {
         if let Some(count) = peptide_counts.get(item.sequence) {

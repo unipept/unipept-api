@@ -57,14 +57,8 @@ async fn a_protein_without_ec_numbers_answers_with_an_empty_list() {
 
 /// A peptide that matches nothing must not shift the repeat counts of the ones that do.
 ///
-/// `analyse` drops a peptide with no matches, so the result list is shorter than the list of
-/// unique peptides that was searched. Pairing the two by position gave every result after the
-/// first miss the count belonging to a different peptide.
-///
-/// Note on detection: `unique_peptides` comes from `HashMap::keys`, whose order is randomised per
-/// process, and the old code happened to be correct in the one ordering where every dropped
-/// peptide sorted last. Three matching peptides make that ordering a 1-in-4 chance, so this test
-/// caught the defect in most runs rather than all of them. It is deterministic against the fix.
+/// `analyse` drops a peptide with no matches, so the result list is shorter than the list of unique
+/// peptides that was searched, and each result has to carry the count of the peptide it names.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_peptide_that_matches_nothing_does_not_shift_the_other_counts() {
     let input = format!(

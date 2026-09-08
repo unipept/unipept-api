@@ -67,15 +67,15 @@ fn get_children_at_rank(
     descendants_ranks: String,
     lineage_store: &LineageStore
 ) -> Option<HashSet<u32>> {
-    let descendants_rank: String = descendants_ranks.to_string().to_lowercase();
-
+    // Taken as it arrived: `handler` rejects a rank `rank_to_idx` does not know before any of them
+    // reaches here, and that check is exact.
     let lineages_at_rank = lineage_store.get_lineages_at_rank(&rank, taxon_id);
 
     let mut children_id_set = HashSet::new();
 
     lineages_at_rank?
         .iter()
-        .filter_map(|lin| lin.get_taxon_id_at_rank(descendants_rank.as_str()))
+        .filter_map(|lin| lin.get_taxon_id_at_rank(descendants_ranks.as_str()))
         .for_each(|id| {
             children_id_set.insert(id.unsigned_abs());
         });

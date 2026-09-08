@@ -126,7 +126,7 @@ async fn filter_handler(
     Ok(filtered_proteomes
         .into_iter()
         .skip(start)
-        .take(end.saturating_sub(start))
+        .take(end - start)
         .map(|(key, _)| key.to_string())
         .collect())
 }

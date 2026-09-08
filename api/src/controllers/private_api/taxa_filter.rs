@@ -126,7 +126,7 @@ async fn filter_handler(
     }
 
     // Take the range [start, end), which is empty when `end` is not past `start`.
-    let taxa: Vec<u32> = filtered_taxa.into_iter().skip(start).take(end.saturating_sub(start)).collect();
+    let taxa: Vec<u32> = filtered_taxa.into_iter().skip(start).take(end - start).collect();
 
     Ok(taxa)
 }

@@ -54,3 +54,37 @@ async fn a_protein_without_ec_numbers_answers_with_an_empty_list() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body[0]["ec"].as_array().map(Vec::len), Some(0));
 }
+
+/// A peptide that matches nothing must not shift the repeat counts of the ones that do.
+///
+/// `analyse` drops a peptide with no matches, so the result list is shorter than the list of
+/// unique peptides that was searched. Pairing the two by position gave every result after the
+/// first miss the count belonging to a different peptide.
+///
+/// Note on detection: `unique_peptides` comes from `HashMap::keys`, whose order is randomised per
+/// process, and the old code happened to be correct in the one ordering where every dropped
+/// peptide sorted last. Three matching peptides make that ordering a 1-in-4 chance, so this test
+/// caught the defect in most runs rather than all of them. It is deterministic against the fix.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_peptide_that_matches_nothing_does_not_shift_the_other_counts() {
+    let input = format!(
+        "input[]={ABSENT}\
+         &input[]={UNIQUE}&input[]={UNIQUE}\
+         &input[]={GENUS_SHARED}&input[]={GENUS_SHARED}&input[]={GENUS_SHARED}\
+         &input[]={VALIDATION_SHARED}"
+    );
+
+    let (status, body) = get_json(&format!("/api/v2/pept2ec?{input}")).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for entry in body.as_array().expect("an array of results") {
+        *counts.entry(entry["peptide"].as_str().expect("a peptide name").to_string()).or_insert(0) += 1;
+    }
+
+    assert_eq!(counts.get(UNIQUE), Some(&2), "asked for twice");
+    assert_eq!(counts.get(GENUS_SHARED), Some(&3), "asked for three times");
+    assert_eq!(counts.get(VALIDATION_SHARED), Some(&1), "asked for once");
+    assert_eq!(counts.get(ABSENT), None, "matches nothing, so it has no result");
+    assert_eq!(body.as_array().map(Vec::len), Some(6), "no result invented and none lost");
+}

@@ -33,13 +33,14 @@ async fn the_json_suffix_reaches_the_same_handler() {
     }
 }
 
-/// `/api/v1` and `/api/v2` mount the same router — see issue #152. Asserted so that separating
-/// them becomes a deliberate change rather than a silent one.
+/// `/api/v1` and `/api/v2` mount the same router, which `create_api_routes` documents as
+/// deliberate. Asserted so that separating them becomes a deliberate change rather than a
+/// silent one.
 #[tokio::test(flavor = "multi_thread")]
-async fn the_two_api_versions_answer_identically_issue_152() {
+async fn the_two_api_versions_answer_identically() {
     let (v1_status, v1) = get_json("/api/v1/taxonomy?input[]=8501").await;
     let (v2_status, v2) = get_json("/api/v2/taxonomy?input[]=8501").await;
 
     assert_eq!(v1_status, v2_status);
-    assert_eq!(v1, v2, "issue #152: v1 is an alias for v2, and nothing else records that");
+    assert_eq!(v1, v2, "v1 is an alias for v2; see the comment on create_api_routes");
 }

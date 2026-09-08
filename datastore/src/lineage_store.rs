@@ -76,6 +76,42 @@ impl Lineage {
             _ => None
         }
     }
+
+    /// Retrieves the ID of this lineage at a rank index, in the same order as
+    /// [`LineageStore::rank_to_idx`]. If the index is out of range, None is returned.
+    pub fn get_rank(&self, rank_index: usize) -> Option<i32> {
+        match rank_index {
+            0 => self.domain,
+            1 => self.realm,
+            2 => self.kingdom,
+            3 => self.subkingdom,
+            4 => self.superphylum,
+            5 => self.phylum,
+            6 => self.subphylum,
+            7 => self.superclass,
+            8 => self.class,
+            9 => self.subclass,
+            10 => self.superorder,
+            11 => self.order,
+            12 => self.suborder,
+            13 => self.infraorder,
+            14 => self.superfamily,
+            15 => self.family,
+            16 => self.subfamily,
+            17 => self.tribe,
+            18 => self.subtribe,
+            19 => self.genus,
+            20 => self.subgenus,
+            21 => self.species_group,
+            22 => self.species_subgroup,
+            23 => self.species,
+            24 => self.subspecies,
+            25 => self.strain,
+            26 => self.varietas,
+            27 => self.forma,
+            _ => None
+        }
+    }
 }
 
 pub struct LineageStore {
@@ -274,9 +310,9 @@ mod tests {
 
     /// The rank names index the lineage columns in order, and each one reads back its own column.
     ///
-    /// `rank_to_idx` and `get_taxon_id_at_rank` are two hand-written tables over the same 28 ranks,
-    /// listed in the same order, and nothing else checks that they agree with each other or with
-    /// the column order the parser fills.
+    /// `rank_to_idx`, `get_taxon_id_at_rank` and `get_rank` are three hand-written tables over the
+    /// same 28 ranks, listed in the same order, and nothing else checks that they agree with each
+    /// other or with the column order the parser fills.
     #[test]
     fn every_rank_key_addresses_its_own_column() {
         let mut lineage = Lineage::default();
@@ -317,6 +353,7 @@ mod tests {
         for (position, key) in RANK_KEYS.iter().enumerate() {
             assert_eq!(LineageStore::rank_to_idx(key), Some(position), "rank_to_idx({key})");
             assert_eq!(lineage.get_taxon_id_at_rank(key), Some(position as i32 + 1000), "get_taxon_id_at_rank({key})");
+            assert_eq!(lineage.get_rank(position), Some(position as i32 + 1000), "get_rank({position})");
         }
     }
 
@@ -324,5 +361,6 @@ mod tests {
     fn an_unknown_rank_key_addresses_nothing() {
         assert_eq!(LineageStore::rank_to_idx("nonsense"), None);
         assert_eq!(Lineage::default().get_taxon_id_at_rank("nonsense"), None);
+        assert_eq!(Lineage::default().get_rank(LineageStore::AMOUNT_OF_RANKS), None);
     }
 }

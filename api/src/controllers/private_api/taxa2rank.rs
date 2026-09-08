@@ -32,8 +32,9 @@ async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
     Parameters { taxa, rank }: Parameters
 ) -> Result<RankMappingResult, ApiError> {
-    let rank_lowercase = rank.to_lowercase();
-    let rank_idx = LineageStore::rank_to_idx(&rank_lowercase)
+    // Read as it arrived. A rank names a lineage column here rather than matching text a user
+    // typed, so it is the exact name or nothing, as `descendants_ranks` is on `/api/v2/taxonomy`.
+    let rank_idx = LineageStore::rank_to_idx(&rank)
         .ok_or_else(|| ApiError::UnknownRankError(format!("Invalid rank: {}", rank)))?;
 
     let lineage_store = datastore.lineage_store();

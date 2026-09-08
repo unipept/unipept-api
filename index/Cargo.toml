@@ -3,6 +3,7 @@ name = "index"
 version = "2.3.2"
 edition.workspace = true
 rust-version.workspace = true
+publish = false
 
 [dependencies]
 sa-server = { git = "https://github.com/unipept/unipept-index.git" }

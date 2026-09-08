@@ -3,6 +3,7 @@ name = "datastore"
 version = "2.3.2"
 edition.workspace = true
 rust-version.workspace = true
+publish = false
 
 [dependencies]
 serde = { version = "1.0.203", features = ["derive"] }

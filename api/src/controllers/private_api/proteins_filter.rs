@@ -41,6 +41,10 @@ async fn filter_handler(
     State(AppState { database, .. }): State<AppState>,
     ProteinFilterParameters { filter, start, end }: ProteinFilterParameters
 ) -> Result<Vec<String>, ApiError> {
+    if end < start {
+        return Err(ApiError::InvalidParameter(format!("end ({end}) must be at least start ({start})")));
+    }
+
     let connection = database.get_conn();
     Ok(get_accessions_by_filter(connection, filter, start, end).await?)
 }

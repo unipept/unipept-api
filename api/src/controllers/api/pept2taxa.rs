@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
@@ -85,7 +83,8 @@ async fn handler(
     version: LineageVersion
 ) -> Result<Vec<TaxaInformation>, ApiError> {
     let input = sanitize_peptides(input);
-    let result = tokio::task::block_in_place(|| index.analyse(&input, equate_il, tryptic, Some(cutoff)));
+    // Neither shape reads anything but the taxon, and `taxa` is already distinct and ascending.
+    let result = tokio::task::block_in_place(|| index.analyse_taxa(&input, equate_il, tryptic, Some(cutoff)));
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
@@ -94,12 +93,8 @@ async fn handler(
         return Ok(result
             .into_iter()
             .filter_map(|item| {
-                let item_taxa: Vec<u32> = item
-                    .proteins
-                    .iter()
-                    .map(|protein| protein.taxon)
-                    .filter(|&taxon_id| taxon_store.is_valid(taxon_id))
-                    .collect();
+                let item_taxa: Vec<u32> =
+                    item.taxa.into_iter().filter(|&taxon_id| taxon_store.is_valid(taxon_id)).collect();
 
                 if item_taxa.is_empty() {
                     return None;
@@ -117,28 +112,26 @@ async fn handler(
     Ok(result
         .into_iter()
         .flat_map(|item| {
-            let cutoff_used = item.cutoff_used;
-            item.proteins.iter().map(|protein| protein.taxon).collect::<HashSet<u32>>().into_iter().filter_map(
-                move |taxon| {
-                    let (name, rank, _) = taxon_store.get(taxon)?;
-                    let lineage = match (extra, names) {
-                        (true, true) => get_lineage_with_names(taxon, version, lineage_store, taxon_store),
-                        (true, false) => get_lineage(taxon, version, lineage_store),
-                        (false, _) => None
-                    };
+            let (sequence, cutoff_used) = (item.sequence, item.cutoff_used);
+            item.taxa.into_iter().filter_map(move |taxon| {
+                let (name, rank, _) = taxon_store.get(taxon)?;
+                let lineage = match (extra, names) {
+                    (true, true) => get_lineage_with_names(taxon, version, lineage_store, taxon_store),
+                    (true, false) => get_lineage(taxon, version, lineage_store),
+                    (false, _) => None
+                };
 
-                    Some(TaxaInformation::Dense(DenseTaxaInformation {
-                        peptide: item.sequence.to_string(),
-                        cutoff_used,
-                        taxon: Taxon {
-                            taxon_id: taxon,
-                            taxon_name: name.to_string(),
-                            taxon_rank: rank.clone().into()
-                        },
-                        lineage
-                    }))
-                }
-            )
+                Some(TaxaInformation::Dense(DenseTaxaInformation {
+                    peptide: sequence.to_string(),
+                    cutoff_used,
+                    taxon: Taxon {
+                        taxon_id: taxon,
+                        taxon_name: name.to_string(),
+                        taxon_rank: rank.clone().into()
+                    },
+                    lineage
+                }))
+            })
         })
         .collect())
 }

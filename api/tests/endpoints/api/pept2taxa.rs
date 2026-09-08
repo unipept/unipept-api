@@ -45,6 +45,32 @@ async fn pept2taxa_lists_every_taxon_a_peptide_reaches() {
     assert_eq!(from_compact, from_dense, "the two shapes must agree about which taxa were found");
 }
 
+/// `COMMON` is in two proteins of `C. niloticus`, which the compact list must name once.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_compact_shape_names_each_taxon_once() {
+    use fixtures::taxa::*;
+
+    let (status, compact) = get_json(&format!("/api/v2/pept2taxa?input[]={COMMON}&compact=true")).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let mut taxa: Vec<u64> = compact[0]["taxa"]
+        .as_array()
+        .unwrap_or_else(|| panic!("compact should carry a taxa list: {}", compact[0]))
+        .iter()
+        .map(|taxon| taxon.as_u64().expect("an id"))
+        .collect();
+    taxa.sort_unstable();
+
+    assert_eq!(taxa, vec![
+        AZORHIZOBIUM_CAULINODANS as u64,
+        BUCHNERA_APHIDICOLA as u64,
+        CROCODYLUS_NILOTICUS as u64,
+        CROCODYLUS_POROSUS as u64,
+        CROCODYLUS_NOVAEGUINEAE as u64,
+        ALOUATTA_SENICULUS as u64
+    ]);
+}
+
 /// `tryptic` narrows a search to matches at a tryptic boundary, so it can only ever return a
 /// subset of the same search without it. A metamorphic assertion, since the rules themselves are
 /// the index's business rather than this endpoint's.

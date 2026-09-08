@@ -335,9 +335,8 @@ async fn a_text_filter_lists_without_a_taxon_clause() {
 
 /// An `end` below `start` asks for a negative page, and must not underflow.
 ///
-/// `(end - start)` on two `usize` panics in a debug build and wraps to a huge number in a release
-/// one, which then truncates to a negative `size` on the cast to `i64`. The handler rejects this
-/// ordering with a 400 before it reaches here, but the crate cannot assume its caller does.
+/// The handler rejects this ordering with a 400 before it reaches here, but the crate cannot assume
+/// its caller does.
 #[tokio::test]
 async fn an_end_below_start_is_an_empty_page_not_an_underflow() {
     let server = MockServer::start_async().await;
@@ -354,6 +353,33 @@ async fn an_end_below_start_is_an_empty_page_not_an_underflow() {
     let database = database(&server);
     let accessions =
         get_accessions_by_filter(database.get_conn(), String::new(), 10, 0).await.expect("the page parses");
+
+    mock.assert_async().await;
+    assert!(accessions.is_empty());
+}
+
+/// A bound above `i64::MAX` saturates rather than wrapping to a negative one.
+///
+/// `from` and `size` travel as `i64`. `end` is a `usize` a caller sets, so on a 64-bit target it
+/// reaches `usize::MAX` — and the handler's `end < start` check passes for it, since it is the
+/// ordering that is checked and not the magnitude. A plain cast would send the cluster `-1`.
+#[tokio::test]
+async fn a_bound_above_i64_saturates_rather_than_going_negative() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/uniprot_entries/_search")
+                .query_param("from", "0")
+                .query_param("size", i64::MAX.to_string());
+            then.status(200).json_body(json!({ "hits": { "hits": [] } }));
+        })
+        .await;
+
+    let database = database(&server);
+    let accessions = get_accessions_by_filter(database.get_conn(), String::new(), 0, usize::MAX)
+        .await
+        .expect("the page parses");
 
     mock.assert_async().await;
     assert!(accessions.is_empty());

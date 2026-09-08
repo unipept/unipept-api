@@ -1,4 +1,5 @@
-//! `/private_api/proteins/count` and `/proteins/filter` — counting and paging the cluster.
+//! `/private_api/proteins/count` and `/private_api/proteins/filter` — counting and paging the
+//! cluster.
 
 use axum::{
     body::Body,

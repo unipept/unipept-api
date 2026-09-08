@@ -210,6 +210,16 @@ pub async fn get_accessions_count_by_filter(client: &OpenSearch, filter: String)
     Ok(response_body["hits"]["total"]["value"].as_u64().unwrap_or(0) as u32)
 }
 
+/// A paging bound as OpenSearch takes it.
+///
+/// `from` and `size` travel as `i64`, and both are computed from `usize` values a caller controls.
+/// Saturating rather than casting: a `usize` above `i64::MAX` wraps to a negative number, and the
+/// subtraction underflows when `end` is below `start`. Either sends the cluster a bound it refuses,
+/// which surfaces as a 500 for what is a malformed request.
+fn as_window_bound(value: usize) -> i64 {
+    i64::try_from(value).unwrap_or(i64::MAX)
+}
+
 /// Gets UniProt accession IDs from the database that match the given filter criteria
 ///
 /// # Arguments
@@ -288,11 +298,8 @@ pub async fn get_accessions_by_filter(
 
     let response = client
         .search(SearchParts::Index(&["uniprot_entries"]))
-        .from(start as i64)
-        // Saturating, so a caller that passes `end` below `start` gets an empty page rather than a
-        // panic in debug and a negative `size` in release. The handler rejects that ordering with
-        // a 400 before it reaches here; this keeps the crate sound on its own terms.
-        .size(end.saturating_sub(start) as i64)
+        .from(as_window_bound(start))
+        .size(as_window_bound(end.saturating_sub(start)))
         .body(body)
         .send()
         .await?;

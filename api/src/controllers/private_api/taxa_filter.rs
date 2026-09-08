@@ -41,6 +41,10 @@ pub struct TaxonCountResult {
 /// `filter` is matched already lowercased, so the caller lowercases it once per request rather than
 /// once per taxon. An empty filter takes every ranked, valid taxon without lowercasing its name,
 /// which is the whole taxon table on the counting path.
+///
+/// The rank is matched as `as_str` spells it, with a space, because that is the name the response
+/// carries and so the name a caller reads. The `descendants_ranks` parameter of `/api/v2/taxonomy`
+/// takes the underscore spelling instead, since it names a lineage column.
 fn matches(filter: &str, taxon_id: u32, name: &str, rank: &LineageRank, is_valid: bool) -> bool {
     if !is_valid || *rank == LineageRank::NoRank {
         return false;

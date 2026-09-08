@@ -29,6 +29,8 @@ pub struct Parameters {
     names: Flag,
     #[serde(default = "default_descendants")]
     descendants: Flag,
+    /// Rank names as the lineage columns spell them, with an underscore: `species_group`, not
+    /// `species group`. `LineageRank::lineage_key` writes this form.
     #[serde(default = "default_descendants_ranks")]
     descendants_ranks: Vec<String>
 }
@@ -148,7 +150,7 @@ async fn handler(
                     taxon: Taxon {
                         taxon_id,
                         taxon_name: String::from("root"),
-                        taxon_rank: String::from(LineageRank::NoRank.as_str())
+                        taxon_rank: LineageRank::NoRank.to_string()
                     },
                     lineage,
                     descendants: children

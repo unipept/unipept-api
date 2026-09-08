@@ -33,6 +33,8 @@ use std::{
     path::{Path, PathBuf}
 };
 
+use datastore::LineageRank;
+
 pub mod synthetic;
 
 #[cfg(feature = "index-builder")]
@@ -164,18 +166,34 @@ pub mod peptides {
     pub const ABSENT: &str = "WWWWWWWWWW";
 }
 
+/// Every row of the taxon corpus as `(id, name, rank, is_valid)`.
+///
+/// One place that knows the column layout, so a reader of any assertion below does not have to
+/// count tabs, and adding a column moves one line rather than four.
+fn taxon_rows() -> Vec<(u32, &'static str, &'static str, bool)> {
+    TAXONS_TSV
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            let mut fields = line.split('\t');
+            let id = fields.next().expect("a taxon row starts with a taxon id");
+            let name = fields.next().expect("a taxon row has a name column");
+            let rank = fields.next().expect("a taxon row has a rank column");
+            let _parent = fields.next().expect("a taxon row has a parent column");
+            let valid = fields.next().expect("a taxon row has a validity column");
+            (id.parse().expect("the taxon id is numeric"), name, rank, valid == "\u{1}")
+        })
+        .collect()
+}
+
 /// How many corpus taxa carry a rank and are marked valid.
 ///
 /// Counted from `TAXONS_TSV` rather than written down, so adding a taxon cannot leave a test
 /// asserting a stale total. Root is the only unranked row, [`taxa::HELODERMA`] the only invalid one.
 pub fn ranked_and_valid_taxa() -> u64 {
-    TAXONS_TSV
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .filter(|line| {
-            let mut columns = line.split('\t').skip(2);
-            columns.next() != Some("no rank") && columns.nth(1) == Some("\u{1}")
-        })
+    taxon_rows()
+        .iter()
+        .filter(|(_, _, rank, is_valid)| *is_valid && *rank != LineageRank::NoRank.as_str())
         .count() as u64
 }
 
@@ -307,17 +325,23 @@ mod tests {
         }
     }
 
+    /// The corpus holds twenty-eight taxa, of which root is unranked and one is invalid.
+    ///
+    /// `ranked_and_valid_taxa` is what four endpoint assertions compare against, so the number it
+    /// derives is pinned here rather than in any of them.
+    #[test]
+    fn the_ranked_and_valid_count_is_the_corpus_less_root_and_the_invalid_taxon() {
+        assert_eq!(taxon_rows().len(), 28);
+        assert_eq!(ranked_and_valid_taxa(), 26);
+    }
+
     /// One taxon at each of the two multi-word ranks a lineage column spells with an underscore.
     #[test]
     fn the_corpus_holds_a_taxon_at_each_multi_word_rank() {
-        let ranks: BTreeSet<&str> = TAXONS_TSV
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .map(|line| line.split('\t').nth(2).expect("a taxon row has a rank column"))
-            .collect();
+        let ranks: BTreeSet<&str> = taxon_rows().iter().map(|(_, _, rank, _)| *rank).collect();
 
-        assert!(ranks.contains("species group"), "{ranks:?}");
-        assert!(ranks.contains("species subgroup"), "{ranks:?}");
+        assert!(ranks.contains(LineageRank::SpeciesGroup.as_str()), "{ranks:?}");
+        assert!(ranks.contains(LineageRank::SpeciesSubgroup.as_str()), "{ranks:?}");
     }
 
     #[test]
@@ -359,12 +383,8 @@ mod tests {
     /// turns it into something printable.
     #[test]
     fn the_corpus_contains_exactly_one_invalid_taxon() {
-        let invalid: Vec<u32> = TAXONS_TSV
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .filter(|line| line.split('\t').nth(4) != Some("\u{1}"))
-            .map(|line| line.split('\t').next().unwrap().parse().unwrap())
-            .collect();
+        let invalid: Vec<u32> =
+            taxon_rows().iter().filter(|(_, _, _, is_valid)| !is_valid).map(|(id, _, _, _)| *id).collect();
 
         assert_eq!(invalid, vec![taxa::HELODERMA]);
     }

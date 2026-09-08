@@ -16,7 +16,8 @@ use crate::{
 pub struct Parameters {
     /// Vector of taxa vectors, one per peptide
     taxa: Vec<Vec<u32>>,
-    /// The rank to map taxa to (e.g., "species", "genus", "family")
+    /// The rank to map taxa to, as the lineage columns spell it: `species`, `genus`,
+    /// `species_group` with an underscore rather than a space.
     rank: String
 }
 

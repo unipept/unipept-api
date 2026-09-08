@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::HashMap,
     io::{BufRead, BufReader},
     sync::Arc
@@ -44,37 +45,7 @@ impl Lineage {
     /// Retrieves the ID of this lineage at a specific rank name. If the provided rank is invalid
     /// None is returned.
     pub fn get_taxon_id_at_rank(&self, rank_name: &str) -> Option<i32> {
-        match rank_name {
-            "domain" => self.domain,
-            "realm" => self.realm,
-            "kingdom" => self.kingdom,
-            "subkingdom" => self.subkingdom,
-            "superphylum" => self.superphylum,
-            "phylum" => self.phylum,
-            "subphylum" => self.subphylum,
-            "superclass" => self.superclass,
-            "class" => self.class,
-            "subclass" => self.subclass,
-            "superorder" => self.superorder,
-            "order" => self.order,
-            "suborder" => self.suborder,
-            "infraorder" => self.infraorder,
-            "superfamily" => self.superfamily,
-            "family" => self.family,
-            "subfamily" => self.subfamily,
-            "tribe" => self.tribe,
-            "subtribe" => self.subtribe,
-            "genus" => self.genus,
-            "subgenus" => self.subgenus,
-            "species_group" => self.species_group,
-            "species_subgroup" => self.species_subgroup,
-            "species" => self.species,
-            "subspecies" => self.subspecies,
-            "strain" => self.strain,
-            "varietas" => self.varietas,
-            "forma" => self.forma,
-            _ => None
-        }
+        self.get_rank(LineageStore::rank_to_idx(rank_name)?)
     }
 
     /// Retrieves the ID of this lineage at a rank index, in the same order as
@@ -125,11 +96,21 @@ impl LineageStore {
     /// The number of rank columns a lineage row carries. `LineageRank::LINEAGE_ORDER` names them.
     pub const AMOUNT_OF_RANKS: usize = 28;
 
-    /// The lineage column a rank name addresses, keyed on the spelling the columns use:
-    /// `species_group` with an underscore. A caller that holds a `LineageRank` has
-    /// [`LineageRank::lineage_index`] instead.
+    /// The lineage column a rank name addresses.
+    ///
+    /// Either spelling is read: the columns are keyed on `species_group`, and the taxonomy — and
+    /// so every response — writes `species group`. A caller that hands back a rank the API gave it
+    /// is answered rather than refused.
+    ///
+    /// Case is not normalised. A rank argument names a column, so it is matched exactly; the taxon
+    /// filter, which matches a rank as text a user typed, does its own lowercasing and does not
+    /// come through here.
+    ///
+    /// A caller that holds a `LineageRank` has [`LineageRank::lineage_index`] instead.
     pub fn rank_to_idx(s: &str) -> Option<usize> {
-        match s {
+        let key = if s.contains(' ') { Cow::Owned(s.replace(' ', "_")) } else { Cow::Borrowed(s) };
+
+        match key.as_ref() {
             "domain" => Some(0),
             "realm" => Some(1),
             "kingdom" => Some(2),
@@ -364,6 +345,37 @@ mod tests {
     #[test]
     fn an_unknown_rank_key_addresses_nothing() {
         assert_eq!(LineageStore::rank_to_idx("nonsense"), None);
+    }
+
+    /// A rank name is read whether it is spelled with a space or an underscore.
+    ///
+    /// The columns are keyed on the underscore; the taxonomy and every response write the space.
+    #[test]
+    fn a_space_and_an_underscore_address_the_same_column() {
+        for (spaced, keyed) in [("species group", "species_group"), ("species subgroup", "species_subgroup")] {
+            let by_key = LineageStore::rank_to_idx(keyed);
+
+            assert!(by_key.is_some(), "`{keyed}`");
+            assert_eq!(LineageStore::rank_to_idx(spaced), by_key, "`{spaced}`");
+        }
+    }
+
+    /// Only the separator is normalised. A rank argument names a column and is matched exactly.
+    #[test]
+    fn a_rank_name_is_read_case_sensitively() {
+        for name in ["SPECIES", "Species", "SPECIES_GROUP", "Species Group"] {
+            assert_eq!(LineageStore::rank_to_idx(name), None, "`{name}`");
+        }
+    }
+
+    /// Normalising leaves the twenty-six single-word ranks exactly as they were.
+    #[test]
+    fn a_single_word_rank_is_unchanged_by_normalising() {
+        for (position, key) in RANK_KEYS.iter().enumerate() {
+            if !key.contains('_') {
+                assert_eq!(LineageStore::rank_to_idx(key), Some(position), "`{key}`");
+            }
+        }
         assert_eq!(Lineage::default().get_taxon_id_at_rank("nonsense"), None);
         assert_eq!(Lineage::default().get_rank(LineageStore::AMOUNT_OF_RANKS), None);
     }

@@ -131,7 +131,8 @@ async fn handler(
 
                 let taxa: Vec<u32> = filtered_proteins.iter().map(|protein| protein.taxon).unique().collect();
 
-                let lca = calculate_lca(taxa.clone(), LineageVersion::V2, taxon_store, lineage_store, validate_taxa);
+                let lca =
+                    calculate_lca(taxa.iter().copied(), LineageVersion::V2, taxon_store, lineage_store, validate_taxa);
                 let lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store);
 
                 Some(DataItem {

@@ -7,7 +7,12 @@ This package is an implementation of the Unipept API that's being used by the Un
 This is an exhaustive list of all endpoints that are exposed by this API
 
 ### Public endpoints
-#### API v1
+`/api/v1` is deprecated. It stays available because many tools still call it, but it now serves
+the same routes and the same content as `/api/v2`. Note that v1 taxonomy differed slightly from
+v2 in the past; that difference is gone, so a v1 caller gets v2 semantics today. The two lists
+below are identical, and a change to one applies to both. New clients should use `/api/v2`.
+
+#### API v1 (deprecated)
 * `/api/v1/pept2taxa`
 * `/api/v1/pept2lca`
 * `/api/v1/taxa2lca`

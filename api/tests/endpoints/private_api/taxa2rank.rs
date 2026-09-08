@@ -62,15 +62,15 @@ async fn a_taxon_with_no_ancestor_at_that_rank_drops_out() {
     assert_eq!(body["mapped_taxa"], json!([[]]), "Crocodylus niloticus records no class");
 }
 
-/// `rank` names a lineage column, so it is matched exactly.
+/// `rank` names a lineage column, so its case is significant.
 ///
 /// The taxon filters match a rank without regard to case, because there the rank is text a user
 /// typed against the name a response carries. This parameter is an identifier, and reads like
 /// `descendants_ranks` on `/api/v2/taxonomy` rather than like a filter.
 #[tokio::test(flavor = "multi_thread")]
-async fn the_rank_is_matched_exactly() {
-    let (lower, body) = post_json("/private_api/taxa2rank", json!({ "taxa": [[8501]], "rank": "genus" })).await;
-    assert_eq!(lower, StatusCode::OK);
+async fn the_rank_case_is_significant() {
+    let (status, body) = post_json("/private_api/taxa2rank", json!({ "taxa": [[8501]], "rank": "genus" })).await;
+    assert_eq!(status, StatusCode::OK);
     assert_eq!(body["mapped_taxa"], json!([[8500]]));
 
     for rank in ["GENUS", "Genus"] {

@@ -5,7 +5,7 @@ use std::{
     str::FromStr
 };
 
-use crate::errors::TaxonStoreError;
+use crate::{errors::TaxonStoreError, lineage_store::LineageStore};
 
 pub type TaxonInformation = (String, LineageRank, bool);
 
@@ -108,6 +108,44 @@ impl TaxonStore {
     }
 }
 
+impl LineageRank {
+    /// The 28 ranks a lineage row carries, in the order `LineageStore` reads its columns.
+    ///
+    /// `NoRank` is not among them: it is a rank a taxon can have, not a column a lineage has.
+    /// `LineageStore::rank_to_idx` indexes the same ranks in the same order, and
+    /// `the_lineage_order_matches_the_column_index` holds the two together.
+    pub const LINEAGE_ORDER: [LineageRank; LineageStore::AMOUNT_OF_RANKS] = [
+        LineageRank::Domain,
+        LineageRank::Realm,
+        LineageRank::Kingdom,
+        LineageRank::Subkingdom,
+        LineageRank::Superphylum,
+        LineageRank::Phylum,
+        LineageRank::Subphylum,
+        LineageRank::Superclass,
+        LineageRank::Class,
+        LineageRank::Subclass,
+        LineageRank::Superorder,
+        LineageRank::Order,
+        LineageRank::Suborder,
+        LineageRank::Infraorder,
+        LineageRank::Superfamily,
+        LineageRank::Family,
+        LineageRank::Subfamily,
+        LineageRank::Tribe,
+        LineageRank::Subtribe,
+        LineageRank::Genus,
+        LineageRank::Subgenus,
+        LineageRank::SpeciesGroup,
+        LineageRank::SpeciesSubgroup,
+        LineageRank::Species,
+        LineageRank::Subspecies,
+        LineageRank::Strain,
+        LineageRank::Varietas,
+        LineageRank::Forma
+    ];
+}
+
 impl FromStr for LineageRank {
     type Err = TaxonStoreError;
 
@@ -187,37 +225,10 @@ impl From<LineageRank> for String {
 mod tests {
     use super::*;
 
-    const ALL_RANKS: [LineageRank; 29] = [
-        LineageRank::NoRank,
-        LineageRank::Domain,
-        LineageRank::Realm,
-        LineageRank::Kingdom,
-        LineageRank::Subkingdom,
-        LineageRank::Superphylum,
-        LineageRank::Phylum,
-        LineageRank::Subphylum,
-        LineageRank::Superclass,
-        LineageRank::Class,
-        LineageRank::Subclass,
-        LineageRank::Superorder,
-        LineageRank::Order,
-        LineageRank::Suborder,
-        LineageRank::Infraorder,
-        LineageRank::Superfamily,
-        LineageRank::Family,
-        LineageRank::Subfamily,
-        LineageRank::Tribe,
-        LineageRank::Subtribe,
-        LineageRank::Genus,
-        LineageRank::Subgenus,
-        LineageRank::SpeciesGroup,
-        LineageRank::SpeciesSubgroup,
-        LineageRank::Species,
-        LineageRank::Subspecies,
-        LineageRank::Strain,
-        LineageRank::Varietas,
-        LineageRank::Forma
-    ];
+    /// Every rank the taxon table can hold: the lineage columns, plus the one that is not a column.
+    fn all_ranks() -> Vec<LineageRank> {
+        std::iter::once(LineageRank::NoRank).chain(LineageRank::LINEAGE_ORDER).collect()
+    }
 
     /// Every rank survives a trip through its string form and back.
     ///
@@ -226,7 +237,7 @@ mod tests {
     /// taxon table can hold and the parser cannot read back.
     #[test]
     fn every_rank_round_trips_through_its_string_form() {
-        for rank in ALL_RANKS {
+        for rank in all_ranks() {
             let text: String = rank.clone().into();
             let parsed: LineageRank = text.parse().unwrap_or_else(|_| panic!("`{text}` does not parse back"));
             assert_eq!(parsed, rank, "`{text}` parsed as a different rank");
@@ -236,5 +247,19 @@ mod tests {
     #[test]
     fn an_unknown_rank_string_is_rejected() {
         assert!("not a rank".parse::<LineageRank>().is_err());
+    }
+
+    /// `LINEAGE_ORDER` and `rank_to_idx` are two hand-written tables over the same 28 ranks. A
+    /// caller that indexes a lineage column with one and names it with the other gets the wrong
+    /// rank if they ever disagree.
+    ///
+    /// The two spell a rank differently — the columns use `species_group`, the taxon table's rank
+    /// column `species group` — so the comparison goes through the underscore form.
+    #[test]
+    fn the_lineage_order_matches_the_column_index() {
+        for (index, rank) in LineageRank::LINEAGE_ORDER.into_iter().enumerate() {
+            let name: String = rank.into();
+            assert_eq!(LineageStore::rank_to_idx(&name.replace(' ', "_")), Some(index), "`{name}`");
+        }
     }
 }

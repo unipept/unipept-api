@@ -1107,6 +1107,7 @@ name = "fixtures"
 version = "0.1.0"
 dependencies = [
  "binary-traits",
+ "datastore",
  "protein-metadata",
  "protein-text",
  "sa-builder",

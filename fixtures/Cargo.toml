@@ -5,10 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 publish = false
 
-# `datastore` dev-depends on this crate. Cargo permits that cycle, because it goes through a
-# dev-dependency, and it is what lets the generated taxonomy name its ranks from the store that
-# parses them rather than from a copy. The index builder's deps are optional so a release build
-# never compiles them.
 [dependencies]
 datastore = { path = "../datastore" }
 binary-traits = { git = "https://github.com/unipept/unipept-index.git", optional = true }
@@ -17,5 +13,6 @@ protein-text = { git = "https://github.com/unipept/unipept-index.git", optional 
 sa-builder = { git = "https://github.com/unipept/unipept-index.git", optional = true }
 sa-index = { git = "https://github.com/unipept/unipept-index.git", optional = true }
 
+# Optional, so a release build never compiles them.
 [features]
 index-builder = ["dep:binary-traits", "dep:protein-metadata", "dep:protein-text", "dep:sa-builder", "dep:sa-index"]

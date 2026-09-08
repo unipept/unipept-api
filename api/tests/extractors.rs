@@ -221,7 +221,7 @@ async fn an_encoded_separator_in_a_multipart_body_does_not_become_a_parameter() 
     let parameters = post_bytes("multipart/form-data; boundary=X", body).await.expect("the value parses");
 
     assert_eq!(parameters.input, vec!["A&equate_il=true"]);
-    assert!(!parameters.equate_il, "a flag the request never sent must not be set");
+    assert!(!parameters.equate_il.0, "a flag the request never sent must not be set");
 }
 
 /// A `+` in a multipart value is a plus, not a space.
@@ -259,7 +259,7 @@ async fn a_multipart_field_name_cannot_inject_a_parameter() {
 
     let parameters = post_bytes("multipart/form-data; boundary=X", body).await.expect("an odd name is not an error");
 
-    assert!(!parameters.equate_il, "a flag the request never sent must not be set");
+    assert!(!parameters.equate_il.0, "a flag the request never sent must not be set");
 }
 
 /// `input[]` still spells a repeated value: the encoder writes the brackets percent-encoded, and
@@ -353,7 +353,7 @@ async fn a_multipart_field_name_that_looks_like_an_escape_is_taken_literally() {
 
     let parameters = post_bytes("multipart/form-data; boundary=X", body).await.expect("an odd name is not an error");
 
-    assert_eq!(parameters, Parameters { input: vec![], equate_il: false, filter: String::new() });
+    assert_eq!(parameters, Parameters { input: vec![], equate_il: Flag(false), filter: String::new() });
 }
 
 // The tests above only send well-formed input. These cover the boundary: query strings that parse

@@ -5,9 +5,12 @@ edition.workspace = true
 rust-version.workspace = true
 publish = false
 
-# No workspace deps: they would cycle with the crates that dev-depend on this one. The index
-# builder's deps are optional so a release build never compiles them.
+# `datastore` dev-depends on this crate. Cargo permits that cycle, because it goes through a
+# dev-dependency, and it is what lets the generated taxonomy name its ranks from the store that
+# parses them rather than from a copy. The index builder's deps are optional so a release build
+# never compiles them.
 [dependencies]
+datastore = { path = "../datastore" }
 binary-traits = { git = "https://github.com/unipept/unipept-index.git", optional = true }
 protein-metadata = { git = "https://github.com/unipept/unipept-index.git", optional = true }
 protein-text = { git = "https://github.com/unipept/unipept-index.git", optional = true }

@@ -16,11 +16,13 @@ use std::{
     path::{Path, PathBuf}
 };
 
+use datastore::{LineageRank, LineageStore};
+
 /// Leaf taxon ids start here, clear of the ancestor ids [`ancestor`] hands out.
 pub const LEAF_BASE: u32 = 10_000_000;
 
-/// The number of ranks a lineage row carries.
-const RANKS: usize = 28;
+/// The number of ranks a lineage row carries, from the store that reads them.
+const RANKS: usize = LineageStore::AMOUNT_OF_RANKS;
 
 /// Each rank's ancestor ids live in a block this wide, so no two ranks name the same taxon.
 pub const RANK_BLOCK: u32 = 100_000;
@@ -28,44 +30,6 @@ pub const RANK_BLOCK: u32 = 100_000;
 /// The widest taxonomy that fits: at the deepest rank every leaf has an ancestor of its own, and
 /// those ids have to stay inside one block.
 pub const MAX_DISTINCT: u32 = RANK_BLOCK;
-
-/// The rank names, in the order `LineageStore` reads the columns, spelled as
-/// `LineageRank::from_str` accepts them.
-///
-/// Note `species group` and `species subgroup`: the lineage columns are named with underscores,
-/// the taxon table's rank column with spaces, and this list feeds the latter. Spelled out here
-/// rather than taken from `datastore`, which dev-depends on this crate and would cycle;
-/// `datastore/tests/synthetic.rs` fails if the two ever disagree.
-const RANK_NAMES: [&str; RANKS] = [
-    "domain",
-    "realm",
-    "kingdom",
-    "subkingdom",
-    "superphylum",
-    "phylum",
-    "subphylum",
-    "superclass",
-    "class",
-    "subclass",
-    "superorder",
-    "order",
-    "suborder",
-    "infraorder",
-    "superfamily",
-    "family",
-    "subfamily",
-    "tribe",
-    "subtribe",
-    "genus",
-    "subgenus",
-    "species group",
-    "species subgroup",
-    "species",
-    "subspecies",
-    "strain",
-    "varietas",
-    "forma"
-];
 
 /// The paths [`write_taxonomy`] wrote, in the order the stores take them.
 pub struct TaxonomyPaths {
@@ -139,15 +103,20 @@ pub fn write_taxonomy(dir: &Path, distinct: u32) -> TaxonomyPaths {
     }
 
     // The fifth column is the validity byte, 0x01 for a valid taxon.
-    let mut taxons = String::from("1\troot\tno rank\t1\t\u{1}\n");
+    let no_rank: String = LineageRank::NoRank.into();
+    let mut taxons = format!("1\troot\t{no_rank}\t1\t\u{1}\n");
 
     for (id, rank) in &ancestors {
-        writeln!(taxons, "{id}\tancestor_{id}\t{}\t1\t\u{1}", RANK_NAMES[*rank]).expect("writing cannot fail");
+        // `LineageRank::LINEAGE_ORDER` names the columns in the order they are read, and its
+        // string form is the spelling the taxon table's rank column takes.
+        let name: String = LineageRank::LINEAGE_ORDER[*rank].clone().into();
+        writeln!(taxons, "{id}\tancestor_{id}\t{name}\t1\t\u{1}").expect("writing cannot fail");
     }
 
     for leaf in 0..distinct {
         let id = LEAF_BASE + leaf;
-        writeln!(taxons, "{id}\ttaxon_{leaf}\tspecies\t1\t\u{1}").expect("writing to a String cannot fail");
+        let species: String = LineageRank::Species.into();
+        writeln!(taxons, "{id}\ttaxon_{leaf}\t{species}\t1\t\u{1}").expect("writing to a String cannot fail");
     }
 
     std::fs::create_dir_all(dir).unwrap_or_else(|err| panic!("could not create {}: {}", dir.display(), err));

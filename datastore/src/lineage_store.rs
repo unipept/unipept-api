@@ -122,7 +122,8 @@ pub struct LineageStore {
 }
 
 impl LineageStore {
-    const AMOUNT_OF_RANKS: usize = 28;
+    /// The number of rank columns a lineage row carries. `LineageRank::LINEAGE_ORDER` names them.
+    pub const AMOUNT_OF_RANKS: usize = 28;
 
     pub fn rank_to_idx(s: &str) -> Option<usize> {
         match s {

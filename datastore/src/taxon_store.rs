@@ -279,6 +279,12 @@ mod tests {
         }
     }
 
+    /// `NoRank` is a rank a taxon can carry but not a lineage column, so it addresses none.
+    #[test]
+    fn no_rank_addresses_no_lineage_column() {
+        assert_eq!(LineageRank::NoRank.lineage_index(), None);
+    }
+
     /// `Display` writes the name the taxon table spells, not the variant name.
     #[test]
     fn display_writes_the_rank_name() {

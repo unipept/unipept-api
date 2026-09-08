@@ -37,7 +37,9 @@ preloaded-proteins = ["index/preloaded-proteins"]
 preloaded-mapping = ["index/preloaded-mapping"]
 
 [dev-dependencies]
+bytes = "1"
 criterion = "0.8.2"
+futures-util = "0.3"
 fixtures = { path = "../fixtures", features = ["index-builder"] }
 tempfile = "3"
 tower = { version = "0.5.3", features = ["util"] }

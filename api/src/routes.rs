@@ -65,13 +65,17 @@ pub fn create_router_with_timeout(state: AppState, timeout: Duration) -> Router 
         .nest("/private_api", create_private_api_routes())
         .layer(
             ServiceBuilder::new()
+                // Outermost, so it also reaches the responses the layers below produce. A 408 from
+                // the timeout and a 413 from the body limit never enter the router, so a CORS layer
+                // sitting under them would leave those two answers without the headers — and every
+                // caller of this API is cross-origin, so the browser would discard them unread.
+                .layer(create_cors_layer())
                 .layer(HandleErrorLayer::new(|err: BoxError| async move { timeout_status(err) }))
                 .layer(TimeoutLayer::new(timeout))
                 // Set max request size to 50MiB (default is 2MiB)
                 .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
                 .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024))
                 .layer(create_tracing_layer())
-                .layer(create_cors_layer())
         )
         .with_state(state)
 }

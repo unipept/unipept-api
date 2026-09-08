@@ -10,12 +10,14 @@
 
 mod common;
 
+use std::time::Duration;
+
 use axum::{
     body::Body,
     http::{Request, StatusCode, header}
 };
 use tower::ServiceExt;
-use unipept_api::routes::create_app;
+use unipept_api::routes::{create_app, create_app_with_timeout};
 
 /// 50 MiB, the ceiling `create_router` installs.
 const BODY_LIMIT: usize = 50 * 1024 * 1024;
@@ -142,4 +144,68 @@ async fn a_body_over_the_limit_is_refused() {
     let (status, _) = post_form_of(BODY_LIMIT + 4096).await;
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+/// A timed-out request still carries the CORS headers.
+///
+/// `TimeoutLayer` answers above the router, so this response is built by a layer rather than by a
+/// handler. If the CORS layer sits below the timeout, the 408 goes out bare and the browser
+/// discards it before any code sees it — the caller gets an opaque network error instead of the
+/// status that says what happened.
+///
+/// Driven with a body that never finishes arriving, because a timeout cannot be provoked any other
+/// way here: `Timeout` polls the inner service before its own sleep, and the corpus answers
+/// immediately however low the duration goes. Awaiting the body is the one part of the request
+/// this test can hold open.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_timed_out_request_still_carries_the_cors_headers() {
+    let stalled = Body::from_stream(futures_util::stream::pending::<Result<bytes::Bytes, std::io::Error>>());
+
+    let (dir, state) = common::offline_state();
+    let app = create_app_with_timeout(state, Duration::from_millis(50));
+
+    let request = Request::post("/api/v2/pept2lca")
+        .header(header::ORIGIN, "https://unipept.ugent.be")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(stalled)
+        .unwrap();
+
+    let response = app.oneshot(request).await.expect("the app responds");
+    let (status, headers) = (response.status(), response.headers().clone());
+    drop(dir);
+
+    assert_eq!(status, StatusCode::REQUEST_TIMEOUT);
+    assert_eq!(
+        headers.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).map(|v| v.to_str().unwrap()),
+        Some("*"),
+        "a 408 the browser cannot read is a 408 nobody receives"
+    );
+}
+
+/// A request refused for its declared size still carries the CORS headers.
+///
+/// `RequestBodyLimitLayer` reads the content-length and answers 413 without waiting for the body,
+/// so like the timeout above this response never reaches the router.
+///
+/// This is the reachable half of the pair: the body-limit path that `a_body_over_the_limit_is_refused`
+/// drives ends in a 422 from the extractor, which is built inside the router and therefore already
+/// passed through the CORS layer whichever order the two were in. Only the declared-length refusal
+/// exercises the layer itself.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_body_refused_for_its_declared_size_still_carries_the_cors_headers() {
+    let request = Request::post("/api/v2/pept2lca")
+        .header(header::ORIGIN, "https://unipept.ugent.be")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::CONTENT_LENGTH, (BODY_LIMIT + 1).to_string())
+        .body(Body::from("junk=A"))
+        .unwrap();
+
+    let (status, headers) = send(request).await;
+
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(
+        headers.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).map(|v| v.to_str().unwrap()),
+        Some("*"),
+        "a 413 the browser cannot read is a 413 nobody receives"
+    );
 }

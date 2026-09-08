@@ -14,16 +14,15 @@ use axum::{
 use serde::Deserialize;
 use unipept_api::controllers::request::{Flag, GetContent, PostContent};
 
-// Shaped like a real controller's `Parameters`, `strict_bool` included. Without that attribute
-// this struct would be more permissive than any endpoint the API actually serves, and the tests
-// below would document a contract that does not exist.
-//
-// `filter` mirrors the private-api filters, which take a `String` where an empty one is a real
-// request. It is here so the empty-value rule can be pinned on both a boolean and a string.
 fn unset() -> Flag {
     Flag(false)
 }
 
+// Shaped like a real controller's `Parameters`: `equate_il` is a `Flag`, so this struct is no more
+// permissive than the endpoints, and the tests below describe the contract the API actually has.
+//
+// `filter` mirrors the private-api filters, which take a `String` where an empty one is a real
+// request. It is here so the empty-value rule can be pinned on both a boolean and a string.
 #[derive(Debug, Deserialize, PartialEq)]
 struct Parameters {
     #[serde(default)]

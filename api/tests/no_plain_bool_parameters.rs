@@ -10,9 +10,16 @@
 
 use std::{fs, path::Path};
 
-/// Drops comment lines, so a `bool` named in prose is not read as a field.
+/// Drops comments, so a `bool` named in prose is not read as a field and a field carrying a
+/// trailing note is still read as one. `sort_by: String, // Can be "id", "name", or "rank"` is the
+/// shape that matters: without cutting the note, the line does not end in its own type.
 fn without_comments(source: &str) -> String {
-    source.lines().filter(|line| !line.trim_start().starts_with("//")).collect::<Vec<_>>().join("\n")
+    source
+        .lines()
+        .map(|line| line.split_once("//").map_or(line, |(code, _)| code))
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Every `struct` body whose derive names `Deserialize`, as `(name, body)`.

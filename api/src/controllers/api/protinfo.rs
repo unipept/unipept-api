@@ -8,7 +8,8 @@ use crate::{
     AppState,
     controllers::{
         api::{default_domains, default_extra, default_names},
-        generate_handlers
+        generate_handlers,
+        request::Flag
     },
     errors::ApiError,
     helpers::{
@@ -29,11 +30,11 @@ pub struct Parameters {
     #[serde(default)]
     input: Vec<String>,
     #[serde(default = "default_extra")]
-    extra: bool,
+    extra: Flag,
     #[serde(default = "default_domains")]
-    domains: bool,
+    domains: Flag,
     #[serde(default = "default_names")]
-    names: bool
+    names: Flag
 }
 
 #[derive(Serialize)]
@@ -58,7 +59,12 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { datastore, database, .. }): State<AppState>,
-    Parameters { input, extra, domains, names }: Parameters,
+    Parameters {
+        input,
+        extra: Flag(extra),
+        domains: Flag(domains),
+        names: Flag(names)
+    }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<ProtInformation>, ApiError> {
     let input = sanitize_proteins(input);

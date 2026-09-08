@@ -4,7 +4,81 @@ use axum::{
     http::{StatusCode, header::CONTENT_TYPE, request::Parts},
     response::{IntoResponse, Response}
 };
-use serde::de::DeserializeOwned;
+use serde::{
+    Deserialize, Deserializer, Serialize, Serializer,
+    de::{self, DeserializeOwned, Visitor}
+};
+use serde_qs::{Config, DuplicateKeyBehavior};
+
+/// The query-string parser every body path shares.
+///
+/// Both settings are non-default. `DuplicateKeyBehavior::Error` refuses `?tryptic=true&tryptic=false`
+/// rather than taking the last of the two. `use_form_encoding` decodes a key before reading its
+/// brackets, so the `input%5B%5D` that `URLSearchParams` and browser forms send is still the array
+/// `input[]` — and it is spelled out because `Config::new` otherwise takes it from a Cargo feature
+/// that any crate in the graph could enable.
+///
+/// Shared by all three paths: parsing that differs by content type lets one request be accepted as
+/// a body and refused as a query string.
+const QS: Config = Config::new().duplicate_key_behavior(DuplicateKeyBehavior::Error).use_form_encoding(true);
+
+/// A boolean request parameter.
+///
+/// The strictness lives on the type rather than on 45 `deserialize_with` attributes. Every
+/// `default_*` function returns a `Flag`, so a parameter field declared `bool` does not compile.
+///
+/// No `Default` impl, deliberately. A bare `#[serde(default)]` would otherwise accept a `bool`
+/// field and lose that check, so every `Flag` field has to name a function that returns one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Flag(pub bool);
+
+impl<'de> Deserialize<'de> for Flag {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        strict_bool(deserializer).map(Flag)
+    }
+}
+
+impl Serialize for Flag {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_bool(self.0)
+    }
+}
+
+/// Reads a boolean parameter, accepting only `true` and `false`.
+///
+/// The query-string parser reads `?tryptic=` and a bare `?tryptic` as `true`, which on a flag
+/// defaulting to false is an instruction the caller never gave, answered 200.
+///
+/// Per field rather than in the extractor: `GetContent<T>` is generic and cannot know which of
+/// `T`'s fields are booleans, and refusing every empty value would refuse `filter=`, which the
+/// private-api filters take as a real request.
+fn strict_bool<'de, D: Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    struct StrictBool;
+
+    impl Visitor<'_> for StrictBool {
+        type Value = bool;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("`true` or `false`")
+        }
+
+        // A JSON body carries a real boolean, and there is nothing to be strict about.
+        fn visit_bool<E: de::Error>(self, value: bool) -> Result<bool, E> {
+            Ok(value)
+        }
+
+        // A query string or a form body carries text, which is where the leniency lives.
+        fn visit_str<E: de::Error>(self, value: &str) -> Result<bool, E> {
+            match value {
+                "true" => Ok(true),
+                "false" => Ok(false),
+                other => Err(E::custom(format!("expected `true` or `false`, got {other:?}")))
+            }
+        }
+    }
+
+    deserializer.deserialize_any(StrictBool)
+}
 
 pub struct GetContent<T>(pub T);
 
@@ -23,7 +97,7 @@ where
         // that value. Decoding the whole string first turned `filter=A%26equate_il%3Dtrue` into two
         // parameters and let a request set a flag it never sent. Invalid UTF-8 comes back as a
         // deserialisation error rather than a panic, which is what the unwrap here used to be.
-        Ok(Self(serde_qs::from_str(query).map_err(|_| (StatusCode::BAD_REQUEST, "invalid query string"))?))
+        Ok(Self(QS.deserialize_str(query).map_err(|_| (StatusCode::BAD_REQUEST, "invalid query string"))?))
     }
 }
 
@@ -43,7 +117,7 @@ where
             .map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body").into_response())?;
 
         // Undecoded, for the same reason as `GetContent` above.
-        Ok(Self(serde_qs::from_bytes(&form).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
+        Ok(Self(QS.deserialize_bytes(&form).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
     }
 }
 
@@ -88,7 +162,7 @@ where
             querystring.push_str(&format!("{}={}&", name, value));
         }
 
-        Ok(Self(serde_qs::from_str(&querystring).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
+        Ok(Self(QS.deserialize_str(&querystring).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
     }
 }
 

@@ -8,7 +8,8 @@ use crate::{
     AppState,
     controllers::{
         api::{default_cutoff, default_equate_il, default_extra, default_tryptic},
-        generate_handlers
+        generate_handlers,
+        request::Flag
     },
     errors::ApiError,
     helpers::sanitize_peptides
@@ -19,11 +20,11 @@ pub struct Parameters {
     #[serde(default)]
     input: Vec<String>,
     #[serde(default = "default_equate_il")]
-    equate_il: bool,
+    equate_il: Flag,
     #[serde(default = "default_extra")]
-    extra: bool,
+    extra: Flag,
     #[serde(default = "default_tryptic")]
-    tryptic: bool,
+    tryptic: Flag,
     #[serde(default = "default_cutoff")]
     cutoff: usize
 }
@@ -55,7 +56,13 @@ pub enum ProtInformation {
 
 async fn handler(
     State(AppState { index, datastore, database }): State<AppState>,
-    Parameters { input, equate_il, extra, tryptic, cutoff }: Parameters
+    Parameters {
+        input,
+        equate_il: Flag(equate_il),
+        extra: Flag(extra),
+        tryptic: Flag(tryptic),
+        cutoff
+    }: Parameters
 ) -> Result<Vec<ProtInformation>, ApiError> {
     let input = sanitize_peptides(input);
 

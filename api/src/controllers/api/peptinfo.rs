@@ -7,7 +7,8 @@ use crate::{
         api::{
             default_cutoff, default_domains, default_equate_il, default_extra, default_names, default_validate_taxa
         },
-        generate_handlers
+        generate_handlers,
+        request::Flag
     },
     errors::ApiError,
     helpers::{
@@ -30,15 +31,15 @@ pub struct Parameters {
     #[serde(default)]
     input: Vec<String>,
     #[serde(default = "default_equate_il")]
-    equate_il: bool,
+    equate_il: Flag,
     #[serde(default = "default_extra")]
-    extra: bool,
+    extra: Flag,
     #[serde(default = "default_domains")]
-    domains: bool,
+    domains: Flag,
     #[serde(default = "default_names")]
-    names: bool,
+    names: Flag,
     #[serde(default = "default_validate_taxa")]
-    validate_taxa: bool,
+    validate_taxa: Flag,
     #[serde(default = "default_cutoff")]
     cutoff: usize
 }
@@ -68,11 +69,11 @@ async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters {
         input,
-        equate_il,
-        extra,
-        domains,
-        names,
-        validate_taxa,
+        equate_il: Flag(equate_il),
+        extra: Flag(extra),
+        domains: Flag(domains),
+        names: Flag(names),
+        validate_taxa: Flag(validate_taxa),
         cutoff
     }: Parameters,
     version: LineageVersion

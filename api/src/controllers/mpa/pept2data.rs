@@ -10,7 +10,8 @@ use crate::{
     controllers::{
         api::{default_cutoff, default_validate_taxa},
         generate_handlers,
-        mpa::{default_equate_il, default_report_taxa, default_tryptic}
+        mpa::{default_equate_il, default_report_taxa, default_tryptic},
+        request::Flag
     },
     errors::ApiError,
     helpers::{
@@ -30,15 +31,15 @@ pub struct Parameters {
     #[serde(default)]
     peptides: Vec<String>,
     #[serde(default = "default_equate_il")]
-    equate_il: bool,
+    equate_il: Flag,
     #[serde(default = "default_tryptic")]
-    tryptic: bool,
+    tryptic: Flag,
     #[serde(default = "default_cutoff")]
     cutoff: usize,
     #[serde(default = "default_report_taxa")]
-    report_taxa: bool,
+    report_taxa: Flag,
     #[serde(default = "default_validate_taxa")]
-    validate_taxa: bool,
+    validate_taxa: Flag,
     filter: Option<Filter>
 }
 
@@ -73,11 +74,11 @@ async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters {
         mut peptides,
-        equate_il,
-        tryptic,
+        equate_il: Flag(equate_il),
+        tryptic: Flag(tryptic),
         cutoff,
-        report_taxa,
-        validate_taxa,
+        report_taxa: Flag(report_taxa),
+        validate_taxa: Flag(validate_taxa),
         filter
     }: Parameters
 ) -> Result<Data, ApiError> {

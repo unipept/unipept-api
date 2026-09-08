@@ -5,7 +5,8 @@ use crate::{
     AppState,
     controllers::{
         api::{default_cutoff, default_domains, default_equate_il, default_extra},
-        generate_handlers
+        generate_handlers,
+        request::Flag
     },
     errors::ApiError,
     helpers::{
@@ -20,11 +21,11 @@ pub struct Parameters {
     #[serde(default)]
     input: Vec<String>,
     #[serde(default = "default_equate_il")]
-    equate_il: bool,
+    equate_il: Flag,
     #[serde(default = "default_extra")]
-    extra: bool,
+    extra: Flag,
     #[serde(default = "default_domains")]
-    domains: bool,
+    domains: Flag,
     #[serde(default = "default_cutoff")]
     cutoff: usize
 }
@@ -39,7 +40,13 @@ pub struct InterproInformation {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, domains, cutoff }: Parameters
+    Parameters {
+        input,
+        equate_il: Flag(equate_il),
+        extra: Flag(extra),
+        domains: Flag(domains),
+        cutoff
+    }: Parameters
 ) -> Result<Vec<InterproInformation>, ApiError> {
     let input = sanitize_peptides(input);
     let result = tokio::task::block_in_place(|| index.analyse(&input, equate_il, false, Some(cutoff)));

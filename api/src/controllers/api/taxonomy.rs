@@ -8,7 +8,8 @@ use crate::{
     AppState,
     controllers::{
         api::{default_descendants, default_descendants_ranks, default_extra, default_names},
-        generate_handlers
+        generate_handlers,
+        request::Flag
     },
     errors::{ApiError, ApiError::UnknownRankError},
     helpers::lineage_helper::{
@@ -23,11 +24,11 @@ pub struct Parameters {
     #[serde(default)]
     input: Vec<u32>,
     #[serde(default = "default_extra")]
-    extra: bool,
+    extra: Flag,
     #[serde(default = "default_names")]
-    names: bool,
+    names: Flag,
     #[serde(default = "default_descendants")]
-    descendants: bool,
+    descendants: Flag,
     #[serde(default = "default_descendants_ranks")]
     descendants_ranks: Vec<String>
 }
@@ -82,7 +83,13 @@ fn get_children_at_rank(
 
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
-    Parameters { input, extra, names, descendants, descendants_ranks }: Parameters,
+    Parameters {
+        input,
+        extra: Flag(extra),
+        names: Flag(names),
+        descendants: Flag(descendants),
+        descendants_ranks
+    }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<TaxaInformation>, ApiError> {
     if input.is_empty() {

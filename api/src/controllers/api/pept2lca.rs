@@ -5,7 +5,8 @@ use crate::{
     AppState,
     controllers::{
         api::{default_cutoff, default_equate_il, default_extra, default_names, default_validate_taxa},
-        generate_handlers
+        generate_handlers,
+        request::Flag
     },
     errors::ApiError,
     helpers::{
@@ -24,13 +25,13 @@ pub struct Parameters {
     #[serde(default)]
     input: Vec<String>,
     #[serde(default = "default_equate_il")]
-    equate_il: bool,
+    equate_il: Flag,
     #[serde(default = "default_extra")]
-    extra: bool,
+    extra: Flag,
     #[serde(default = "default_names")]
-    names: bool,
+    names: Flag,
     #[serde(default = "default_validate_taxa")]
-    validate_taxa: bool,
+    validate_taxa: Flag,
     #[serde(default = "default_cutoff")]
     cutoff: usize
 }
@@ -54,7 +55,14 @@ pub struct Taxon {
 
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
-    Parameters { input, equate_il, extra, names, validate_taxa, cutoff }: Parameters,
+    Parameters {
+        input,
+        equate_il: Flag(equate_il),
+        extra: Flag(extra),
+        names: Flag(names),
+        validate_taxa: Flag(validate_taxa),
+        cutoff
+    }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<LcaInformation>, ApiError> {
     let input = sanitize_peptides(input);

@@ -3,7 +3,10 @@ use std::convert::Infallible;
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
-use crate::{AppState, controllers::generate_handlers};
+use crate::{
+    AppState,
+    controllers::{generate_handlers, private_api::default_sort_descending, request::Flag}
+};
 
 fn default_filter() -> String {
     String::from("")
@@ -23,8 +26,8 @@ pub struct ReferenceProteomeFilterParameters {
     end: usize,
     #[serde(default)]
     sort_by: String, // Can be "id", "name", or "rank"
-    #[serde(default)]
-    sort_descending: bool
+    #[serde(default = "default_sort_descending")]
+    sort_descending: Flag
 }
 
 #[derive(Serialize)]
@@ -68,7 +71,7 @@ async fn filter_handler(
         start,
         end,
         sort_by,
-        sort_descending
+        sort_descending: Flag(sort_descending)
     }: ReferenceProteomeFilterParameters
 ) -> Result<Vec<String>, Infallible> {
     let proteome_store = datastore.reference_proteome_store();

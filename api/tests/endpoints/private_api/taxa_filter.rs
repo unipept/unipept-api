@@ -125,6 +125,19 @@ async fn the_window_bounds_are_required() {
     assert_eq!(body, "invalid query string");
 }
 
+/// `end` below `start` is a malformed request: the window has no size, so there is nothing to
+/// return and no page to fall back on.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_end_below_start_is_rejected() {
+    let (dir, state) = offline_state();
+    let request = Request::get("/private_api/taxa/filter?filter=&start=10&end=0").body(Body::empty()).unwrap();
+    let (status, body) = request_raw(state, request).await;
+    drop(dir);
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body.contains("end"), "the message should name the parameter, got: {body}");
+}
+
 // ── sorting ─────────────────────────────────────────────────────────────────────────────────────
 //
 // `sort_by` takes "id", "name" or "rank", and `sort_descending` reverses each. Six combinations

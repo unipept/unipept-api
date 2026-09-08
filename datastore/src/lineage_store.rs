@@ -6,7 +6,7 @@ use std::{
 
 use serde::Serialize;
 
-use crate::errors::LineageStoreError;
+use crate::{errors::LineageStoreError, taxon_store::LineageRank};
 
 #[derive(Clone, Debug, Serialize, Default)]
 pub struct Lineage {
@@ -125,6 +125,9 @@ impl LineageStore {
     /// The number of rank columns a lineage row carries. `LineageRank::LINEAGE_ORDER` names them.
     pub const AMOUNT_OF_RANKS: usize = 28;
 
+    /// The lineage column a rank name addresses, keyed on the spelling the columns use:
+    /// `species_group` with an underscore. A caller that holds a `LineageRank` has
+    /// [`LineageRank::lineage_index`] instead.
     pub fn rank_to_idx(s: &str) -> Option<usize> {
         match s {
             "domain" => Some(0),
@@ -260,15 +263,15 @@ impl LineageStore {
         self.mapper.get(&key)
     }
 
-    pub fn get_lineages_at_rank(&self, rank: &str, taxon_id: u32) -> Option<&Vec<Arc<Lineage>>> {
-        LineageStore::rank_to_idx(rank)
+    pub fn get_lineages_at_rank(&self, rank: &LineageRank, taxon_id: u32) -> Option<&Vec<Arc<Lineage>>> {
+        rank.lineage_index()
             .and_then(|idx| self.index_references.get(idx))
             .and_then(|map| map.get(&taxon_id))
     }
 
     /// Returns all unique taxon IDs at a specific rank in the NCBI taxonomy.
-    pub fn get_all_taxon_ids_at_rank(&self, rank: &str) -> Option<Vec<u32>> {
-        LineageStore::rank_to_idx(rank)
+    pub fn get_all_taxon_ids_at_rank(&self, rank: &LineageRank) -> Option<Vec<u32>> {
+        rank.lineage_index()
             .and_then(|idx| self.index_references.get(idx))
             .map(|map| map.keys().cloned().collect())
     }

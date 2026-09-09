@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use axum::{Json, extract::State};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -30,7 +31,7 @@ pub struct Parameters {
     cutoff: usize
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct EcInformation {
     peptide: String,
     cutoff_used: bool,
@@ -49,51 +50,34 @@ async fn handler(
 ) -> Result<Vec<EcInformation>, ApiError> {
     let input = sanitize_peptides(input);
 
-    // Each distinct peptide once, in first-appearance order, with the number of times it occurs.
-    // The search reads `unique_peptides`, so that order is the order of the results.
-    let mut peptide_counts: HashMap<String, usize> = HashMap::new();
-    let mut unique_peptides: Vec<String> = Vec::new();
-    for peptide in input.into_iter() {
-        if !peptide_counts.contains_key(&peptide) {
-            unique_peptides.push(peptide.clone());
-        }
+    // Each distinct peptide once. The search reads this list, so the results come back in its
+    // order, and a peptide named twice is searched once.
+    let distinct: Vec<String> = input.iter().cloned().unique().collect();
 
-        *peptide_counts.entry(peptide).or_insert(0) += 1;
-    }
-
-    let result = tokio::task::block_in_place(|| index.analyse(&unique_peptides, equate_il, false, Some(cutoff)));
+    let result = tokio::task::block_in_place(|| index.analyse(&distinct, equate_il, false, Some(cutoff)));
 
     let ec_store = datastore.ec_store();
 
-    // Repeat each result as many times as its own peptide was asked for.
-    //
-    // Keyed on `item.sequence` rather than on position: `analyse` drops a peptide that matches
-    // nothing, so `result` is shorter than the list that was searched. `sequence` is the peptide as
-    // the caller wrote it, so it addresses `peptide_counts` directly.
-    let mut final_results = Vec::new();
-    for item in result {
-        if let Some(count) = peptide_counts.get(item.sequence) {
+    // One answer per distinct peptide. Aggregating the annotations, ordering the terms and naming
+    // them out of the datastore all depend on the peptide alone, so a peptide asked for twenty
+    // times pays for them once.
+    let answers: HashMap<&str, EcInformation> = result
+        .iter()
+        .map(|item| {
             let fa = calculate_fa(&item.proteins);
-            let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
-            let cutoff_used = item.cutoff_used;
 
-            // Built once and copied per repeat. Ordering the terms and naming them out of the
-            // datastore depends on the peptide alone, so a peptide asked for twenty times would
-            // otherwise pay for both twenty times.
-            let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
+            (item.sequence, EcInformation {
+                peptide: item.sequence.to_string(),
+                cutoff_used: item.cutoff_used,
+                total_protein_count: *fa.counts.get("all").unwrap_or(&0),
+                ec: ec_numbers_from_map(&fa.data, ec_store, extra)
+            })
+        })
+        .collect();
 
-            for _ in 0..*count {
-                final_results.push(EcInformation {
-                    peptide: item.sequence.to_string(),
-                    cutoff_used,
-                    total_protein_count,
-                    ec: ecs.clone()
-                });
-            }
-        }
-    }
-
-    Ok(final_results)
+    // Laid back over the input, so a peptide is answered at each position it was named at. A
+    // peptide the index matched nothing for has no answer and is passed over, as it is elsewhere.
+    Ok(input.iter().filter_map(|peptide| answers.get(peptide.as_str()).cloned()).collect())
 }
 
 generate_handlers!(

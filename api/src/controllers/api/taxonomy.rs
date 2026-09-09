@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use axum::{Json, extract::State};
 use datastore::{LineageRank, LineageStore};
@@ -66,12 +66,14 @@ fn get_children_at_rank(
     rank: LineageRank,
     descendants_rank: String,
     lineage_store: &LineageStore
-) -> Option<HashSet<u32>> {
+) -> Option<BTreeSet<u32>> {
     // Taken as it arrived: `handler` rejects a rank `rank_to_idx` does not know before any of them
     // reaches here, and that check is exact.
     let lineages_at_rank = lineage_store.get_lineages_at_rank(&rank, taxon_id);
 
-    let mut children_id_set = HashSet::new();
+    // Ordered rather than hashed: this set becomes a list in the response, and a `HashSet` would
+    // report it in a different order on every request.
+    let mut children_id_set = BTreeSet::new();
 
     lineages_at_rank?
         .iter()

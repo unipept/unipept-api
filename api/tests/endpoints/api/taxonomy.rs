@@ -7,13 +7,10 @@ use axum::http::StatusCode;
 
 use crate::common::get_json;
 
-/// Descendant ids, sorted. The endpoint collects them through a `HashSet` and does not order them,
-/// so nothing may compare two responses element by element.
-fn sorted_ids(value: &serde_json::Value) -> Vec<u64> {
-    let mut ids: Vec<u64> =
-        value.as_array().expect("descendants").iter().map(|id| id.as_u64().expect("an id")).collect();
-    ids.sort_unstable();
-    ids
+/// Descendant ids, as they arrive. Taken in order: since #204 the endpoint collects them through a
+/// `BTreeSet`, so a response may be compared to another element by element.
+fn ids(value: &serde_json::Value) -> Vec<u64> {
+    value.as_array().expect("descendants").iter().map(|id| id.as_u64().expect("an id")).collect()
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -63,35 +60,33 @@ async fn descendants_are_absent_unless_asked_for() {
     assert!(with[0]["descendants"].is_array());
 }
 
+/// The ids come back ascending, which is the `BTreeSet` they are collected in.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_genus_finds_its_species() {
     let (status, body) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true&descendants_ranks[]=species").await;
 
     assert_eq!(status, StatusCode::OK);
 
-    assert_eq!(sorted_ids(&body[0]["descendants"]), vec![8501, 8502, 8503]);
+    assert_eq!(ids(&body[0]["descendants"]), vec![8501, 8502, 8503]);
 }
 
 /// `descendants_ranks` defaults to `["species"]`, so asking without it is asking for species.
-///
-/// The two lists are sorted before comparing because the endpoint does not order them: descendants
-/// are collected through a `HashSet`, so the same request answers with the same ids in a different
-/// order from one call to the next. Worth knowing for any client that diffs or caches a response.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_default_descendant_rank_is_species() {
     let (_, defaulted) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true").await;
     let (_, explicit) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true&descendants_ranks[]=species").await;
 
-    assert_eq!(sorted_ids(&defaulted[0]["descendants"]), sorted_ids(&explicit[0]["descendants"]));
+    assert_eq!(ids(&defaulted[0]["descendants"]), ids(&explicit[0]["descendants"]));
 }
 
-/// The order is genuinely not stable, which is why every assertion here sorts first.
+/// Two `BTreeSet`s built from the same ids iterate alike, where two `HashSet`s did not. Before #204
+/// this test could only compare the ids as sets.
 #[tokio::test(flavor = "multi_thread")]
-async fn descendants_carry_the_same_ids_however_they_are_ordered() {
+async fn the_same_request_answers_with_the_descendants_in_the_same_order() {
     let (_, first) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true").await;
     let (_, second) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true").await;
 
-    assert_eq!(sorted_ids(&first[0]["descendants"]), sorted_ids(&second[0]["descendants"]));
+    assert_eq!(first, second);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -158,7 +153,7 @@ async fn a_species_group_finds_its_descendants() {
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body[0]["taxon_rank"], "species group");
-    assert_eq!(sorted_ids(&body[0]["descendants"]), vec![fixtures::taxa::MELANOGASTER_SUBGROUP as u64]);
+    assert_eq!(ids(&body[0]["descendants"]), vec![fixtures::taxa::MELANOGASTER_SUBGROUP as u64]);
 }
 
 /// The same crossing from the second multi-word rank, `species subgroup`.
@@ -174,7 +169,7 @@ async fn a_species_subgroup_is_read_at_its_own_rank() {
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body[0]["taxon_rank"], "species subgroup");
-    assert_eq!(sorted_ids(&body[0]["descendants"]), vec![fixtures::taxa::MELANOGASTER_SUBGROUP as u64]);
+    assert_eq!(ids(&body[0]["descendants"]), vec![fixtures::taxa::MELANOGASTER_SUBGROUP as u64]);
 }
 
 /// `descendants_ranks` reads a rank spelled either way.
@@ -197,7 +192,7 @@ async fn a_descendant_rank_is_read_with_a_space_or_an_underscore() {
     assert_eq!(keyed_status, StatusCode::OK);
     assert_eq!(spaced_status, StatusCode::OK);
     assert_eq!(keyed, spaced);
-    assert_eq!(sorted_ids(&keyed[0]["descendants"]), vec![fixtures::taxa::MELANOGASTER_SUBGROUP as u64]);
+    assert_eq!(ids(&keyed[0]["descendants"]), vec![fixtures::taxa::MELANOGASTER_SUBGROUP as u64]);
 }
 
 /// Only the separator is normalised: a rank argument names a column and is matched exactly.

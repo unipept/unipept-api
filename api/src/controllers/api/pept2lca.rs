@@ -14,7 +14,7 @@ use crate::{
     helpers::{
         distinct_peptides, laid_over_input,
         lca_helper::calculate_lca,
-        lineage_helper::{AnyLineage, get_lineage, get_lineage_with_names},
+        lineage_helper::{LineageResponse, get_lineage, get_lineage_with_names},
         sanitize_peptides
     }
 };
@@ -42,7 +42,7 @@ pub struct LcaInformation {
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    lineage: Option<AnyLineage>
+    lineage: Option<LineageResponse>
 }
 
 #[derive(Serialize, Clone)]

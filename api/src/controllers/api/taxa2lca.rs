@@ -12,7 +12,7 @@ use crate::{
     },
     helpers::{
         lca_helper::calculate_lca,
-        lineage_helper::{AnyLineage, get_lineage, get_lineage_with_names}
+        lineage_helper::{LineageResponse, get_lineage, get_lineage_with_names}
     }
 };
 
@@ -33,7 +33,7 @@ pub struct LcaInformation {
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     taxon: Option<Taxon>,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    lineage: Option<AnyLineage>
+    lineage: Option<LineageResponse>
 }
 
 #[derive(Serialize)]

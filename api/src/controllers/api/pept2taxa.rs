@@ -13,7 +13,7 @@ use crate::{
     errors::ApiError,
     helpers::{
         distinct_peptides, laid_over_input,
-        lineage_helper::{AnyLineage, get_lineage, get_lineage_with_names},
+        lineage_helper::{LineageResponse, get_lineage, get_lineage_with_names},
         sanitize_peptides
     }
 };
@@ -51,7 +51,7 @@ pub struct DenseTaxaInformation {
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    lineage: Option<AnyLineage>
+    lineage: Option<LineageResponse>
 }
 
 #[derive(Serialize, Clone)]

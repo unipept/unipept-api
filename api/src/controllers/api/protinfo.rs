@@ -15,7 +15,7 @@ use crate::{
         ec_helper::{EcNumber, ec_numbers_from_list},
         go_helper::{GoTerms, go_terms_from_list},
         interpro_helper::{InterproEntries, interpro_entries_from_list},
-        lineage_helper::{AnyLineage, get_lineage, get_lineage_with_names},
+        lineage_helper::{LineageResponse, get_lineage, get_lineage_with_names},
         sanitize_proteins
     }
 };
@@ -42,7 +42,7 @@ pub struct ProtInformation {
     go: GoTerms,
     ipr: InterproEntries,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    lineage: Option<AnyLineage>
+    lineage: Option<LineageResponse>
 }
 
 #[derive(Serialize)]

@@ -39,7 +39,7 @@ fn name_of(taxon_id: Option<i32>, taxon_store: &TaxonStore) -> String {
 
 /// The id of each ancestor, answered as `{rank}_id`.
 #[derive(Debug, Default, Clone)]
-pub struct Lineage {
+pub struct LineageIds {
     ranks: Vec<Option<i32>>
 }
 
@@ -59,7 +59,7 @@ fn checked<S: Serializer, T>(ranks: &[T]) -> Result<(), S::Error> {
     Err(S::Error::custom(format!("a lineage of {} ranks, where {} are named", ranks.len(), FIELDS.len())))
 }
 
-impl Serialize for Lineage {
+impl Serialize for LineageIds {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         checked::<S, _>(&self.ranks)?;
 
@@ -84,40 +84,44 @@ impl Serialize for LineageWithNames {
     }
 }
 
-/// Whichever shape a request asked for.
+/// A lineage as a response carries it, in whichever shape the request asked for.
+///
+/// Not [`datastore::Lineage`], which is the row as the taxonomy wrote it: a rank there holds a
+/// negative id where its taxon is invalid, and -1 where it holds no taxon, and each reader of the
+/// store takes that differently. These are the ids a caller is shown.
 #[derive(Serialize, Debug, Clone)]
 #[serde(untagged)]
-pub enum AnyLineage {
-    Ids(Lineage),
+pub enum LineageResponse {
+    Ids(LineageIds),
     WithNames(LineageWithNames)
 }
 
-pub fn get_lineage(taxon_id: u32, lineage_store: &LineageStore) -> Option<AnyLineage> {
+pub fn get_lineage(taxon_id: u32, lineage_store: &LineageStore) -> Option<LineageResponse> {
     let lineage = lineage_store.get(taxon_id)?;
     let ranks = lineage.ranks.iter().map(|&id| reported(id)).collect();
 
-    Some(AnyLineage::Ids(Lineage { ranks }))
+    Some(LineageResponse::Ids(LineageIds { ranks }))
 }
 
-pub fn get_empty_lineage() -> Option<AnyLineage> {
-    Some(AnyLineage::Ids(Lineage { ranks: vec![None; RANK_NAMES.len()] }))
+pub fn get_empty_lineage() -> Option<LineageResponse> {
+    Some(LineageResponse::Ids(LineageIds { ranks: vec![None; RANK_NAMES.len()] }))
 }
 
 pub fn get_lineage_with_names(
     taxon_id: u32,
     lineage_store: &LineageStore,
     taxon_store: &TaxonStore
-) -> Option<AnyLineage> {
+) -> Option<LineageResponse> {
     let lineage = lineage_store.get(taxon_id)?;
     let ranks = lineage.ranks.iter().map(|&id| (reported(id), name_of(id, taxon_store))).collect();
 
-    Some(AnyLineage::WithNames(LineageWithNames { ranks }))
+    Some(LineageResponse::WithNames(LineageWithNames { ranks }))
 }
 
-pub fn get_empty_lineage_with_names() -> Option<AnyLineage> {
+pub fn get_empty_lineage_with_names() -> Option<LineageResponse> {
     let ranks = vec![(None, String::new()); RANK_NAMES.len()];
 
-    Some(AnyLineage::WithNames(LineageWithNames { ranks }))
+    Some(LineageResponse::WithNames(LineageWithNames { ranks }))
 }
 
 /// The ancestor ids alone, in column order, for the endpoints that answer a list rather than an
@@ -166,7 +170,7 @@ mod tests {
     /// A lineage carrying the wrong number of ranks is refused rather than answered short.
     #[test]
     fn a_lineage_of_the_wrong_width_is_not_answered() {
-        let short = AnyLineage::Ids(Lineage { ranks: vec![None; RANK_NAMES.len() - 1] });
+        let short = LineageResponse::Ids(LineageIds { ranks: vec![None; RANK_NAMES.len() - 1] });
 
         assert!(serde_json::to_value(short).is_err());
     }

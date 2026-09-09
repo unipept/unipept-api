@@ -13,7 +13,7 @@ use crate::{
     },
     errors::{ApiError, ApiError::UnknownRankError},
     helpers::lineage_helper::{
-        AnyLineage, get_empty_lineage, get_empty_lineage_with_names, get_lineage, get_lineage_with_names
+        LineageResponse, get_empty_lineage, get_empty_lineage_with_names, get_lineage, get_lineage_with_names
     }
 };
 
@@ -38,7 +38,7 @@ pub struct TaxaInformation {
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    lineage: Option<AnyLineage>,
+    lineage: Option<LineageResponse>,
     #[serde(skip_serializing_if = "Option::is_none")]
     descendants: Option<Vec<u32>>
 }
@@ -155,7 +155,7 @@ async fn handler(
                     children = Some(descendant_ids.into_iter().collect());
                 }
 
-                let lineage: Option<AnyLineage> = match (extra, names) {
+                let lineage: Option<LineageResponse> = match (extra, names) {
                     (true, true) => get_empty_lineage_with_names(),
                     (true, false) => get_empty_lineage(),
                     (false, _) => None

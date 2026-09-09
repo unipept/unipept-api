@@ -44,7 +44,7 @@ pub enum LineageRank {
 
 impl fmt::Display for LineageRank {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if *self == LineageRank::NoRank { write!(f, "{:?}", "root") } else { write!(f, "{:?}", self) }
+        f.write_str(self.as_str())
     }
 }
 
@@ -144,6 +144,59 @@ impl LineageRank {
         LineageRank::Varietas,
         LineageRank::Forma
     ];
+
+    /// The rank name as the taxon table spells it, and as every response carries it.
+    ///
+    /// `Display`, `From<LineageRank> for String` and [`Self::lineage_key`] all read this table.
+    /// `FromStr` holds the same names in its own match, so that reading a rank is a switch rather
+    /// than a scan; `every_rank_round_trips_through_its_string_form` is what holds the two together.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            LineageRank::NoRank => "no rank",
+            LineageRank::Domain => "domain",
+            LineageRank::Realm => "realm",
+            LineageRank::Kingdom => "kingdom",
+            LineageRank::Subkingdom => "subkingdom",
+            LineageRank::Superphylum => "superphylum",
+            LineageRank::Phylum => "phylum",
+            LineageRank::Subphylum => "subphylum",
+            LineageRank::Superclass => "superclass",
+            LineageRank::Class => "class",
+            LineageRank::Subclass => "subclass",
+            LineageRank::Superorder => "superorder",
+            LineageRank::Order => "order",
+            LineageRank::Suborder => "suborder",
+            LineageRank::Infraorder => "infraorder",
+            LineageRank::Superfamily => "superfamily",
+            LineageRank::Family => "family",
+            LineageRank::Subfamily => "subfamily",
+            LineageRank::Tribe => "tribe",
+            LineageRank::Subtribe => "subtribe",
+            LineageRank::Genus => "genus",
+            LineageRank::Subgenus => "subgenus",
+            LineageRank::SpeciesGroup => "species group",
+            LineageRank::SpeciesSubgroup => "species subgroup",
+            LineageRank::Species => "species",
+            LineageRank::Subspecies => "subspecies",
+            LineageRank::Strain => "strain",
+            LineageRank::Varietas => "varietas",
+            LineageRank::Forma => "forma"
+        }
+    }
+
+    /// The rank name as the lineage columns spell it: [`Self::as_str`] with a space written as an
+    /// underscore. Only the three ranks below carry one.
+    ///
+    /// `LineageStore::rank_to_idx` and `Lineage::get_taxon_id_at_rank` are keyed on this form.
+    /// `NoRank` is not a lineage column, so its key addresses nothing.
+    pub fn lineage_key(&self) -> &'static str {
+        match self {
+            LineageRank::NoRank => "no_rank",
+            LineageRank::SpeciesGroup => "species_group",
+            LineageRank::SpeciesSubgroup => "species_subgroup",
+            other => other.as_str()
+        }
+    }
 }
 
 impl FromStr for LineageRank {
@@ -187,37 +240,7 @@ impl FromStr for LineageRank {
 
 impl From<LineageRank> for String {
     fn from(val: LineageRank) -> Self {
-        match val {
-            LineageRank::NoRank => "no rank".to_string(),
-            LineageRank::Domain => "domain".to_string(),
-            LineageRank::Realm => "realm".to_string(),
-            LineageRank::Kingdom => "kingdom".to_string(),
-            LineageRank::Subkingdom => "subkingdom".to_string(),
-            LineageRank::Superphylum => "superphylum".to_string(),
-            LineageRank::Phylum => "phylum".to_string(),
-            LineageRank::Subphylum => "subphylum".to_string(),
-            LineageRank::Superclass => "superclass".to_string(),
-            LineageRank::Class => "class".to_string(),
-            LineageRank::Subclass => "subclass".to_string(),
-            LineageRank::Superorder => "superorder".to_string(),
-            LineageRank::Order => "order".to_string(),
-            LineageRank::Suborder => "suborder".to_string(),
-            LineageRank::Infraorder => "infraorder".to_string(),
-            LineageRank::Superfamily => "superfamily".to_string(),
-            LineageRank::Family => "family".to_string(),
-            LineageRank::Subfamily => "subfamily".to_string(),
-            LineageRank::Tribe => "tribe".to_string(),
-            LineageRank::Subtribe => "subtribe".to_string(),
-            LineageRank::Genus => "genus".to_string(),
-            LineageRank::Subgenus => "subgenus".to_string(),
-            LineageRank::SpeciesGroup => "species group".to_string(),
-            LineageRank::SpeciesSubgroup => "species subgroup".to_string(),
-            LineageRank::Species => "species".to_string(),
-            LineageRank::Subspecies => "subspecies".to_string(),
-            LineageRank::Strain => "strain".to_string(),
-            LineageRank::Varietas => "varietas".to_string(),
-            LineageRank::Forma => "forma".to_string()
-        }
+        val.as_str().to_string()
     }
 }
 
@@ -254,12 +277,35 @@ mod tests {
     /// rank if they ever disagree.
     ///
     /// The two spell a rank differently — the columns use `species_group`, the taxon table's rank
-    /// column `species group` — so the comparison goes through the underscore form.
+    /// column `species group` — so the comparison goes through `lineage_key`.
     #[test]
     fn the_lineage_order_matches_the_column_index() {
         for (index, rank) in LineageRank::LINEAGE_ORDER.into_iter().enumerate() {
-            let name: String = rank.into();
-            assert_eq!(LineageStore::rank_to_idx(&name.replace(' ', "_")), Some(index), "`{name}`");
+            assert_eq!(LineageStore::rank_to_idx(rank.lineage_key()), Some(index), "`{}`", rank.as_str());
         }
+    }
+
+    /// `Display` writes the name the taxon table spells, not the variant name.
+    #[test]
+    fn display_writes_the_rank_name() {
+        assert_eq!(LineageRank::NoRank.to_string(), "no rank");
+        assert_eq!(LineageRank::SpeciesGroup.to_string(), "species group");
+        assert_eq!(LineageRank::SpeciesSubgroup.to_string(), "species subgroup");
+        assert_eq!(LineageRank::Species.to_string(), "species");
+    }
+
+    /// Every rank whose name holds a space writes it as an underscore, `no rank` included.
+    #[test]
+    fn a_space_in_a_rank_name_is_an_underscore_in_its_key() {
+        for rank in all_ranks() {
+            assert_eq!(rank.lineage_key(), rank.as_str().replace(' ', "_"), "`{}`", rank.as_str());
+        }
+    }
+
+    /// `NoRank` is a rank a taxon can carry but not a lineage column, so its key addresses none.
+    #[test]
+    fn no_rank_addresses_no_lineage_column() {
+        assert_eq!(LineageRank::NoRank.lineage_key(), "no_rank");
+        assert_eq!(LineageStore::rank_to_idx(LineageRank::NoRank.lineage_key()), None);
     }
 }

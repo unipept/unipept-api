@@ -116,10 +116,7 @@ async fn a_rank_nothing_sits_at_is_an_empty_list() {
 
 /// Root does not walk a lineage: it collects every taxon at the requested rank beneath each domain.
 ///
-/// That branch also sidesteps issue #148, which is worth recording because it looks like it should
-/// not. Root's own rank is `no rank`, one of the three multi-word ranks whose `Display` output
-/// `rank_to_idx` cannot read — but this path hardcodes `LineageRank::Domain` rather than using
-/// root's rank, so the broken conversion is never reached.
+/// Root's own rank, `no rank`, names no lineage column, so this path starts at domain instead.
 #[tokio::test(flavor = "multi_thread")]
 async fn root_reports_every_taxon_at_the_requested_rank() {
     let (status, body) = get_json("/api/v2/taxonomy?input[]=1&descendants=true&descendants_ranks[]=species").await;
@@ -147,33 +144,35 @@ async fn an_unknown_taxon_is_omitted_rather_than_failing() {
     assert_eq!(body.as_array().map(Vec::len), Some(1));
 }
 
-/// The rank conversion behind issue #148, tested where it is actually reachable.
+/// A taxon whose own rank holds a space finds its descendants.
 ///
-/// `LineageRank`'s `Display` writes the variant name, so the three multi-word ranks come out in a
-/// spelling `rank_to_idx` does not know — and `NoRank` comes out as `"root"` with the quotation
-/// marks `{:?}` puts around a `&str`. This asserts the broken behaviour, so fixing #148 turns it
-/// red rather than leaving it quietly passing.
+/// The taxon carries `species group` and the lineage column is `species_group`, so the endpoint has
+/// to cross between the two spellings to read the column at all.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_species_group_finds_its_descendants() {
+    let path = format!(
+        "/api/v2/taxonomy?input[]={}&descendants=true&descendants_ranks[]=species_subgroup",
+        fixtures::taxa::MELANOGASTER_GROUP
+    );
+    let (status, body) = get_json(&path).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body[0]["taxon_rank"], "species group");
+    assert_eq!(sorted_ids(&body[0]["descendants"]), vec![fixtures::taxa::MELANOGASTER_SUBGROUP as u64]);
+}
+
+/// The same crossing from the second multi-word rank, `species subgroup`.
 ///
-/// Reaching it through an endpoint needs a non-root taxon of a multi-word rank, and the corpus has
-/// none — one exists in the entire 10,000-row source table.
-#[test]
-fn multi_word_ranks_do_not_survive_a_render_and_lookup_issue_148() {
-    use datastore::{LineageRank, LineageStore};
+/// A taxon is its own descendant at its own rank, so the subgroup answers with itself.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_species_subgroup_is_read_at_its_own_rank() {
+    let path = format!(
+        "/api/v2/taxonomy?input[]={}&descendants=true&descendants_ranks[]=species_subgroup",
+        fixtures::taxa::MELANOGASTER_SUBGROUP
+    );
+    let (status, body) = get_json(&path).await;
 
-    for rank in [LineageRank::NoRank, LineageRank::SpeciesGroup, LineageRank::SpeciesSubgroup] {
-        let rendered = rank.to_string().to_lowercase();
-        assert_eq!(
-            LineageStore::rank_to_idx(&rendered),
-            None,
-            "issue #148: `{rank:?}` renders as `{rendered}`, which addresses no lineage column. If this now \
-             resolves, the bug is fixed and this test should assert the column instead."
-        );
-    }
-
-    assert_eq!(LineageRank::NoRank.to_string(), "\"root\"", "and NoRank arrives quoted");
-
-    // The conversion that does work, for contrast.
-    let spaced: String = LineageRank::SpeciesGroup.into();
-    assert_eq!(spaced, "species group");
-    assert_eq!(LineageStore::rank_to_idx("species_group"), Some(21), "while the lookup wants underscores");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body[0]["taxon_rank"], "species subgroup");
+    assert_eq!(sorted_ids(&body[0]["descendants"]), vec![fixtures::taxa::MELANOGASTER_SUBGROUP as u64]);
 }

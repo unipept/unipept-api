@@ -9,19 +9,20 @@
 //!
 //! Two layers make up the corpus:
 //!
-//! - **Taxonomy** — `data/taxons.tsv` and `data/lineages.tsv`: twenty-six real NCBI rows, copied
+//! - **Taxonomy** — `data/taxons.tsv` and `data/lineages.tsv`: twenty-eight real NCBI taxa, copied
 //!   verbatim out of a `taxons.tsv`/`lineages.tsv` pair from a Unipept database build. The set is
 //!   closed under ancestry — every taxon a protein names, every ancestor those taxa's lineages
 //!   record, and root — so it is small enough to read in full, which is what makes an expected LCA
-//!   checkable by eye rather than by rerunning the code.
+//!   checkable by eye rather than by rerunning the code. The `melanogaster` pair carries the two
+//!   multi-word ranks a lineage column spells with an underscore, and carries no protein.
 //! - **Proteins** — `data/proteins.tsv`: thirteen rows referencing only taxa from that subset.
 //!
 //! To regenerate the taxonomy after changing the proteins: take the taxon column of
 //! `proteins.tsv`, union it with every non-`\N` rank id on those taxa's rows in the build's
-//! lineage table, add taxon 1, and copy the matching rows out of both tables. Copy them rather
-//! than rewriting them — the fifth taxon column is a raw `0x01`/`0x00` byte, not text, and fifteen
-//! of the ancestors have a lineage row but no taxon row, which is a property of a sampled taxonomy
-//! and not an error.
+//! lineage table, add taxon 1, and keep the `melanogaster` pair, which no protein names. Copy the
+//! matching rows out of both tables rather than rewriting them — the fifth taxon column is a raw
+//! `0x01`/`0x00` byte, not text. Twenty-eight ancestors are named in a lineage column without
+//! having a row of their own, which is a property of a sampled taxonomy and not an error.
 //!
 //! Writers panic rather than returning errors. A fixture that cannot be written to a temporary
 //! directory is a broken harness, not a condition a test should handle; this is the opposite of
@@ -31,6 +32,8 @@ use std::{
     fs,
     path::{Path, PathBuf}
 };
+
+use datastore::LineageRank;
 
 pub mod synthetic;
 
@@ -71,7 +74,9 @@ pub const VERSION: &str = include_str!("../data/version.txt");
 /// `LineageRank::from_str` accepts, and the fifth column is a raw `0x01`/`0x00` byte.
 pub const TAXONS_TSV: &str = include_str!("../data/taxons.tsv");
 
-/// Lineages: a taxon id followed by 28 rank columns, `\N` where the taxonomy records nothing.
+/// Lineages: a taxon id followed by one column per rank, `\N` where the taxonomy records nothing.
+///
+/// The column count is `LineageStore::AMOUNT_OF_RANKS`.
 pub const LINEAGES_TSV: &str = include_str!("../data/lineages.tsv");
 
 /// Every accession in the corpus, in file order.
@@ -111,6 +116,14 @@ pub mod taxa {
     pub const SPHENODONTIA: u32 = 8505;
     /// `Alouatta seniculus`, a mammal; diverges from the crocodiles at class.
     pub const ALOUATTA_SENICULUS: u32 = 9503;
+    /// The `melanogaster group`, a taxon of rank `species group`.
+    ///
+    /// Its rank name holds a space, which the lineage columns write as an underscore. It carries no
+    /// protein: nothing but a rank name is asked of it.
+    pub const MELANOGASTER_GROUP: u32 = 32346;
+    /// The `melanogaster subgroup`, of rank `species subgroup`, and the only descendant of
+    /// [`MELANOGASTER_GROUP`].
+    pub const MELANOGASTER_SUBGROUP: u32 = 32351;
     /// `Heloderma sp.`, and the only taxon here the taxonomy marks **invalid**.
     ///
     /// Without one, `TaxonStore::is_valid` has no counterexample and `calculate_lca`'s
@@ -151,6 +164,37 @@ pub mod peptides {
     pub const VALIDATION_SHARED: &str = "VALIDATEKR";
     /// In no protein. Distinguishes an empty result from an error.
     pub const ABSENT: &str = "WWWWWWWWWW";
+}
+
+/// Every row of the taxon corpus as `(id, name, rank, is_valid)`.
+///
+/// One place that knows the column layout, so a reader of any assertion below does not have to
+/// count tabs, and adding a column moves one line rather than four.
+fn taxon_rows() -> Vec<(u32, &'static str, &'static str, bool)> {
+    TAXONS_TSV
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            let mut fields = line.split('\t');
+            let id = fields.next().expect("a taxon row starts with a taxon id");
+            let name = fields.next().expect("a taxon row has a name column");
+            let rank = fields.next().expect("a taxon row has a rank column");
+            let _parent = fields.next().expect("a taxon row has a parent column");
+            let valid = fields.next().expect("a taxon row has a validity column");
+            (id.parse().expect("the taxon id is numeric"), name, rank, valid == "\u{1}")
+        })
+        .collect()
+}
+
+/// How many corpus taxa carry a rank and are marked valid.
+///
+/// Counted from `TAXONS_TSV` rather than written down, so adding a taxon cannot leave a test
+/// asserting a stale total. Root is the only unranked row, [`taxa::HELODERMA`] the only invalid one.
+pub fn ranked_and_valid_taxa() -> u64 {
+    taxon_rows()
+        .iter()
+        .filter(|(_, _, rank, is_valid)| *is_valid && *rank != LineageRank::NoRank.as_str())
+        .count() as u64
 }
 
 /// Paths to a written-out set of datastore files, in the order `DataStore::try_from_files` takes.
@@ -260,6 +304,8 @@ mod tests {
             taxa::CROCODYLUS_NOVAEGUINEAE,
             taxa::SPHENODONTIA,
             taxa::ALOUATTA_SENICULUS,
+            taxa::MELANOGASTER_GROUP,
+            taxa::MELANOGASTER_SUBGROUP,
             taxa::HELODERMA
         ] {
             assert!(ids.contains(&taxon), "taxa:: names {taxon}, which has no row in taxons.tsv");
@@ -277,6 +323,25 @@ mod tests {
             assert!(taxons.contains(&taxon), "{accession} names taxon {taxon}, absent from taxons.tsv");
             assert!(lineages.contains(&taxon), "{accession} names taxon {taxon}, absent from lineages.tsv");
         }
+    }
+
+    /// The corpus holds twenty-eight taxa, of which root is unranked and one is invalid.
+    ///
+    /// `ranked_and_valid_taxa` is what four endpoint assertions compare against, so the number it
+    /// derives is pinned here rather than in any of them.
+    #[test]
+    fn the_ranked_and_valid_count_is_the_corpus_less_root_and_the_invalid_taxon() {
+        assert_eq!(taxon_rows().len(), 28);
+        assert_eq!(ranked_and_valid_taxa(), 26);
+    }
+
+    /// One taxon at each of the two multi-word ranks a lineage column spells with an underscore.
+    #[test]
+    fn the_corpus_holds_a_taxon_at_each_multi_word_rank() {
+        let ranks: BTreeSet<&str> = taxon_rows().iter().map(|(_, _, rank, _)| *rank).collect();
+
+        assert!(ranks.contains(LineageRank::SpeciesGroup.as_str()), "{ranks:?}");
+        assert!(ranks.contains(LineageRank::SpeciesSubgroup.as_str()), "{ranks:?}");
     }
 
     #[test]
@@ -318,12 +383,8 @@ mod tests {
     /// turns it into something printable.
     #[test]
     fn the_corpus_contains_exactly_one_invalid_taxon() {
-        let invalid: Vec<u32> = TAXONS_TSV
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .filter(|line| line.split('\t').nth(4) != Some("\u{1}"))
-            .map(|line| line.split('\t').next().unwrap().parse().unwrap())
-            .collect();
+        let invalid: Vec<u32> =
+            taxon_rows().iter().filter(|(_, _, _, is_valid)| !is_valid).map(|(id, _, _, _)| *id).collect();
 
         assert_eq!(invalid, vec![taxa::HELODERMA]);
     }

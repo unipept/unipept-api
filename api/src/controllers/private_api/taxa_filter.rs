@@ -36,35 +36,40 @@ pub struct TaxonCountResult {
     count: u32
 }
 
+/// Whether a taxon belongs in a filtered listing.
+///
+/// `filter` is matched already lowercased, so the caller lowercases it once per request rather than
+/// once per taxon. An empty filter takes every ranked, valid taxon without lowercasing its name,
+/// which is the whole taxon table on the counting path.
+///
+/// The rank is matched as `as_str` spells it, with a space, because that is the name the response
+/// carries and so the name a caller reads. The `descendants_ranks` parameter of `/api/v2/taxonomy`
+/// takes the underscore spelling instead, since it names a lineage column.
+fn matches(filter: &str, taxon_id: u32, name: &str, rank: &LineageRank, is_valid: bool) -> bool {
+    if !is_valid || *rank == LineageRank::NoRank {
+        return false;
+    }
+
+    filter.is_empty()
+        || name.to_lowercase().contains(filter)
+        || taxon_id.to_string().contains(filter)
+        || rank.as_str().contains(filter)
+}
+
 async fn count_handler(
     State(AppState { datastore, .. }): State<AppState>,
     TaxaCountParameters { filter }: TaxaCountParameters
 ) -> Result<TaxonCountResult, Infallible> {
     let taxon_store = datastore.taxon_store();
+    let filter = filter.to_lowercase();
 
-    if filter.is_empty() {
-        Ok(TaxonCountResult {
-            count: taxon_store
-                .mapper
-                .values()
-                .filter(|&(_, rank, is_valid)| *is_valid && *rank != LineageRank::NoRank)
-                .count() as u32
-        })
-    } else {
-        Ok(TaxonCountResult {
-            count: taxon_store
-                .mapper
-                .iter()
-                .filter(|(taxon_id, (name, rank, is_valid))| {
-                    *is_valid
-                        && *rank != LineageRank::NoRank
-                        && (name.to_lowercase().contains(&filter.to_lowercase())
-                            || taxon_id.to_string().to_lowercase().contains(&filter.to_lowercase())
-                            || rank.to_string().to_lowercase().contains(&filter.to_lowercase()))
-                })
-                .count() as u32
-        })
-    }
+    Ok(TaxonCountResult {
+        count: taxon_store
+            .mapper
+            .iter()
+            .filter(|(taxon_id, (name, rank, is_valid))| matches(&filter, **taxon_id, name, rank, *is_valid))
+            .count() as u32
+    })
 }
 
 async fn filter_handler(
@@ -79,16 +84,12 @@ async fn filter_handler(
 ) -> Result<Vec<u32>, Infallible> {
     let taxon_store = datastore.taxon_store();
 
+    let filter = filter.to_lowercase();
+
     let mut filtered_taxa: Vec<_> = taxon_store
         .mapper
         .iter()
-        .filter(|(taxon_id, (name, rank, is_valid))| {
-            *is_valid
-                && *rank != LineageRank::NoRank
-                && (name.to_lowercase().contains(&filter.to_lowercase())
-                    || taxon_id.to_string().to_lowercase().contains(&filter.to_lowercase())
-                    || rank.to_string().to_lowercase().contains(&filter.to_lowercase()))
-        })
+        .filter(|(taxon_id, (name, rank, is_valid))| matches(&filter, **taxon_id, name, rank, *is_valid))
         .map(|(id, _)| *id)
         .collect();
 

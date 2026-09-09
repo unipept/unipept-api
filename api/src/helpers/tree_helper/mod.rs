@@ -1,4 +1,4 @@
-use datastore::{LineageStore, TaxonStore};
+use datastore::{LineageRank, LineageStore, TaxonStore};
 use frequency::FrequencyTable;
 use node::Node;
 
@@ -13,7 +13,7 @@ pub fn build_tree(
     lineage_store: &LineageStore,
     taxon_store: &TaxonStore
 ) -> Node {
-    let mut root: Node = Node::new(1, "Organism".to_string(), "no rank".to_string());
+    let mut root: Node = Node::new(1, "Organism".to_string(), LineageRank::NoRank.to_string());
     for taxon_id in frequencies.keys() {
         let mut current_node = &mut root;
 
@@ -33,7 +33,7 @@ pub fn build_tree(
                 // is still added so the branch below it hangs in the right place.
                 let (name, rank) = match taxon_store.get(lineage_id as u32) {
                     Some((name, rank, _)) => (name.clone(), rank.clone().into()),
-                    None => (String::new(), String::from("no rank"))
+                    None => (String::new(), LineageRank::NoRank.to_string())
                 };
                 current_node.add_child(Node::new(lineage_id as usize, name, rank));
             }

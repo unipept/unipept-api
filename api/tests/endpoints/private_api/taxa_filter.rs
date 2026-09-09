@@ -7,16 +7,12 @@ use axum::{
 
 use crate::common::{get_json, offline_state, request_raw};
 
-/// Every taxon that is both valid and ranked: the twenty-six corpus rows less the invalid one and
-/// less root, which carries no rank.
-const RANKED_AND_VALID: u64 = 24;
-
 #[tokio::test(flavor = "multi_thread")]
 async fn an_empty_filter_counts_every_ranked_valid_taxon() {
     let (status, body) = get_json("/private_api/taxa/count").await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["count"], RANKED_AND_VALID);
+    assert_eq!(body["count"], fixtures::ranked_and_valid_taxa());
 }
 
 /// The count excludes the invalid taxon, which `/private_api/taxa` will still return by id.
@@ -25,7 +21,7 @@ async fn the_invalid_taxon_is_not_counted() {
     let (_, counted) = get_json("/private_api/taxa/count").await;
     let (_, by_id) = get_json(&format!("/private_api/taxa?taxids[]={}", fixtures::taxa::HELODERMA)).await;
 
-    assert_eq!(counted["count"], RANKED_AND_VALID);
+    assert_eq!(counted["count"], fixtures::ranked_and_valid_taxa());
     assert_eq!(by_id.as_array().map(Vec::len), Some(1), "but it is still there when asked for directly");
 }
 
@@ -34,7 +30,7 @@ async fn a_name_filter_selects_fewer_than_everything() {
     let (status, body) = get_json("/private_api/taxa/count?filter=Crocodylus").await;
 
     assert_eq!(status, StatusCode::OK);
-    assert!(body["count"].as_u64().is_some_and(|n| (4..RANKED_AND_VALID).contains(&n)), "got {body}");
+    assert!(body["count"].as_u64().is_some_and(|n| (4..fixtures::ranked_and_valid_taxa()).contains(&n)), "got {body}");
 }
 
 /// The filter matches on the id as well as the name.
@@ -44,6 +40,23 @@ async fn a_numeric_filter_matches_a_taxon_id() {
 
     assert_eq!(status, StatusCode::OK);
     assert!(body["count"].as_u64().is_some_and(|n| n >= 1), "got {body}");
+}
+
+/// The filter matches on the rank name, including the two rank names that hold a space.
+///
+/// `species group` is the name the API serialises for that rank, so it is the name a caller has to
+/// type. `species subgroup` is a different rank and must not be swept in with it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_rank_filter_matches_a_multi_word_rank_name() {
+    let (status, group) = get_json("/private_api/taxa/count?filter=species%20group").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(group["count"], 1);
+
+    let (_, subgroup) = get_json("/private_api/taxa/count?filter=species%20subgroup").await;
+    assert_eq!(subgroup["count"], 1);
+
+    let (_, listed) = get_json("/private_api/taxa/filter?filter=species%20group&start=0&end=100").await;
+    assert_eq!(as_set(&listed), std::collections::BTreeSet::from([fixtures::taxa::MELANOGASTER_GROUP as u64]));
 }
 
 #[tokio::test(flavor = "multi_thread")]

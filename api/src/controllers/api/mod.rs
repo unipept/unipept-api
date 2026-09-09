@@ -1,3 +1,4 @@
+use datastore::TaxonRank;
 use serde::Deserialize;
 
 use crate::controllers::request::Flag;
@@ -56,7 +57,7 @@ pub fn default_descendants() -> Flag {
 }
 
 pub fn default_descendants_ranks() -> Vec<String> {
-    vec![String::from("species")]
+    vec![TaxonRank::SPECIES.as_str().to_string()]
 }
 
 pub fn default_link() -> Flag {

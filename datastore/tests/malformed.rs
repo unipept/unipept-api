@@ -28,7 +28,7 @@ fn outcome<T, E>(result: Result<T, E>) -> Result<(), E> {
     result.map(|_| ())
 }
 
-/// A well-formed lineage row: a taxon id followed by 28 unrecorded rank columns.
+/// A well-formed lineage row: a taxon id followed by an unrecorded column per rank.
 fn valid_row(taxon_id: u32) -> String {
     let ranks = vec!["\\N"; datastore::RANK_COUNT].join("\t");
     format!("{taxon_id}\t{ranks}")
@@ -123,11 +123,11 @@ fn the_error_names_the_line_it_came_from() {
 
 /// A row of nothing but delimiters is malformed input, not a blank line.
 ///
-/// It is the case a `trim()` before the emptiness check silently swallows: 28 tabs trim to nothing
+/// It is the case a `trim()` before the emptiness check silently swallows: a row of tabs trims to nothing
 /// and the row disappears, which is the behaviour this policy exists to remove.
 #[test]
 fn a_row_of_only_delimiters_is_an_error() {
-    // 28 tabs is 29 fields, so this row is the right width and fails on its empty taxon id. A
+    // One tab per rank is a row of the right width, so this fails on its empty taxon id. A
     // shorter run of tabs fails on the width. Either way it is rejected rather than skipped, which
     // is the property that matters.
     assert!(matches!(rejection(&"\t".repeat(datastore::RANK_COUNT)), LineageStoreError::InvalidTaxonId { .. }));

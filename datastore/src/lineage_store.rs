@@ -147,7 +147,7 @@ impl LineageStore {
                 .parse()
                 .map_err(|_| LineageStoreError::InvalidTaxonId { line: line_number, value: fields[0].to_string() })?;
 
-            // Enumerated for the column number: a lineage row has 28 rank fields, and an error
+            // Enumerated for the column number: a lineage row has one field per rank, and an error
             // naming only the offending value leaves the reader counting tabs to find it.
             let mut parts: Vec<Option<i32>> = Vec::with_capacity(RANK_COUNT);
             for (rank, field) in fields[1..].iter().enumerate() {
@@ -239,12 +239,12 @@ mod tests {
     /// The rank names index the lineage columns in order, and each one reads back its own column.
     ///
     /// `rank_to_idx`, `get_taxon_id_at_rank` and `get_rank` are three hand-written tables over the
-    /// same 28 ranks, listed in the same order, and nothing else checks that they agree with each
+    /// same ranks, listed in the same order, and nothing else checks that they agree with each
     /// other or with the column order the parser fills.
     #[test]
     fn every_rank_key_addresses_its_own_column() {
         let mut lineage = Lineage::default();
-        let fields: [&mut Option<i32>; 28] = [
+        let fields: [&mut Option<i32>; RANK_COUNT] = [
             &mut lineage.domain,
             &mut lineage.realm,
             &mut lineage.kingdom,

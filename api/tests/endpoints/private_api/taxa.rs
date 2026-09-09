@@ -13,7 +13,11 @@ async fn one_id_resolves_to_its_name_rank_and_lineage() {
     assert_eq!(body[0]["id"], 8501);
     assert_eq!(body[0]["name"], "Crocodylus niloticus");
     assert_eq!(body[0]["rank"], "species");
-    assert_eq!(body[0]["lineage"].as_array().map(Vec::len), Some(28), "one entry per rank, recorded or not");
+    assert_eq!(
+        body[0]["lineage"].as_array().map(Vec::len),
+        Some(datastore::RANK_COUNT),
+        "one entry per rank, recorded or not"
+    );
 }
 
 /// A lineage carries `null` at every rank the taxonomy does not record, and this taxon has no

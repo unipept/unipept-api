@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use datastore::InterproStore;
 use serde::Serialize;
 
-use crate::helpers::{by_count_then_key, is_zero};
+use crate::helpers::{by_count_then_key, grouped_by_domain, is_zero};
 
 #[derive(Serialize)]
 #[serde(untagged)]
@@ -87,32 +87,19 @@ pub fn interpro_entries_from_list(
     }
 }
 
-/// The entries arrive ordered, so each domain keeps them in that order; the domains themselves are
-/// grouped through a `HashMap` and so need ordering of their own. There is no count to rank a
-/// domain by, so they go out by name.
+/// An entry the store knows nothing about is dropped, and so is one built in a shape that carries
+/// no domain — neither can be filed under a namespace.
 fn handle_domains(iprs: Vec<(&str, u32)>, interpro_store: &InterproStore, extra: bool) -> InterproEntries {
-    let mut interpro_domains: HashMap<String, Vec<InterproEntry>> = HashMap::new();
-    for (key, count) in iprs {
-        if let Some(entry) = interpro_entry(key, count, interpro_store, extra, true)
-            && let InterproEntry::Domains { domain, .. } | InterproEntry::ExtraDomains { domain, .. } = &entry
-        {
-            interpro_domains.entry(domain.to_string()).or_default().push(entry);
+    InterproEntries::Domains(grouped_by_domain(iprs.into_iter().filter_map(|(key, count)| {
+        let entry = interpro_entry(key, count, interpro_store, extra, true)?;
+        match &entry {
+            InterproEntry::Domains { domain, .. } | InterproEntry::ExtraDomains { domain, .. } => {
+                let domain = domain.clone();
+                Some((domain, entry))
+            }
+            _ => None
         }
-    }
-
-    let mut interpro_domains: Vec<(String, Vec<InterproEntry>)> = interpro_domains.into_iter().collect();
-    interpro_domains.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
-
-    let result: Vec<HashMap<String, Vec<InterproEntry>>> = interpro_domains
-        .into_iter()
-        .map(|(key, value)| {
-            let mut mapping = HashMap::new();
-            mapping.insert(key, value);
-            mapping
-        })
-        .collect();
-
-    InterproEntries::Domains(result)
+    })))
 }
 
 fn interpro_entry(

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use datastore::GoStore;
 use serde::Serialize;
 
-use crate::helpers::{by_count_then_key, is_zero};
+use crate::helpers::{by_count_then_key, grouped_by_domain, is_zero};
 
 #[derive(Serialize)]
 #[serde(untagged)]
@@ -50,30 +50,12 @@ pub fn go_terms_from_list(fa_data: &[&str], go_store: &GoStore, extra: bool, dom
     }
 }
 
-/// The terms arrive ordered, so each domain keeps them in that order; the domains themselves are
-/// grouped through a `HashMap` and so need ordering of their own. There is no count to rank a
-/// domain by, so they go out by name.
+/// A term the store knows no namespace for is dropped, which is what `filter_map` says here.
 fn handle_domains(gos: Vec<(&str, u32)>, go_store: &GoStore, extra: bool) -> GoTerms {
-    let mut go_domains: HashMap<String, Vec<GoTerm>> = HashMap::new();
-    for (key, count) in gos {
-        if let Some(domain) = go_store.get_domain(key) {
-            go_domains.entry(domain.to_string()).or_default().push(go_term(key, count, go_store, extra));
-        }
-    }
-
-    let mut go_domains: Vec<(String, Vec<GoTerm>)> = go_domains.into_iter().collect();
-    go_domains.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
-
-    let result: Vec<HashMap<String, Vec<GoTerm>>> = go_domains
-        .into_iter()
-        .map(|(key, value)| {
-            let mut mapping = HashMap::new();
-            mapping.insert(key, value);
-            mapping
-        })
-        .collect();
-
-    GoTerms::Domains(result)
+    GoTerms::Domains(grouped_by_domain(gos.into_iter().filter_map(|(key, count)| {
+        let domain = go_store.get_domain(key)?;
+        Some((domain.to_string(), go_term(key, count, go_store, extra)))
+    })))
 }
 
 fn go_term(key: &str, count: u32, go_store: &GoStore, extra: bool) -> GoTerm {

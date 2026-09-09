@@ -177,3 +177,26 @@ async fn the_annotations_come_from_the_surviving_proteins_only() {
     let fa = &filtered["peptides"][0]["fa"];
     assert_eq!(fa["counts"]["all"], 1, "one protein survived the filter");
 }
+
+/// This endpoint sorts and deduplicates its peptides before searching, so a repeat is neither
+/// searched again nor answered again, and the answer comes back in sorted order rather than in the
+/// order the peptides were sent.
+///
+/// That makes it the one peptide endpoint that already searched each distinct peptide once, and the
+/// only one that does not answer positionally. Recorded rather than changed: the deduplication is
+/// what unipept#218 asks the others to do, and the sorting is a separate question.
+#[tokio::test(flavor = "multi_thread")]
+async fn peptides_are_deduplicated_and_sorted_before_the_search() {
+    let (status, body) = post_json("/mpa/pept2data", json!({ "peptides": [GENUS_SHARED, UNIQUE, GENUS_SHARED] })).await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    let sequences: Vec<&str> = body["peptides"]
+        .as_array()
+        .expect("a list")
+        .iter()
+        .map(|item| item["sequence"].as_str().expect("a sequence"))
+        .collect();
+
+    assert_eq!(sequences, vec![UNIQUE, GENUS_SHARED], "one row per distinct peptide, in sorted order");
+}

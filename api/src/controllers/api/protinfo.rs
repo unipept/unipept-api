@@ -15,11 +15,7 @@ use crate::{
         ec_helper::{EcNumber, ec_numbers_from_list},
         go_helper::{GoTerms, go_terms_from_list},
         interpro_helper::{InterproEntries, interpro_entries_from_list},
-        lineage_helper::{
-            Lineage,
-            LineageVersion::{self, *},
-            get_lineage, get_lineage_with_names
-        },
+        lineage_helper::{AnyLineage, get_lineage, get_lineage_with_names},
         sanitize_proteins
     }
 };
@@ -46,7 +42,7 @@ pub struct ProtInformation {
     go: GoTerms,
     ipr: InterproEntries,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    lineage: Option<Lineage>
+    lineage: Option<AnyLineage>
 }
 
 #[derive(Serialize)]
@@ -63,8 +59,7 @@ async fn handler(
         extra: Flag(extra),
         domains: Flag(domains),
         names: Flag(names)
-    }: Parameters,
-    version: LineageVersion
+    }: Parameters
 ) -> Result<Vec<ProtInformation>, ApiError> {
     // Each accession once, in first-appearance order, which is the order the answer takes.
     let input: Vec<String> = sanitize_proteins(input).into_iter().unique().collect();
@@ -89,8 +84,8 @@ async fn handler(
 
             let (name, rank, _) = taxon_store.get(entry.taxon_id)?;
             let lineage = match (extra, names) {
-                (true, true) => get_lineage_with_names(entry.taxon_id, version, lineage_store, taxon_store),
-                (true, false) => get_lineage(entry.taxon_id, version, lineage_store),
+                (true, true) => get_lineage_with_names(entry.taxon_id, lineage_store, taxon_store),
+                (true, false) => get_lineage(entry.taxon_id, lineage_store),
                 (false, _) => None
             };
 
@@ -112,12 +107,10 @@ async fn handler(
 }
 
 generate_handlers! (
-    [ V2 ]
     async fn json_handler(
         state => State<AppState>,
-        params => Parameters,
-        version: LineageVersion
+        params => Parameters
     ) -> Result<Json<Vec<ProtInformation>>, ApiError> {
-        Ok(Json(handler(state, params, version).await?))
+        Ok(Json(handler(state, params).await?))
     }
 );

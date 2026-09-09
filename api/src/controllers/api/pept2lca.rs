@@ -14,11 +14,7 @@ use crate::{
     helpers::{
         distinct_peptides, laid_over_input,
         lca_helper::calculate_lca,
-        lineage_helper::{
-            Lineage,
-            LineageVersion::{self, *},
-            get_lineage, get_lineage_with_names
-        },
+        lineage_helper::{AnyLineage, get_lineage, get_lineage_with_names},
         sanitize_peptides
     }
 };
@@ -46,7 +42,7 @@ pub struct LcaInformation {
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    lineage: Option<Lineage>
+    lineage: Option<AnyLineage>
 }
 
 #[derive(Serialize, Clone)]
@@ -65,8 +61,7 @@ async fn handler(
         names: Flag(names),
         validate_taxa: Flag(validate_taxa),
         cutoff
-    }: Parameters,
-    version: LineageVersion
+    }: Parameters
 ) -> Result<Vec<LcaInformation>, ApiError> {
     let input = sanitize_peptides(input);
     let distinct = distinct_peptides(&input);
@@ -83,12 +78,12 @@ async fn handler(
         .filter_map(|item| {
             // Already sorted and deduplicated; `calculate_lca` reduces rank by rank and is
             // unaffected by repeats.
-            let lca = calculate_lca(item.taxa.iter().copied(), version, taxon_store, lineage_store, validate_taxa);
+            let lca = calculate_lca(item.taxa.iter().copied(), taxon_store, lineage_store, validate_taxa);
 
             let (name, rank, _) = taxon_store.get(lca as u32)?;
             let lineage = match (extra, names) {
-                (true, true) => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
-                (true, false) => get_lineage(lca as u32, version, lineage_store),
+                (true, true) => get_lineage_with_names(lca as u32, lineage_store, taxon_store),
+                (true, false) => get_lineage(lca as u32, lineage_store),
                 (false, _) => None
             };
 
@@ -109,12 +104,10 @@ async fn handler(
 }
 
 generate_handlers! (
-    [ V2 ]
     async fn json_handler(
         state => State<AppState>,
-        params => Parameters,
-        version: LineageVersion
+        params => Parameters
     ) -> Result<Json<Vec<LcaInformation>>, ApiError> {
-        Ok(Json(handler(state, params, version).await?))
+        Ok(Json(handler(state, params).await?))
     }
 );

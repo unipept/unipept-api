@@ -22,7 +22,7 @@ use crate::{
             proteome_filter::ProteomeFilter, taxa_filter::TaxaFilter
         },
         lca_helper::calculate_lca,
-        lineage_helper::{LineageVersion, get_lineage_array},
+        lineage_helper::get_lineage_array,
         sanitize_peptides
     }
 };
@@ -130,9 +130,8 @@ async fn handler(
 
                 let taxa: Vec<u32> = filtered_proteins.iter().map(|protein| protein.taxon).unique().collect();
 
-                let lca =
-                    calculate_lca(taxa.iter().copied(), LineageVersion::V2, taxon_store, lineage_store, validate_taxa);
-                let lineage = get_lineage_array(lca as u32, LineageVersion::V2, lineage_store);
+                let lca = calculate_lca(taxa.iter().copied(), taxon_store, lineage_store, validate_taxa);
+                let lineage = get_lineage_array(lca as u32, lineage_store);
 
                 Some(DataItem {
                     sequence: sequence.to_string(),

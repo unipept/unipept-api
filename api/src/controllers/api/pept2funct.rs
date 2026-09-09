@@ -64,8 +64,6 @@ async fn handler(
     let go_store = datastore.go_store();
     let interpro_store = datastore.interpro_store();
 
-    // One answer per distinct peptide, laid back over the input. This endpoint aggregates once and
-    // reads three stores from it, so a repeat cost the most of the three annotation endpoints.
     let rows: HashMap<&str, Vec<FunctInformation>> = result
         .iter()
         .map(|item| {
@@ -87,7 +85,7 @@ async fn handler(
         })
         .collect();
 
-    Ok(laid_over_input(&input, &rows))
+    Ok(laid_over_input(&input, rows))
 }
 
 generate_handlers!(

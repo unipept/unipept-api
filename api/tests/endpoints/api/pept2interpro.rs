@@ -51,3 +51,8 @@ async fn equate_il_widens_which_proteins_are_reached() {
     assert_eq!(status, StatusCode::OK);
     assert!(together[0]["total_protein_count"].as_u64() > apart[0]["total_protein_count"].as_u64());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_repeated_peptide_answers_at_each_position() {
+    super::a_repeat_answers_like_a_single("pept2interpro", "extra=true&domains=true").await;
+}

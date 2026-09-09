@@ -58,8 +58,6 @@ async fn handler(
 
     let go_store = datastore.go_store();
 
-    // One answer per distinct peptide. Aggregating the annotations and naming the terms out of the
-    // datastore depend on the peptide alone, so a peptide named twice pays for them once.
     let rows: HashMap<&str, Vec<GoInformation>> = result
         .iter()
         .map(|item| {
@@ -77,7 +75,7 @@ async fn handler(
         })
         .collect();
 
-    Ok(laid_over_input(&input, &rows))
+    Ok(laid_over_input(&input, rows))
 }
 
 generate_handlers!(

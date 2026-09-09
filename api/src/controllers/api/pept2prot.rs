@@ -71,10 +71,14 @@ async fn handler(
 
     // Only ever read as a lookup, so the order does not reach the answer; deduplicated so the
     // database is not asked for one accession twice.
+    //
+    // Deduplicated before the accessions are owned rather than after: a peptide reaches the same
+    // protein through many hits, and only the distinct ones are worth an allocation.
     let accession_numbers: Vec<String> = result
         .iter()
-        .flat_map(|item| item.proteins.iter().map(|protein| protein.uniprot_accession.to_string()))
+        .flat_map(|item| item.proteins.iter().map(|protein| protein.uniprot_accession))
         .unique()
+        .map(str::to_string)
         .collect();
 
     if accession_numbers.is_empty() {

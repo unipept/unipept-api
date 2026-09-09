@@ -77,14 +77,17 @@ async fn handler(
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let cutoff_used = item.cutoff_used;
 
-            for _ in 0..*count {
-                let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
+            // Built once and copied per repeat. Ordering the terms and naming them out of the
+            // datastore depends on the peptide alone, so a peptide asked for twenty times would
+            // otherwise pay for both twenty times.
+            let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
 
+            for _ in 0..*count {
                 final_results.push(EcInformation {
                     peptide: item.sequence.to_string(),
                     cutoff_used,
                     total_protein_count,
-                    ec: ecs
+                    ec: ecs.clone()
                 });
             }
         }

@@ -7,8 +7,8 @@ use axum::http::StatusCode;
 
 use crate::common::get_json;
 
-/// Descendant ids, as they arrive. The endpoint collects them through a `BTreeSet`, so two
-/// responses may be compared element by element.
+/// Descendant ids, as they arrive. The endpoint orders them, so two responses may be compared
+/// element by element.
 fn ids(value: &serde_json::Value) -> Vec<u64> {
     value.as_array().expect("descendants").iter().map(|id| id.as_u64().expect("an id")).collect()
 }
@@ -60,7 +60,7 @@ async fn descendants_are_absent_unless_asked_for() {
     assert!(with[0]["descendants"].is_array());
 }
 
-/// The ids come back ascending, which is the `BTreeSet` they are collected in.
+/// The ids come back ascending.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_genus_finds_its_species() {
     let (status, body) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true&descendants_ranks[]=species").await;
@@ -79,13 +79,38 @@ async fn the_default_descendant_rank_is_species() {
     assert_eq!(ids(&defaulted[0]["descendants"]), ids(&explicit[0]["descendants"]));
 }
 
-/// Two `BTreeSet`s built from the same ids iterate alike, so the whole response is comparable.
+/// The whole response is comparable, ids included.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_same_request_answers_with_the_descendants_in_the_same_order() {
     let (_, first) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true").await;
     let (_, second) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true").await;
 
     assert_eq!(first, second);
+}
+
+/// Two ranks give one ascending list, not one ascending run per rank.
+///
+/// Each rank is read separately, so what is asserted is that the parts are ordered together after
+/// they are collected rather than each on its own.
+#[tokio::test(flavor = "multi_thread")]
+async fn several_ranks_answer_with_one_ordered_list() {
+    let (status, body) = get_json(
+        "/api/v2/taxonomy?input[]=8493&descendants=true&descendants_ranks[]=species&descendants_ranks[]=genus"
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    let found = ids(&body[0]["descendants"]);
+    assert!(found.windows(2).all(|pair| pair[0] < pair[1]), "not ascending, and without repeats: {found:?}");
+
+    // The same ids, whichever order the ranks are named in.
+    let (_, reversed) = get_json(
+        "/api/v2/taxonomy?input[]=8493&descendants=true&descendants_ranks[]=genus&descendants_ranks[]=species"
+    )
+    .await;
+
+    assert_eq!(ids(&reversed[0]["descendants"]), found);
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -87,13 +87,7 @@ async fn handler(
         return Ok(Data { peptides: Vec::new() });
     }
 
-    // Deduplicated after the peptides are sanitised, not before. Sanitising upper-cases and trims,
-    // so two spellings that differ only in case or in trailing space are one peptide by the time
-    // the index sees them — and were two searches, and two identical rows, when the order was the
-    // other way round.
-    //
-    // This endpoint answers one row per distinct peptide rather than one per position: it is what a
-    // whole sample is posted to, and a sample names the same peptide many times.
+    // Sanitising folds case and trims, so it has to run before anything deduplicates.
     let peptides = distinct_peptides(&sanitize_peptides(peptides));
 
     let taxon_store = datastore.taxon_store();

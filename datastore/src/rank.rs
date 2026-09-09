@@ -4,7 +4,7 @@ use std::{fmt, str::FromStr};
 
 use crate::errors::TaxonStoreError;
 
-/// Every rank, in the order a lineage row holds its columns.
+/// Every rank, from the broadest to the narrowest, in the order a lineage row holds its columns.
 ///
 /// **The one place the ranks are named.** The columns of a lineage row, the rank a taxon is stored
 /// with, and the fields a lineage answers with are all derived from this list, so a rank added here
@@ -46,6 +46,10 @@ pub const RANK_NAMES: [&str; 28] = [
 /// How many columns a lineage row carries after its taxon id.
 pub const RANK_COUNT: usize = RANK_NAMES.len();
 
+/// Whether two names are the same.
+///
+/// Spelled out rather than `==`, which a `const fn` cannot call: `PartialEq` is not a const trait
+/// yet, and neither is `slice::iter`, so `position` is out too.
 const fn is(name: &str, other: &str) -> bool {
     let (name, other) = (name.as_bytes(), other.as_bytes());
     if name.len() != other.len() {
@@ -65,9 +69,9 @@ const fn is(name: &str, other: &str) -> bool {
 
 /// The position of a rank in [`RANK_NAMES`], resolved while compiling.
 ///
-/// A name no rank carries fails the build, which is what makes the constants below safe to state:
-/// rename a rank in the list and every constant that named it stops compiling, rather than
-/// addressing the wrong column.
+/// A name no rank carries fails the build. A rank renamed in the list therefore stops the build at
+/// the constant that named it, rather than addressing the wrong column — which matters, because
+/// ranks are renamed: `domain` was `superkingdom`.
 pub const fn rank_index(name: &str) -> u8 {
     let mut index = 0;
     while index < RANK_NAMES.len() {
@@ -90,11 +94,20 @@ pub struct TaxonRank(u8);
 impl TaxonRank {
     /// A taxon the taxonomy places at no rank of its own. Not a lineage column.
     pub const NO_RANK: Self = Self(u8::MAX);
-    /// The top of a lineage, which `/api/v2/taxonomy` reads the root's descendants from.
-    pub const DOMAIN: Self = Self(rank_index("domain"));
-    /// Read by `calculate_lca`, which will not reduce to a taxon of its own at this rank.
+
+    /// The broadest rank, which is the first column of a lineage.
+    ///
+    /// Named for where it sits rather than for what it is called, because what it is called
+    /// changes: this rank was `superkingdom` before it was `domain`. Everything below the root is
+    /// reached by walking the taxa at this rank.
+    pub const TOP: Self = Self(0);
+
+    /// Named rather than positional, because the rule that reads them is about these two ranks.
+    ///
+    /// `calculate_lca` will not let two taxa agree at genus or species by both recording nothing
+    /// there. Rename either in the list and the build stops here.
     pub const GENUS: Self = Self(rank_index("genus"));
-    /// Read by `calculate_lca`, for the same reason as [`Self::GENUS`].
+    /// See [`Self::GENUS`].
     pub const SPECIES: Self = Self(rank_index("species"));
 
     /// Every rank a lineage row holds a column for, in column order. `NO_RANK` is not among them.
@@ -210,9 +223,15 @@ mod tests {
     /// The named ranks are resolved while compiling, so this holds them to the list they came from.
     #[test]
     fn the_named_ranks_address_the_columns_they_name() {
-        assert_eq!(TaxonRank::DOMAIN.as_str(), "domain");
         assert_eq!(TaxonRank::GENUS.as_str(), "genus");
         assert_eq!(TaxonRank::SPECIES.as_str(), "species");
         assert_eq!(TaxonRank::columns().count(), RANK_COUNT);
+    }
+
+    /// The broadest rank is the first column, whatever the taxonomy calls it.
+    #[test]
+    fn the_top_rank_is_the_first_column() {
+        assert_eq!(TaxonRank::TOP.lineage_index(), Some(0));
+        assert_eq!(TaxonRank::TOP.as_str(), RANK_NAMES[0]);
     }
 }

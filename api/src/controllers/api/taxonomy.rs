@@ -144,10 +144,10 @@ async fn handler(
                 if descendants {
                     let mut descendant_ids = BTreeSet::new();
 
-                    for domain_taxon in lineage_store.get_all_taxon_ids_at_rank(TaxonRank::DOMAIN)? {
+                    for top_taxon in lineage_store.get_all_taxon_ids_at_rank(TaxonRank::TOP)? {
                         descendants_at_ranks(
-                            domain_taxon,
-                            TaxonRank::DOMAIN,
+                            top_taxon,
+                            TaxonRank::TOP,
                             &descendants_ranks,
                             lineage_store,
                             &mut descendant_ids

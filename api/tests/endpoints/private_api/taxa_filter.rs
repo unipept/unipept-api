@@ -303,3 +303,34 @@ async fn every_window_matches_the_whole_listing() {
         }
     }
 }
+
+/// Pages walked end to end rebuild the whole listing, so every taxon on one page sorts below every
+/// taxon on the next.
+///
+/// A page is cut by partitioning around its bounds rather than by ordering the whole table. What
+/// makes the two agree is that the comparison is a total order: no two taxa compare equal, so "the
+/// taxa at ranks [start, end)" names one set of taxa, whichever way the partition reached it.
+///
+/// The listing compared against is a genuine sort, not another partition — a window wider than the
+/// table skips both partition steps.
+#[tokio::test(flavor = "multi_thread")]
+async fn pages_walked_end_to_end_rebuild_the_listing() {
+    for field in ["id", "rank", "name"] {
+        for descending in ["false", "true"] {
+            let sorted = format!("sort_by={field}&sort_descending={descending}");
+            let (_, whole) = get_json(&format!("/private_api/taxa/filter?start=0&end=1000&{sorted}")).await;
+            let whole = whole.as_array().expect("a page").clone();
+
+            let mut walked = Vec::new();
+            let mut start = 0;
+            while start < whole.len() {
+                let (_, page) =
+                    get_json(&format!("/private_api/taxa/filter?start={start}&end={}&{sorted}", start + 3)).await;
+                walked.extend(page.as_array().expect("a page").clone());
+                start += 3;
+            }
+
+            assert_eq!(walked, whole, "{sorted}: pages walked end to end differ from the whole listing");
+        }
+    }
+}

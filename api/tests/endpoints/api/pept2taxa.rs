@@ -103,3 +103,34 @@ async fn extra_and_names_add_a_named_lineage() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(named[0]["genus_name"], "Crocodylus");
 }
+
+/// A repeat multiplies with the taxa rather than adding one row.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_repeated_peptide_carries_all_of_its_taxa_to_each_position() {
+    let (status, once) = get_json(&format!("/api/v2/pept2taxa?input[]={GENUS_SHARED}&extra=true&names=true")).await;
+    assert_eq!(status, StatusCode::OK);
+    let once = once.as_array().expect("a list");
+    assert!(once.len() > 1, "the peptide should reach several taxa, or this asserts nothing");
+
+    let (status, twice) =
+        get_json(&format!("/api/v2/pept2taxa?input[]={GENUS_SHARED}&input[]={GENUS_SHARED}&extra=true&names=true"))
+            .await;
+    assert_eq!(status, StatusCode::OK);
+    let twice = twice.as_array().expect("a list");
+
+    assert_eq!(twice.len(), once.len() * 2, "every taxon repeats with the peptide");
+    assert_eq!(&twice[..once.len()], &once[..], "the first occurrence answers as it does alone");
+    assert_eq!(&twice[once.len()..], &once[..], "and so does the second, to the byte");
+}
+
+/// The compact shape answers one row per peptide, so a repeat adds one row.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_repeated_peptide_answers_once_per_position_when_compact() {
+    let (status, body) =
+        get_json(&format!("/api/v2/pept2taxa?input[]={GENUS_SHARED}&input[]={GENUS_SHARED}&compact=true")).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let rows = body.as_array().expect("a list");
+    assert_eq!(rows.len(), 2, "one row per position: {body}");
+    assert_eq!(rows[0], rows[1]);
+}

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
@@ -10,6 +12,7 @@ use crate::{
     },
     errors::ApiError,
     helpers::{
+        distinct_peptides, laid_over_input,
         lca_helper::calculate_lca,
         lineage_helper::{
             Lineage,
@@ -36,7 +39,7 @@ pub struct Parameters {
     cutoff: usize
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct LcaInformation {
     peptide: String,
     cutoff_used: bool,
@@ -46,7 +49,7 @@ pub struct LcaInformation {
     lineage: Option<Lineage>
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Taxon {
     taxon_id: u32,
     taxon_name: String,
@@ -66,19 +69,21 @@ async fn handler(
     version: LineageVersion
 ) -> Result<Vec<LcaInformation>, ApiError> {
     let input = sanitize_peptides(input);
+    let distinct = distinct_peptides(&input);
+
     // Only the taxa are used below, so this takes the lightweight path: no accession or
     // annotation is retrieved for hits that would immediately be discarded.
-    let result = tokio::task::block_in_place(|| index.analyse_taxa(&input, equate_il, false, Some(cutoff)));
+    let result = tokio::task::block_in_place(|| index.analyse_taxa(&distinct, equate_il, false, Some(cutoff)));
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
-    Ok(result
-        .into_iter()
+    let rows: HashMap<&str, Vec<LcaInformation>> = result
+        .iter()
         .filter_map(|item| {
             // Already sorted and deduplicated; `calculate_lca` reduces rank by rank and is
             // unaffected by repeats.
-            let lca = calculate_lca(item.taxa, version, taxon_store, lineage_store, validate_taxa);
+            let lca = calculate_lca(item.taxa.iter().copied(), version, taxon_store, lineage_store, validate_taxa);
 
             let (name, rank, _) = taxon_store.get(lca as u32)?;
             let lineage = match (extra, names) {
@@ -87,7 +92,7 @@ async fn handler(
                 (false, _) => None
             };
 
-            Some(LcaInformation {
+            Some((item.sequence, vec![LcaInformation {
                 peptide: item.sequence.to_string(),
                 cutoff_used: item.cutoff_used,
                 taxon: Taxon {
@@ -96,9 +101,11 @@ async fn handler(
                     taxon_rank: rank.clone().into()
                 },
                 lineage
-            })
+            }]))
         })
-        .collect())
+        .collect();
+
+    Ok(laid_over_input(&input, rows))
 }
 
 generate_handlers! (

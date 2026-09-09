@@ -15,6 +15,7 @@ use crate::{
     },
     errors::ApiError,
     helpers::{
+        distinct_peptides,
         fa_helper::{FunctionalAggregation, calculate_fa},
         filters::{
             UniprotFilter, crap_filter::CrapFilter, empty_filter::EmptyFilter, protein_filter::ProteinFilter,
@@ -73,7 +74,7 @@ pub struct Data {
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters {
-        mut peptides,
+        peptides,
         equate_il: Flag(equate_il),
         tryptic: Flag(tryptic),
         cutoff,
@@ -86,10 +87,8 @@ async fn handler(
         return Ok(Data { peptides: Vec::new() });
     }
 
-    peptides.sort();
-    peptides.dedup();
-
-    let peptides = sanitize_peptides(peptides);
+    // Sanitising folds case and trims, so it has to run before anything deduplicates.
+    let peptides = distinct_peptides(&sanitize_peptides(peptides));
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();

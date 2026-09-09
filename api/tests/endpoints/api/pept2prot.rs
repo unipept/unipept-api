@@ -210,3 +210,24 @@ async fn equate_il_reaches_a_second_protein() {
     assert_eq!(apart.as_array().map(Vec::len), Some(1));
     assert_eq!(together.as_array().map(Vec::len), Some(2));
 }
+
+/// A repeat multiplies with the proteins. The cluster is asked for each accession once either way.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_repeated_peptide_carries_all_of_its_proteins_to_each_position() {
+    let server = cluster_holding_the_corpus().await;
+
+    let (status, once) = get_against(&server, &format!("/api/v2/pept2prot?input[]={GENUS_SHARED}&extra=true")).await;
+    assert_eq!(status, StatusCode::OK);
+    let once = once.as_array().expect("a list");
+    assert!(once.len() > 1, "the peptide should reach several proteins, or this asserts nothing");
+
+    let (status, twice) =
+        get_against(&server, &format!("/api/v2/pept2prot?input[]={GENUS_SHARED}&input[]={GENUS_SHARED}&extra=true"))
+            .await;
+    assert_eq!(status, StatusCode::OK);
+    let twice = twice.as_array().expect("a list");
+
+    assert_eq!(twice.len(), once.len() * 2, "every protein repeats with the peptide");
+    assert_eq!(&twice[..once.len()], &once[..]);
+    assert_eq!(&twice[once.len()..], &once[..], "the second occurrence answers to the byte like the first");
+}

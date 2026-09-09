@@ -30,7 +30,7 @@ pub struct Parameters {
     #[serde(default = "default_descendants")]
     descendants: Flag,
     /// Rank names as the lineage columns spell them, with an underscore: `species_group`, not
-    /// `species group`. `LineageRank::lineage_key` writes this form.
+    /// `species group`. `LineageStore::rank_to_idx` is keyed on this form.
     #[serde(default = "default_descendants_ranks")]
     descendants_ranks: Vec<String>
 }
@@ -64,12 +64,12 @@ pub struct Taxon {
 fn get_children_at_rank(
     taxon_id: u32,
     rank: LineageRank,
-    descendants_ranks: String,
+    descendants_rank: String,
     lineage_store: &LineageStore
 ) -> Option<HashSet<u32>> {
-    let descendants_rank: String = descendants_ranks.to_string().to_lowercase();
-
-    let lineages_at_rank = lineage_store.get_lineages_at_rank(rank.lineage_key(), taxon_id);
+    // Taken as it arrived: `handler` rejects a rank `rank_to_idx` does not know before any of them
+    // reaches here, and that check is exact.
+    let lineages_at_rank = lineage_store.get_lineages_at_rank(&rank, taxon_id);
 
     let mut children_id_set = HashSet::new();
 
@@ -124,7 +124,7 @@ async fn handler(
                 if descendants {
                     children = Some(
                         lineage_store
-                            .get_all_taxon_ids_at_rank(LineageRank::Domain.lineage_key())?
+                            .get_all_taxon_ids_at_rank(&LineageRank::Domain)?
                             .iter()
                             .flat_map(|sk_taxon| {
                                 descendants_ranks

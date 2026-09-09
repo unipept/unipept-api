@@ -1,7 +1,6 @@
-use std::collections::HashSet;
-
 use axum::{Json, extract::State};
 use database::get_accessions;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -67,8 +66,8 @@ async fn handler(
     }: Parameters,
     version: LineageVersion
 ) -> Result<Vec<ProtInformation>, ApiError> {
-    let input = sanitize_proteins(input);
-    let input = HashSet::from_iter(input);
+    // Each accession once, in first-appearance order, which is the order the answer takes.
+    let input: Vec<String> = sanitize_proteins(input).into_iter().unique().collect();
 
     let connection = database.get_conn();
 

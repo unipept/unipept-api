@@ -98,3 +98,30 @@ async fn an_unresolvable_accession_yields_no_row() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, json!([]));
 }
+
+/// The results follow the input. The accessions reach the cluster in the order they were given,
+/// and `mget` answers in that same order.
+///
+/// The mock echoes back whichever order it is asked for, so what this pins is that the endpoint
+/// asks in input order rather than in the order of a set it built along the way.
+#[tokio::test(flavor = "multi_thread")]
+async fn results_follow_the_order_of_the_input() {
+    let server = MockServer::start_async().await;
+    server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/uniprot_entries/_mget")
+                .json_body(json!({ "docs": [ { "_id": "P00003" }, { "_id": "P00001" } ] }));
+            then.status(200).json_body(json!({ "docs": [
+                { "_source": source("P00003", 8502, "Protein three", "EC:1.1.1.1") },
+                { "_source": source("P00001", 8501, "Protein one", "EC:1.1.1.1") }
+            ] }));
+        })
+        .await;
+
+    let (status, body) = get_against(&server, "/api/v2/protinfo?input[]=P00003&input[]=P00001").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body[0]["protein"], "P00003");
+    assert_eq!(body[1]["protein"], "P00001");
+}

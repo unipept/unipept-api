@@ -1,7 +1,6 @@
-use std::collections::HashSet;
-
 use axum::{Json, extract::State};
 use database::get_accessions;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::{AppState, controllers::generate_handlers, errors::ApiError};
@@ -26,7 +25,10 @@ async fn handler(
 ) -> Result<Vec<Protein>, ApiError> {
     let connection = database.get_conn();
 
-    let entries = get_accessions(connection, &HashSet::from_iter(accessions.iter().cloned())).await?;
+    // Each accession once, in first-appearance order, which is the order the answer takes.
+    let accessions: Vec<String> = accessions.into_iter().unique().collect();
+
+    let entries = get_accessions(connection, &accessions).await?;
 
     Ok(entries
         .into_iter()

@@ -15,7 +15,7 @@ async fn an_empty_filter_counts_every_proteome() {
     let (status, body) = get_json("/private_api/proteomes/count").await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["count"], 3, "the corpus declares three reference proteomes");
+    assert_eq!(body["count"], 4, "the corpus declares four reference proteomes");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -142,4 +142,43 @@ async fn the_documented_sort_fields_are_not_the_implemented_ones() {
 
 fn as_set(value: &serde_json::Value) -> std::collections::BTreeSet<String> {
     value.as_array().expect("a page").iter().map(|id| id.as_str().expect("an id").to_string()).collect()
+}
+
+/// `UP000000002` and `UP000000004` share a taxon and a protein count, so on both sort fields the
+/// proteome id is what separates them, and the order is total.
+///
+/// Nothing else could separate them: the proteomes are collected out of a `HashMap`, whose
+/// iteration order differs from one process to the next. A page is a window on this order, so two
+/// processes ordering the pair differently would hand a client paging through the list one proteome
+/// twice and another not at all.
+#[tokio::test(flavor = "multi_thread")]
+async fn proteomes_alike_on_the_sort_field_are_ordered_by_id() {
+    for field in ["taxon_name", "protein_count"] {
+        let path = format!("/private_api/proteomes/filter?start=0&end=100&sort_by={field}");
+        let (status, page) = get_json(&path).await;
+
+        assert_eq!(status, StatusCode::OK, "{field}");
+
+        let ids: Vec<&str> =
+            page.as_array().expect("a page").iter().map(|id| id.as_str().expect("an accession")).collect();
+        let second = ids.iter().position(|id| *id == "UP000000002").expect("UP000000002 is in the page");
+        let fourth = ids.iter().position(|id| *id == "UP000000004").expect("UP000000004 is in the page");
+
+        assert_eq!(fourth, second + 1, "sorted by {field} the tied pair is adjacent, in id order: {ids:?}");
+    }
+}
+
+/// Descending reverses the whole order, the tiebreak included, so the two directions are exact
+/// mirrors even on a field two proteomes share.
+#[tokio::test(flavor = "multi_thread")]
+async fn sorting_by_protein_count_reverses_exactly() {
+    let (_, ascending) = get_json("/private_api/proteomes/filter?start=0&end=100&sort_by=protein_count").await;
+    let (status, descending) =
+        get_json("/private_api/proteomes/filter?start=0&end=100&sort_by=protein_count&sort_descending=true").await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    let mut reversed = descending.as_array().expect("a page").clone();
+    reversed.reverse();
+    assert_eq!(ascending.as_array().expect("a page"), &reversed);
 }

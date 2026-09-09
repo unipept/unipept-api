@@ -61,6 +61,10 @@ pub const INTERPRO_ENTRIES_TSV: &str = include_str!("../data/interpro_entries.ts
 
 /// Reference proteomes: `id`, `accession`, `taxon`, `count`, `proteins`.
 ///
+/// `UP000000004` carries the taxon and the protein count of `UP000000002`. Both fields the proteome
+/// filter sorts on are therefore held by two rows, which is what makes its tiebreak reachable: with
+/// four rows all distinct, the sort is total whether or not it names one.
+///
 /// The final column is semicolon separated, which is how `ReferenceProteomeStore` splits it.
 pub const PROTEOMES_TSV: &str = include_str!("../data/proteomes.tsv");
 

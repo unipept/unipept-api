@@ -91,3 +91,23 @@ async fn an_absent_peptide_produces_no_row() {
     assert_eq!(body.as_array().map(Vec::len), Some(1), "only the peptide that matched appears");
     assert_eq!(body[0]["peptide"], UNIQUE);
 }
+
+/// A repeated peptide is searched once and answered at each position it occupies.
+///
+/// This endpoint takes the taxon-only search path and reduces the taxa to an LCA, so what a repeat
+/// used to cost here is a second search and a second reduction.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_repeated_peptide_answers_at_each_position() {
+    let (status, once) = get_json(&format!("/api/v2/pept2lca?input[]={GENUS_SHARED}&extra=true&names=true")).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let repeated = format!("input[]={GENUS_SHARED}&input[]={UNIQUE}&input[]={GENUS_SHARED}&extra=true&names=true");
+    let (status, body) = get_json(&format!("/api/v2/pept2lca?{repeated}")).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let rows = body.as_array().expect("a list");
+    assert_eq!(rows.len(), 3, "one row per position: {body}");
+    assert_eq!(rows[0], once[0]);
+    assert_eq!(rows[2], once[0], "the second occurrence reduces to the same LCA, to the byte");
+    assert_eq!(rows[1]["peptide"], UNIQUE);
+}

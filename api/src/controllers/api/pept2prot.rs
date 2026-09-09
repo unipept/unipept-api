@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use axum::{Json, extract::State};
 use database::get_accessions_map;
 use itertools::Itertools;
@@ -11,7 +13,7 @@ use crate::{
         request::Flag
     },
     errors::ApiError,
-    helpers::sanitize_peptides
+    helpers::{distinct_peptides, laid_over_input, sanitize_peptides}
 };
 
 #[derive(Deserialize)]
@@ -28,7 +30,7 @@ pub struct Parameters {
     cutoff: usize
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(untagged)]
 pub enum ProtInformation {
     Default {
@@ -67,7 +69,9 @@ async fn handler(
 
     let connection = database.get_conn();
 
-    let result = tokio::task::block_in_place(|| index.analyse(&input, equate_il, tryptic, Some(cutoff)));
+    let distinct = distinct_peptides(&input);
+
+    let result = tokio::task::block_in_place(|| index.analyse(&distinct, equate_il, tryptic, Some(cutoff)));
 
     // Only ever read as a lookup, so the order does not reach the answer; deduplicated so the
     // database is not asked for one accession twice.
@@ -92,12 +96,16 @@ async fn handler(
 
     let taxon_store = datastore.taxon_store();
 
-    Ok(result
-        .into_iter()
-        .flat_map(|item| {
-            let cutoff_used = item.cutoff_used;
-            item.proteins
-                .into_iter()
+    // A row per protein, so a repeated peptide carries all of its proteins to each position it was
+    // named at. The cluster lookup above is keyed on accession and is unaffected: it was built from
+    // the distinct peptides, which reach the same proteins.
+    let rows: HashMap<&str, Vec<ProtInformation>> = result
+        .iter()
+        .map(|item| {
+            let (sequence, cutoff_used) = (item.sequence, item.cutoff_used);
+            let proteins = item
+                .proteins
+                .iter()
                 .filter_map(|protein| {
                     let uniprot_entry = accessions_map.get(protein.uniprot_accession)?;
 
@@ -125,7 +133,7 @@ async fn handler(
                             .join(" ");
 
                         Some(ProtInformation::Extra {
-                            peptide: item.sequence.to_string(),
+                            peptide: sequence.to_string(),
                             cutoff_used,
                             uniprot_id: protein.uniprot_accession.to_string(),
                             protein_name: uniprot_entry.name.clone(),
@@ -138,7 +146,7 @@ async fn handler(
                         })
                     } else {
                         Some(ProtInformation::Default {
-                            peptide: item.sequence.to_string(),
+                            peptide: sequence.to_string(),
                             cutoff_used,
                             uniprot_id: protein.uniprot_accession.to_string(),
                             protein_name: uniprot_entry.name.clone(),
@@ -147,9 +155,13 @@ async fn handler(
                         })
                     }
                 })
-                .collect::<Vec<ProtInformation>>()
+                .collect();
+
+            (sequence, proteins)
         })
-        .collect())
+        .collect();
+
+    Ok(laid_over_input(&input, &rows))
 }
 
 generate_handlers!(

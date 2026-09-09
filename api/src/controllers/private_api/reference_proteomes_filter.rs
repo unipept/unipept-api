@@ -42,15 +42,16 @@ pub struct ReferenceProteomeCountResult {
 
 /// A proteome is kept when the filter appears in its accession, its taxon id, or its taxon name.
 ///
-/// `lowercased` is the filter folded once by the caller rather than per proteome; `filter` as given
-/// is what the taxon id is matched against, which is numeric and has no case.
-fn matches(lowercased: &str, filter: &str, key: &str, taxon_id: u32, taxon_store: &datastore::TaxonStore) -> bool {
+/// The filter arrives folded rather than folded here, which would repeat that per proteome. A
+/// taxon id is matched against the same folded filter: an id is digits, and no character folds to
+/// a digit, so a filter that differs from its folded form matches neither.
+fn matches(filter: &str, key: &str, taxon_id: u32, taxon_store: &datastore::TaxonStore) -> bool {
     // An empty filter keeps every proteome, and answering that before folding a case saves an
     // allocation per row on what the browser asks for by default.
     filter.is_empty()
-        || key.to_lowercase().contains(lowercased)
+        || key.to_lowercase().contains(filter)
         || taxon_id.to_string().contains(filter)
-        || get_taxon_name_by_id(taxon_store, taxon_id).to_lowercase().contains(lowercased)
+        || get_taxon_name_by_id(taxon_store, taxon_id).to_lowercase().contains(filter)
 }
 
 /// Borrowed rather than cloned: this is read once per proteome by the filter and once more to sort,
@@ -65,20 +66,18 @@ async fn count_handler(
 ) -> Result<ReferenceProteomeCountResult, Infallible> {
     let proteome_store = datastore.reference_proteome_store();
 
-    if filter.is_empty() {
-        Ok(ReferenceProteomeCountResult { count: proteome_store.mapper.values().count() as u32 })
-    } else {
-        let lowercased = filter.to_lowercase();
-        let taxon_store = datastore.taxon_store();
+    // No branch for an empty filter: `matches` answers that first, and counting the map is what
+    // the filter then reduces to.
+    let filter = filter.to_lowercase();
+    let taxon_store = datastore.taxon_store();
 
-        Ok(ReferenceProteomeCountResult {
-            count: proteome_store
-                .mapper
-                .iter()
-                .filter(|(key, (taxon_id, _, _))| matches(&lowercased, &filter, key, *taxon_id, taxon_store))
-                .count() as u32
-        })
-    }
+    Ok(ReferenceProteomeCountResult {
+        count: proteome_store
+            .mapper
+            .iter()
+            .filter(|(key, (taxon_id, _, _))| matches(&filter, key, *taxon_id, taxon_store))
+            .count() as u32
+    })
 }
 
 async fn filter_handler(
@@ -97,13 +96,13 @@ async fn filter_handler(
 
     let proteome_store = datastore.reference_proteome_store();
 
-    let lowercased = filter.to_lowercase();
+    let filter = filter.to_lowercase();
     let taxon_store = datastore.taxon_store();
 
     let filtered_proteomes = proteome_store
         .mapper
         .iter()
-        .filter(|(key, (taxon_id, _, _))| matches(&lowercased, &filter, key, *taxon_id, taxon_store));
+        .filter(|(key, (taxon_id, _, _))| matches(&filter, key, *taxon_id, taxon_store));
 
     // A taxon name and a protein count are both held by many proteomes, and the proteome id breaks
     // every tie, so the order is total. That matters here more than in a plain listing: this list is

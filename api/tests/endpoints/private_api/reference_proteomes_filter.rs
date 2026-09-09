@@ -185,15 +185,14 @@ async fn sorting_by_protein_count_reverses_exactly() {
     assert_eq!(ascending.as_array().expect("a page"), &reversed);
 }
 
-/// Every window is the slice of the whole listing that sits at the same offsets, on each sort field
-/// and in both directions.
+/// A window is the slice of the whole listing at the same offsets, on each sort field and in both
+/// directions.
 ///
-/// A page is taken by partitioning around its bounds rather than by ordering the whole table, so
-/// what is asserted is that the cheaper route answers exactly what the ordering would have. The
-/// tied pair is what makes that worth asserting: a partition that treated them as equal could
-/// return either.
+/// `page_of` is exhaustively tested where it lives. What this adds is that the endpoint hands it a
+/// total order: `UP000000002` and `UP000000004` are alike on both sort fields, so a page is only
+/// well defined because the proteome id follows them.
 #[tokio::test(flavor = "multi_thread")]
-async fn every_window_matches_the_whole_listing() {
+async fn a_window_matches_the_whole_listing() {
     for field in ["id", "taxon_name", "protein_count"] {
         for descending in ["false", "true"] {
             let sorted = format!("sort_by={field}&sort_descending={descending}");
@@ -203,19 +202,17 @@ async fn every_window_matches_the_whole_listing() {
             let whole = whole.as_array().expect("a page");
 
             for start in 0..whole.len() {
-                for size in [1usize, 2] {
-                    let end = start + size;
-                    let path = format!("/private_api/proteomes/filter?start={start}&end={end}&{sorted}");
-                    let (window_status, window) = get_json(&path).await;
-                    assert_eq!(window_status, StatusCode::OK, "{sorted}: the window [{start}, {end})");
+                let end = start + 2;
+                let path = format!("/private_api/proteomes/filter?start={start}&end={end}&{sorted}");
+                let (window_status, window) = get_json(&path).await;
 
-                    let expected: Vec<_> = whole.iter().skip(start).take(size).cloned().collect();
-                    assert_eq!(
-                        window.as_array().expect("a page"),
-                        &expected,
-                        "{sorted}: the window [{start}, {end}) differs from the same slice of the listing"
-                    );
-                }
+                assert_eq!(window_status, StatusCode::OK, "{sorted}: the window [{start}, {end})");
+                let expected: Vec<_> = whole.iter().skip(start).take(2).cloned().collect();
+                assert_eq!(
+                    window.as_array().expect("a page"),
+                    &expected,
+                    "{sorted}: the window [{start}, {end}) differs from the same slice of the listing"
+                );
             }
         }
     }

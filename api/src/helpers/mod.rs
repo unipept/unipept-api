@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub mod ec_helper;
 pub mod fa_helper;
@@ -23,16 +23,31 @@ pub fn by_count_then_key<'a>(terms: impl Iterator<Item = (&'a str, u32)>) -> Vec
     terms
 }
 
+/// The terms of one annotation family, ordered, out of the aggregated counts.
+///
+/// The prefix both selects the family and stays on the key: `ec_number` and `interpro_entry` trim
+/// it themselves, and a GO term keeps it.
+pub fn family_from_map<'a>(fa_data: &'a HashMap<String, u32>, prefix: &str) -> Vec<(&'a str, u32)> {
+    by_count_then_key(
+        fa_data.iter().filter(|(key, _)| key.starts_with(prefix)).map(|(key, &count)| (key.as_str(), count))
+    )
+}
+
+/// The same, out of a list of annotations that carries no counts.
+///
+/// Every term is given a count of zero, which `is_zero` keeps out of the response, so the
+/// identifier alone puts them in order.
+pub fn family_from_list<'a>(fa_data: &[&'a str], prefix: &str) -> Vec<(&'a str, u32)> {
+    by_count_then_key(fa_data.iter().filter(|key| key.starts_with(prefix)).map(|&key| (key, 0)))
+}
+
 /// Groups terms under the domain each belongs to, as one single-key map per domain. The domains
 /// come out by name, and each keeps the order its terms were given in.
 pub fn grouped_by_domain<T>(terms: impl Iterator<Item = (String, T)>) -> Vec<HashMap<String, Vec<T>>> {
-    let mut domains: HashMap<String, Vec<T>> = HashMap::new();
+    let mut domains: BTreeMap<String, Vec<T>> = BTreeMap::new();
     for (domain, term) in terms {
         domains.entry(domain).or_default().push(term);
     }
-
-    let mut domains: Vec<(String, Vec<T>)> = domains.into_iter().collect();
-    domains.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
 
     domains.into_iter().map(|(domain, terms)| HashMap::from([(domain, terms)])).collect()
 }

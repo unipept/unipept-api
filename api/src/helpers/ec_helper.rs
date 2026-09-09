@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use datastore::EcStore;
 use serde::Serialize;
 
-use crate::helpers::{by_count_then_key, is_zero};
+use crate::helpers::{family_from_list, family_from_map, is_zero};
+
+/// The prefix an EC annotation carries in the aggregated counts.
+const PREFIX: &str = "EC:";
 
 #[derive(Serialize, Clone)]
 #[serde(untagged)]
@@ -22,17 +25,15 @@ pub enum EcNumber {
 }
 
 pub fn ec_numbers_from_map(fa_data: &HashMap<String, u32>, ec_store: &EcStore, extra: bool) -> Vec<EcNumber> {
-    let ec_numbers = by_count_then_key(
-        fa_data.iter().filter(|(key, _)| key.starts_with("EC:")).map(|(key, &count)| (key.as_str(), count))
-    );
-
-    ec_numbers.into_iter().map(|(key, count)| ec_number(key, count, ec_store, extra)).collect()
+    ec_numbers(family_from_map(fa_data, PREFIX), ec_store, extra)
 }
 
 pub fn ec_numbers_from_list(fa_data: &[&str], ec_store: &EcStore, extra: bool) -> Vec<EcNumber> {
-    let ec_numbers = by_count_then_key(fa_data.iter().filter(|key| key.starts_with("EC:")).map(|&key| (key, 0)));
+    ec_numbers(family_from_list(fa_data, PREFIX), ec_store, extra)
+}
 
-    ec_numbers.into_iter().map(|(key, count)| ec_number(key, count, ec_store, extra)).collect()
+fn ec_numbers(ecs: Vec<(&str, u32)>, ec_store: &EcStore, extra: bool) -> Vec<EcNumber> {
+    ecs.into_iter().map(|(key, count)| ec_number(key, count, ec_store, extra)).collect()
 }
 
 fn ec_number(key: &str, count: u32, ec_store: &EcStore, extra: bool) -> EcNumber {

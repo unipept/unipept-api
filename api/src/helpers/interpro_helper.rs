@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use datastore::InterproStore;
 use serde::Serialize;
 
-use crate::helpers::{by_count_then_key, grouped_by_domain, is_zero};
+use crate::helpers::{family_from_list, family_from_map, grouped_by_domain, is_zero};
+
+/// The prefix an InterPro annotation carries in the aggregated counts.
+const PREFIX: &str = "IPR:";
 
 #[derive(Serialize)]
 #[serde(untagged)]
@@ -51,20 +54,7 @@ pub fn interpro_entries_from_map(
     extra: bool,
     domains: bool
 ) -> InterproEntries {
-    let interpro_entries = by_count_then_key(
-        fa_data.iter().filter(|(key, _)| key.starts_with("IPR:")).map(|(key, &count)| (key.as_str(), count))
-    );
-
-    if domains {
-        handle_domains(interpro_entries, interpro_store, extra)
-    } else {
-        InterproEntries::Default(
-            interpro_entries
-                .into_iter()
-                .filter_map(|(key, count)| interpro_entry(key, count, interpro_store, extra, false))
-                .collect()
-        )
-    }
+    interpro_entries(family_from_map(fa_data, PREFIX), interpro_store, extra, domains)
 }
 
 pub fn interpro_entries_from_list(
@@ -73,14 +63,20 @@ pub fn interpro_entries_from_list(
     extra: bool,
     domains: bool
 ) -> InterproEntries {
-    let interpro_entries = by_count_then_key(fa_data.iter().filter(|key| key.starts_with("IPR:")).map(|&key| (key, 0)));
+    interpro_entries(family_from_list(fa_data, PREFIX), interpro_store, extra, domains)
+}
 
+fn interpro_entries(
+    iprs: Vec<(&str, u32)>,
+    interpro_store: &InterproStore,
+    extra: bool,
+    domains: bool
+) -> InterproEntries {
     if domains {
-        handle_domains(interpro_entries, interpro_store, extra)
+        handle_domains(iprs, interpro_store, extra)
     } else {
         InterproEntries::Default(
-            interpro_entries
-                .into_iter()
+            iprs.into_iter()
                 .filter_map(|(key, count)| interpro_entry(key, count, interpro_store, extra, false))
                 .collect()
         )

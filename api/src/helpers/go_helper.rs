@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use datastore::GoStore;
 use serde::Serialize;
 
-use crate::helpers::{by_count_then_key, grouped_by_domain, is_zero};
+use crate::helpers::{family_from_list, family_from_map, grouped_by_domain, is_zero};
+
+/// The prefix a GO annotation carries in the aggregated counts, and keeps in the response.
+const PREFIX: &str = "GO:";
 
 #[derive(Serialize)]
 #[serde(untagged)]
@@ -29,24 +32,18 @@ pub enum GoTerms {
 }
 
 pub fn go_terms_from_map(fa_data: &HashMap<String, u32>, go_store: &GoStore, extra: bool, domains: bool) -> GoTerms {
-    let go_terms = by_count_then_key(
-        fa_data.iter().filter(|(key, _)| key.starts_with("GO:")).map(|(key, &count)| (key.as_str(), count))
-    );
-
-    if domains {
-        handle_domains(go_terms, go_store, extra)
-    } else {
-        GoTerms::Default(go_terms.into_iter().map(|(key, count)| go_term(key, count, go_store, extra)).collect())
-    }
+    go_terms(family_from_map(fa_data, PREFIX), go_store, extra, domains)
 }
 
 pub fn go_terms_from_list(fa_data: &[&str], go_store: &GoStore, extra: bool, domains: bool) -> GoTerms {
-    let go_terms = by_count_then_key(fa_data.iter().filter(|key| key.starts_with("GO:")).map(|&key| (key, 0)));
+    go_terms(family_from_list(fa_data, PREFIX), go_store, extra, domains)
+}
 
+fn go_terms(gos: Vec<(&str, u32)>, go_store: &GoStore, extra: bool, domains: bool) -> GoTerms {
     if domains {
-        handle_domains(go_terms, go_store, extra)
+        handle_domains(gos, go_store, extra)
     } else {
-        GoTerms::Default(go_terms.into_iter().map(|(key, count)| go_term(key, count, go_store, extra)).collect())
+        GoTerms::Default(gos.into_iter().map(|(key, count)| go_term(key, count, go_store, extra)).collect())
     }
 }
 

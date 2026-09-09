@@ -11,36 +11,13 @@ use crate::{
     rank::{RANK_COUNT, TaxonRank}
 };
 
+/// One taxon's ancestor at each rank, in the order [`crate::RANK_NAMES`] declares them.
+///
+/// A rank the taxonomy records nothing at holds `None`; one it records an invalid taxon at holds a
+/// negative id.
 #[derive(Clone, Debug, Serialize, Default)]
 pub struct Lineage {
-    pub domain: Option<i32>,
-    pub realm: Option<i32>,
-    pub kingdom: Option<i32>,
-    pub subkingdom: Option<i32>,
-    pub superphylum: Option<i32>,
-    pub phylum: Option<i32>,
-    pub subphylum: Option<i32>,
-    pub superclass: Option<i32>,
-    pub class: Option<i32>,
-    pub subclass: Option<i32>,
-    pub superorder: Option<i32>,
-    pub order: Option<i32>,
-    pub suborder: Option<i32>,
-    pub infraorder: Option<i32>,
-    pub superfamily: Option<i32>,
-    pub family: Option<i32>,
-    pub subfamily: Option<i32>,
-    pub tribe: Option<i32>,
-    pub subtribe: Option<i32>,
-    pub genus: Option<i32>,
-    pub subgenus: Option<i32>,
-    pub species_group: Option<i32>,
-    pub species_subgroup: Option<i32>,
-    pub species: Option<i32>,
-    pub subspecies: Option<i32>,
-    pub strain: Option<i32>,
-    pub varietas: Option<i32>,
-    pub forma: Option<i32>
+    pub ranks: [Option<i32>; RANK_COUNT]
 }
 
 impl Lineage {
@@ -50,39 +27,10 @@ impl Lineage {
         self.get_rank(LineageStore::rank_to_idx(rank_name)?)
     }
 
-    /// Retrieves the ID of this lineage at a rank index, in the order [`crate::RANK_NAMES`] declares them. If the index is out of range, None is returned.
+    /// The id at a rank index, in the order [`crate::RANK_NAMES`] declares them, or `None` past
+    /// the last column.
     pub fn get_rank(&self, rank_index: usize) -> Option<i32> {
-        match rank_index {
-            0 => self.domain,
-            1 => self.realm,
-            2 => self.kingdom,
-            3 => self.subkingdom,
-            4 => self.superphylum,
-            5 => self.phylum,
-            6 => self.subphylum,
-            7 => self.superclass,
-            8 => self.class,
-            9 => self.subclass,
-            10 => self.superorder,
-            11 => self.order,
-            12 => self.suborder,
-            13 => self.infraorder,
-            14 => self.superfamily,
-            15 => self.family,
-            16 => self.subfamily,
-            17 => self.tribe,
-            18 => self.subtribe,
-            19 => self.genus,
-            20 => self.subgenus,
-            21 => self.species_group,
-            22 => self.species_subgroup,
-            23 => self.species,
-            24 => self.subspecies,
-            25 => self.strain,
-            26 => self.varietas,
-            27 => self.forma,
-            _ => None
-        }
+        self.ranks.get(rank_index).copied().flatten()
     }
 }
 
@@ -161,36 +109,9 @@ impl LineageStore {
                 });
             }
 
-            let lin = Arc::new(Lineage {
-                domain: parts[0],
-                realm: parts[1],
-                kingdom: parts[2],
-                subkingdom: parts[3],
-                superphylum: parts[4],
-                phylum: parts[5],
-                subphylum: parts[6],
-                superclass: parts[7],
-                class: parts[8],
-                subclass: parts[9],
-                superorder: parts[10],
-                order: parts[11],
-                suborder: parts[12],
-                infraorder: parts[13],
-                superfamily: parts[14],
-                family: parts[15],
-                subfamily: parts[16],
-                tribe: parts[17],
-                subtribe: parts[18],
-                genus: parts[19],
-                subgenus: parts[20],
-                species_group: parts[21],
-                species_subgroup: parts[22],
-                species: parts[23],
-                subspecies: parts[24],
-                strain: parts[25],
-                varietas: parts[26],
-                forma: parts[27]
-            });
+            let mut ranks = [None; RANK_COUNT];
+            ranks.copy_from_slice(&parts);
+            let lin = Arc::new(Lineage { ranks });
 
             mapper.insert(taxon_id, Arc::clone(&lin));
 
@@ -236,47 +157,17 @@ mod tests {
         TaxonRank::columns().map(|rank| rank.as_str().replace(' ', "_")).collect()
     }
 
-    /// The rank names index the lineage columns in order, and each one reads back its own column.
+    /// A rank name, a rank and a column index all address the same column.
     ///
-    /// `rank_to_idx`, `get_taxon_id_at_rank` and `get_rank` are three hand-written tables over the
-    /// same ranks, listed in the same order, and nothing else checks that they agree with each
-    /// other or with the column order the parser fills.
+    /// `rank_to_idx` reads a name, `get_taxon_id_at_rank` reads a name through it, and `get_rank`
+    /// reads a position. A different value in every column is what makes a disagreement visible.
     #[test]
     fn every_rank_key_addresses_its_own_column() {
-        let mut lineage = Lineage::default();
-        let fields: [&mut Option<i32>; RANK_COUNT] = [
-            &mut lineage.domain,
-            &mut lineage.realm,
-            &mut lineage.kingdom,
-            &mut lineage.subkingdom,
-            &mut lineage.superphylum,
-            &mut lineage.phylum,
-            &mut lineage.subphylum,
-            &mut lineage.superclass,
-            &mut lineage.class,
-            &mut lineage.subclass,
-            &mut lineage.superorder,
-            &mut lineage.order,
-            &mut lineage.suborder,
-            &mut lineage.infraorder,
-            &mut lineage.superfamily,
-            &mut lineage.family,
-            &mut lineage.subfamily,
-            &mut lineage.tribe,
-            &mut lineage.subtribe,
-            &mut lineage.genus,
-            &mut lineage.subgenus,
-            &mut lineage.species_group,
-            &mut lineage.species_subgroup,
-            &mut lineage.species,
-            &mut lineage.subspecies,
-            &mut lineage.strain,
-            &mut lineage.varietas,
-            &mut lineage.forma
-        ];
-        for (position, field) in fields.into_iter().enumerate() {
-            *field = Some(position as i32 + 1000);
+        let mut ranks = [None; RANK_COUNT];
+        for (position, rank) in ranks.iter_mut().enumerate() {
+            *rank = Some(position as i32 + 1000);
         }
+        let lineage = Lineage { ranks };
 
         for (position, key) in rank_keys().iter().enumerate() {
             assert_eq!(LineageStore::rank_to_idx(key), Some(position), "rank_to_idx({key})");

@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
-    controllers::{generate_handlers, private_api::default_sort_descending, request::Flag}
+    controllers::{generate_handlers, private_api::default_sort_descending, request::Flag},
+    errors::ApiError
 };
 
 fn default_filter() -> String {
@@ -73,7 +74,11 @@ async fn filter_handler(
         sort_by,
         sort_descending: Flag(sort_descending)
     }: ReferenceProteomeFilterParameters
-) -> Result<Vec<String>, Infallible> {
+) -> Result<Vec<String>, ApiError> {
+    if end < start {
+        return Err(ApiError::InvalidParameter(format!("end ({end}) must be at least start ({start})")));
+    }
+
     let proteome_store = datastore.reference_proteome_store();
 
     let mut filtered_proteomes: Vec<(&String, &(u32, u32, String))> = proteome_store
@@ -117,6 +122,7 @@ async fn filter_handler(
         }
     }
 
+    // Take the range [start, end), which is empty when `end` is not past `start`.
     Ok(filtered_proteomes
         .into_iter()
         .skip(start)
@@ -138,7 +144,7 @@ generate_handlers!(
     async fn json_filter_handler(
         state => State<AppState>,
         params => ReferenceProteomeFilterParameters
-    ) -> Result<Json<Vec<String>>, Infallible> {
+    ) -> Result<Json<Vec<String>>, ApiError> {
         Ok(Json(filter_handler(state, params).await?))
     }
 );

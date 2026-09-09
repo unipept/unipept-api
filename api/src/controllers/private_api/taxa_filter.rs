@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
-    controllers::{generate_handlers, private_api::default_sort_descending, request::Flag}
+    controllers::{generate_handlers, private_api::default_sort_descending, request::Flag},
+    errors::ApiError
 };
 
 fn default_filter() -> String {
@@ -81,7 +82,11 @@ async fn filter_handler(
         sort_by,
         sort_descending: Flag(sort_descending)
     }: TaxaFilterParameters
-) -> Result<Vec<u32>, Infallible> {
+) -> Result<Vec<u32>, ApiError> {
+    if end < start {
+        return Err(ApiError::InvalidParameter(format!("end ({end}) must be at least start ({start})")));
+    }
+
     let taxon_store = datastore.taxon_store();
 
     let filter = filter.to_lowercase();
@@ -120,7 +125,7 @@ async fn filter_handler(
         }
     }
 
-    // Take the range [start, end)
+    // Take the range [start, end), which is empty when `end` is not past `start`.
     let taxa: Vec<u32> = filtered_taxa.into_iter().skip(start).take(end - start).collect();
 
     Ok(taxa)
@@ -139,7 +144,7 @@ generate_handlers!(
     async fn json_filter_handler(
         state => State<AppState>,
         params => TaxaFilterParameters
-    ) -> Result<Json<Vec<u32>>, Infallible> {
+    ) -> Result<Json<Vec<u32>>, ApiError> {
         Ok(Json(filter_handler(state, params).await?))
     }
 );

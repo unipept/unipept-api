@@ -176,3 +176,45 @@ async fn a_species_subgroup_is_read_at_its_own_rank() {
     assert_eq!(body[0]["taxon_rank"], "species subgroup");
     assert_eq!(sorted_ids(&body[0]["descendants"]), vec![fixtures::taxa::MELANOGASTER_SUBGROUP as u64]);
 }
+
+/// `descendants_ranks` reads a rank spelled either way.
+///
+/// The lineage columns are keyed on `species_group`; every response writes `species group`, so a
+/// caller handing back a rank the API gave it is answered rather than refused.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_descendant_rank_is_read_with_a_space_or_an_underscore() {
+    let path = |rank: &str| {
+        format!(
+            "/api/v2/taxonomy?input[]={}&descendants=true&descendants_ranks[]={}",
+            fixtures::taxa::MELANOGASTER_GROUP,
+            rank.replace(' ', "%20")
+        )
+    };
+
+    let (keyed_status, keyed) = get_json(&path("species_subgroup")).await;
+    let (spaced_status, spaced) = get_json(&path("species subgroup")).await;
+
+    assert_eq!(keyed_status, StatusCode::OK);
+    assert_eq!(spaced_status, StatusCode::OK);
+    assert_eq!(keyed, spaced);
+    assert_eq!(sorted_ids(&keyed[0]["descendants"]), vec![fixtures::taxa::MELANOGASTER_SUBGROUP as u64]);
+}
+
+/// Only the separator is normalised: a rank argument names a column and is matched exactly.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_descendant_rank_is_read_case_sensitively() {
+    for rank in ["SPECIES_SUBGROUP", "Species Subgroup"] {
+        let (dir, state) = crate::common::offline_state();
+        let request = axum::http::Request::get(format!(
+            "/api/v2/taxonomy?input[]={}&descendants=true&descendants_ranks[]={}",
+            fixtures::taxa::MELANOGASTER_GROUP,
+            rank.replace(' ', "%20")
+        ))
+        .body(axum::body::Body::empty())
+        .unwrap();
+        let (status, _) = crate::common::request_raw(state, request).await;
+        drop(dir);
+
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{rank}");
+    }
+}

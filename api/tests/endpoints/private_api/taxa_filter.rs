@@ -206,3 +206,18 @@ async fn the_window_is_taken_after_sorting() {
 fn as_set(value: &serde_json::Value) -> std::collections::BTreeSet<u64> {
     value.as_array().expect("a page").iter().map(|id| id.as_u64().expect("an id")).collect()
 }
+
+/// The filter still matches a rank as text, with a space and without regard to case.
+///
+/// Normalising the separator in `rank_to_idx` must not reach here: this endpoint matches a rank
+/// name the way a user types it, and never asks for a lineage column.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_rank_filter_still_matches_the_spaced_name_in_any_case() {
+    let (_, spaced) = get_json("/private_api/taxa/count?filter=species%20group").await;
+    let (_, shouted) = get_json("/private_api/taxa/count?filter=SPECIES%20GROUP").await;
+    let (_, keyed) = get_json("/private_api/taxa/count?filter=species_group").await;
+
+    assert_eq!(spaced["count"], 1);
+    assert_eq!(shouted["count"], 1, "the filter ignores case");
+    assert_eq!(keyed["count"], 0, "the filter matches the name, not the column key");
+}

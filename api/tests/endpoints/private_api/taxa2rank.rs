@@ -103,3 +103,22 @@ async fn no_taxa_is_an_empty_answer() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["mapped_taxa"], json!([]));
 }
+
+/// `rank` is read spelled either way, so a caller can hand back the name a response carries.
+///
+/// Only the separator is normalised. Whether the name is matched without regard to case is a
+/// separate question, settled in #200.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_rank_is_read_with_a_space_or_an_underscore() {
+    let taxa = json!([[fixtures::taxa::MELANOGASTER_SUBGROUP]]);
+
+    let (keyed_status, keyed) =
+        post_json("/private_api/taxa2rank", json!({ "taxa": taxa, "rank": "species_group" })).await;
+    let (spaced_status, spaced) =
+        post_json("/private_api/taxa2rank", json!({ "taxa": taxa, "rank": "species group" })).await;
+
+    assert_eq!(keyed_status, StatusCode::OK);
+    assert_eq!(spaced_status, StatusCode::OK);
+    assert_eq!(keyed, spaced);
+    assert_eq!(keyed["mapped_taxa"], json!([[fixtures::taxa::MELANOGASTER_GROUP]]));
+}

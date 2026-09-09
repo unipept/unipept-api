@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use datastore::EcStore;
 use serde::Serialize;
 
-use crate::helpers::is_zero;
+use crate::helpers::{by_count_then_key, is_zero};
 
 #[derive(Serialize)]
 #[serde(untagged)]
@@ -22,19 +22,17 @@ pub enum EcNumber {
 }
 
 pub fn ec_numbers_from_map(fa_data: &HashMap<String, u32>, ec_store: &EcStore, extra: bool) -> Vec<EcNumber> {
-    fa_data
-        .iter()
-        .filter(|(key, _)| key.starts_with("EC:"))
-        .map(|(key, &count)| ec_number(key, count, ec_store, extra))
-        .collect()
+    let ec_numbers = by_count_then_key(
+        fa_data.iter().filter(|(key, _)| key.starts_with("EC:")).map(|(key, &count)| (key.as_str(), count))
+    );
+
+    ec_numbers.into_iter().map(|(key, count)| ec_number(key, count, ec_store, extra)).collect()
 }
 
 pub fn ec_numbers_from_list(fa_data: &[&str], ec_store: &EcStore, extra: bool) -> Vec<EcNumber> {
-    fa_data
-        .iter()
-        .filter(|key| key.starts_with("EC:"))
-        .map(|key| ec_number(key, 0, ec_store, extra))
-        .collect()
+    let ec_numbers = by_count_then_key(fa_data.iter().filter(|key| key.starts_with("EC:")).map(|&key| (key, 0)));
+
+    ec_numbers.into_iter().map(|(key, count)| ec_number(key, count, ec_store, extra)).collect()
 }
 
 fn ec_number(key: &str, count: u32, ec_store: &EcStore, extra: bool) -> EcNumber {

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use datastore::GoStore;
 use serde::Serialize;
 
-use crate::helpers::is_zero;
+use crate::helpers::{by_count_then_key, is_zero};
 
 #[derive(Serialize)]
 #[serde(untagged)]
@@ -29,35 +29,40 @@ pub enum GoTerms {
 }
 
 pub fn go_terms_from_map(fa_data: &HashMap<String, u32>, go_store: &GoStore, extra: bool, domains: bool) -> GoTerms {
-    let go_terms = fa_data.iter().filter(|(key, _)| key.starts_with("GO:"));
+    let go_terms = by_count_then_key(
+        fa_data.iter().filter(|(key, _)| key.starts_with("GO:")).map(|(key, &count)| (key.as_str(), count))
+    );
 
     if domains {
-        handle_domains(go_terms.map(|(key, count)| (key.as_str(), count)), go_store, extra)
+        handle_domains(go_terms, go_store, extra)
     } else {
-        GoTerms::Default(go_terms.map(|(key, &count)| go_term(key, count, go_store, extra)).collect())
+        GoTerms::Default(go_terms.into_iter().map(|(key, count)| go_term(key, count, go_store, extra)).collect())
     }
 }
 
 pub fn go_terms_from_list(fa_data: &[&str], go_store: &GoStore, extra: bool, domains: bool) -> GoTerms {
-    let go_terms = fa_data.iter().filter(|key| key.starts_with("GO:"));
+    let go_terms = by_count_then_key(fa_data.iter().filter(|key| key.starts_with("GO:")).map(|&key| (key, 0)));
 
     if domains {
-        handle_domains(go_terms.map(|&key| (key, &0u32)), go_store, extra)
+        handle_domains(go_terms, go_store, extra)
     } else {
-        GoTerms::Default(go_terms.map(|key| go_term(key, 0, go_store, extra)).collect())
+        GoTerms::Default(go_terms.into_iter().map(|(key, count)| go_term(key, count, go_store, extra)).collect())
     }
 }
 
-fn handle_domains<'a>(gos: impl Iterator<Item = (&'a str, &'a u32)>, go_store: &GoStore, extra: bool) -> GoTerms {
-    let mut go_domains = HashMap::new();
-    for (key, &count) in gos {
+/// The terms arrive ordered, so each domain keeps them in that order; the domains themselves are
+/// grouped through a `HashMap` and so need ordering of their own. There is no count to rank a
+/// domain by, so they go out by name.
+fn handle_domains(gos: Vec<(&str, u32)>, go_store: &GoStore, extra: bool) -> GoTerms {
+    let mut go_domains: HashMap<String, Vec<GoTerm>> = HashMap::new();
+    for (key, count) in gos {
         if let Some(domain) = go_store.get_domain(key) {
-            go_domains
-                .entry(domain.to_string())
-                .or_insert_with(Vec::new)
-                .push(go_term(key, count, go_store, extra));
+            go_domains.entry(domain.to_string()).or_default().push(go_term(key, count, go_store, extra));
         }
     }
+
+    let mut go_domains: Vec<(String, Vec<GoTerm>)> = go_domains.into_iter().collect();
+    go_domains.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
 
     let result: Vec<HashMap<String, Vec<GoTerm>>> = go_domains
         .into_iter()

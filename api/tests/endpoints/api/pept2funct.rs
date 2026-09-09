@@ -91,3 +91,8 @@ async fn the_same_request_answers_identically() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(first, again);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_repeated_peptide_answers_at_each_position() {
+    super::a_repeat_answers_like_a_single("pept2funct", "extra=true&domains=true").await;
+}

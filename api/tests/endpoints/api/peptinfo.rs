@@ -49,3 +49,8 @@ async fn a_cutoff_is_reported_on_the_result() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(capped[0]["cutoff_used"], true);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_repeated_peptide_answers_at_each_position() {
+    super::a_repeat_answers_like_a_single("peptinfo", "extra=true&names=true").await;
+}

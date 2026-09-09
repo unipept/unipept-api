@@ -6,14 +6,14 @@ use serde::Serialize;
 macro_rules! create_lineages {
     ($($field:ident),*) => {
         paste! {
-            #[derive(Serialize, Default, Debug)]
+            #[derive(Serialize, Default, Debug, Clone)]
             pub struct Lineage {
                 $(
                     [<$field _id>]: Option<i32>,
                 )*
             }
 
-            #[derive(Serialize, Default, Debug)]
+            #[derive(Serialize, Default, Debug, Clone)]
             pub struct LineageWithNames {
                 $(
                     [<$field _id>]: Option<i32>,
@@ -98,7 +98,7 @@ pub enum LineageVersion {
     V2
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(untagged)]
 #[allow(clippy::large_enum_variant)]
 pub enum Lineage {

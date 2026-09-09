@@ -43,15 +43,9 @@ pub const RANK_NAMES: [&str; 28] = [
 /// How many columns a lineage row carries after its taxon id.
 pub const RANK_COUNT: usize = RANK_NAMES.len();
 
-/// Whether two names are the same.
-///
-/// Spelled out rather than `==`, which a `const fn` cannot call: `PartialEq` is not a const trait
-/// yet, and neither is `slice::iter`, so `position` is out too.
 /// What the taxon table writes for a taxon at no rank of its own.
 const NO_RANK_NAME: &str = "no rank";
 
-/// Whether a rank name and a column name are the same, reading a space and an underscore alike.
-///
 /// Whether a rank name and a column name are the same, reading a space and an underscore alike.
 ///
 /// Compares in place, because a coarse rank is looked up once per lineage.
@@ -63,6 +57,7 @@ fn spelled_alike(rank: &str, column: &str) -> bool {
             .all(|(rank, column)| rank == column || (rank == b' ' && column == b'_'))
 }
 
+/// `==` is not callable here: `PartialEq` is not a const trait yet.
 const fn is(name: &str, other: &str) -> bool {
     let (name, other) = (name.as_bytes(), other.as_bytes());
     if name.len() != other.len() {

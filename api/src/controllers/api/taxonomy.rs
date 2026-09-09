@@ -12,9 +12,7 @@ use crate::{
         request::Flag
     },
     errors::{ApiError, ApiError::UnknownRankError},
-    helpers::lineage_helper::{
-        LineageResponse, get_empty_lineage, get_empty_lineage_with_names, get_lineage, get_lineage_with_names
-    }
+    helpers::lineage_helper::{LineageResponse, get_empty_lineage, get_empty_lineage_with_names, lineage_for}
 };
 
 #[derive(Deserialize)]
@@ -50,15 +48,7 @@ pub struct Taxon {
     taxon_rank: String
 }
 
-/// Retrieve all child IDs for a specific taxon.
-///
-/// # Arguments
-///
-/// * `taxon_id` - ID of the taxon for which all taxon child IDs should be retrieved.
-/// * `rank` - The rank of the taxon that was passed using the `taxon_id` parameter
-/// * `descendants_rank` - The rank from which the children should be retrieved.
-/// * `lineage_store` - A reference to the LineageStore that can be used to retrieve lineages and
-///   taxonomic information from the database.
+/// Adds the taxa at `descendants_rank` that sit below `taxon_id`.
 fn get_children_at_rank(
     taxon_id: u32,
     rank: TaxonRank,
@@ -119,7 +109,6 @@ async fn handler(
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
-    // Check if the provided ranks are actually valid and known
     if descendants {
         for desc_rank in descendants_ranks.clone() {
             if LineageStore::rank_to_idx(desc_rank.as_str()).is_none() {
@@ -137,8 +126,7 @@ async fn handler(
             if taxon_id == 1 {
                 let mut children: Option<Vec<u32>> = None;
 
-                // If descendants is true, we need to get all the taxa at the requested level and
-                // report those as children of the root.
+                // The root's children are every taxon at the top rank.
                 if descendants {
                     let mut descendant_ids = BTreeSet::new();
 
@@ -173,14 +161,8 @@ async fn handler(
             }
 
             let (name, rank, _) = taxon_store.get(taxon_id)?;
-            let lineage = match (extra, names) {
-                (true, true) => get_lineage_with_names(taxon_id, lineage_store, taxon_store),
-                (true, false) => get_lineage(taxon_id, lineage_store),
-                (false, _) => None
-            };
+            let lineage = lineage_for(taxon_id, extra, names, lineage_store, taxon_store);
 
-            // If the user would like to get all the descendants of the given taxon, we'll try to
-            // retrieve these here. These descendants are just a list of taxon IDs.
             let children: Option<Vec<u32>> = descendants.then(|| {
                 let mut descendant_ids = BTreeSet::new();
                 descendants_at_ranks(taxon_id, *rank, &descendants_ranks, lineage_store, &mut descendant_ids);

@@ -14,7 +14,7 @@ use crate::{
     helpers::{
         distinct_peptides, laid_over_input,
         lca_helper::calculate_lca,
-        lineage_helper::{LineageResponse, get_lineage, get_lineage_with_names},
+        lineage_helper::{LineageResponse, lineage_for},
         sanitize_peptides
     }
 };
@@ -81,11 +81,7 @@ async fn handler(
             let lca = calculate_lca(item.taxa.iter().copied(), taxon_store, lineage_store, validate_taxa);
 
             let (name, rank, _) = taxon_store.get(lca as u32)?;
-            let lineage = match (extra, names) {
-                (true, true) => get_lineage_with_names(lca as u32, lineage_store, taxon_store),
-                (true, false) => get_lineage(lca as u32, lineage_store),
-                (false, _) => None
-            };
+            let lineage = lineage_for(lca as u32, extra, names, lineage_store, taxon_store);
 
             Some((item.sequence, vec![LcaInformation {
                 peptide: item.sequence.to_string(),

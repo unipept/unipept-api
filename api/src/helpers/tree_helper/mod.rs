@@ -22,10 +22,9 @@ pub fn build_tree(frequencies: FrequencyTable<u32>, lineage_store: &LineageStore
             let child = current_node.get_child(lineage_id as usize);
             if child.is_none() {
                 // A lineage may name an ancestor the taxon table does not — the two are separate
-                // dumps, and a taxon can be dropped from one without the other. This used to
-                // unwrap, so an incomplete pair turned every request touching that branch into a
-                // panic. The rest of the API renders such a taxon with an empty name, and the node
-                // is still added so the branch below it hangs in the right place.
+                // dumps, and a taxon can be dropped from one without the other. Such a taxon is
+                // rendered with an empty name, and the node is still added so the branch below it
+                // hangs in the right place.
                 let (name, rank) = match taxon_store.get(lineage_id as u32) {
                     Some((name, rank, _)) => (name.clone(), rank.to_string()),
                     None => (String::new(), TaxonRank::NO_RANK.to_string())

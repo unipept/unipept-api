@@ -12,7 +12,7 @@ use crate::{
     },
     helpers::{
         lca_helper::calculate_lca,
-        lineage_helper::{LineageResponse, get_lineage, get_lineage_with_names}
+        lineage_helper::{LineageResponse, lineage_for}
     }
 };
 
@@ -57,16 +57,10 @@ async fn handler(
 
     let casted_input: Vec<u32> = input.iter().map(|v| v.into()).collect();
 
-    // Calculate the LCA of all taxa
     let lca: i32 = calculate_lca(casted_input, taxon_store, lineage_store, validate_taxa);
 
     if let Some((taxon_name, taxon_rank, _)) = taxon_store.get(lca as u32) {
-        // Calculate the lineage of the LCA
-        let lineage = match (extra, names) {
-            (true, true) => get_lineage_with_names(lca as u32, lineage_store, taxon_store),
-            (true, false) => get_lineage(lca as u32, lineage_store),
-            (false, _) => None
-        };
+        let lineage = lineage_for(lca as u32, extra, names, lineage_store, taxon_store);
 
         return Ok(LcaInformation {
             taxon: Some(Taxon {

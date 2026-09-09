@@ -1,7 +1,6 @@
 use datastore::{Lineage, LineageStore, RANK_COUNT, TaxonRank, TaxonStore};
 
-/// Takes the taxa as an iterator rather than a `Vec`: the callers that hold one still pass it, and
-/// the ones that build the list only to hand it over no longer allocate it.
+/// Takes an iterator, so a caller that builds the list only to hand it over does not allocate it.
 pub fn calculate_lca(
     taxa: impl IntoIterator<Item = u32>,
     taxon_store: &TaxonStore,
@@ -9,13 +8,11 @@ pub fn calculate_lca(
     only_valid_taxa: bool
 ) -> i32 {
     // A taxon the lineage store does not know still counts, and reads as a lineage of zeroes. Zero
-    // agrees with no taxon ID, so such a taxon holds the result at the root, which is what the
-    // per-taxon array this loop used to build did.
+    // agrees with no taxon id, so such a taxon holds the result at the root.
     let unknown = Lineage::default();
 
-    // Borrowed, not copied: the loop below reads each lineage once per rank, and the store already
-    // holds them. Building an owned array per taxon allocated once per input taxon, of which a
-    // single `pept2data` request can carry hundreds of thousands.
+    // Borrowed, not copied: the loop reads each lineage once per rank, and one `pept2data` request
+    // can carry hundreds of thousands of taxa.
     let lineages: Vec<&Lineage> = taxa
         .into_iter()
         .filter(|&taxon_id| !only_valid_taxa || taxon_store.is_valid(taxon_id))
@@ -28,12 +25,10 @@ pub fn calculate_lca(
     for rank in (0..RANK_COUNT).rev() {
         let mut iterator = lineages
             .iter()
-            // -1 and an absent rank both read as 0, and a negative id is reported as its
-            // absolute value, which is the reading a lineage response gives a rank.
+            // The reading `lineage_helper::reported` gives a rank, with an absent one as zero.
             .map(|lineage| lineage.get_rank(rank).filter(|&id| id != -1).map(i32::abs).unwrap_or(0))
             .filter(|&x| if rank == genus || rank == species { x > 0 } else { x >= 0 });
 
-        // Check if all elements in the iterator are the same
         if let Some(first) = iterator.next()
             && first > 0
             && iterator.all(|item| item == first)

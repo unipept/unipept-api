@@ -95,14 +95,11 @@ pub fn create_app_with_timeout(state: AppState, timeout: Duration) -> NormalizeP
     NormalizePathLayer::normalize_uris().layer(create_router_with_timeout(state, timeout))
 }
 
-/// `/api/v1` is a deprecated alias for `/api/v2`, on purpose.
+/// `/api/v1` is a deprecated alias for `/api/v2`, on purpose: many tools still call v1, and both
+/// prefixes mount the same routes.
 ///
-/// v1 is deprecated but stays mounted, because many tools still call it. It no longer serves
-/// what it originally did: v1 taxonomy differed slightly from v2, and that difference is gone.
-/// A v1 caller now gets v2 semantics, since there is no `create_api_v1_routes` and
-///
-/// The two prefixes therefore change together, and `the_two_api_versions_answer_identically`
-/// in `tests/endpoints/routing.rs` fails if one is given routes the other does not have.
+/// The two therefore change together, and `the_two_api_versions_answer_identically` in
+/// `tests/endpoints/routing.rs` fails if one is given routes the other does not have.
 fn create_api_routes() -> Router<AppState> {
     Router::new().nest("/v1", create_api_v2_routes()).nest("/v2", create_api_v2_routes())
 }

@@ -13,7 +13,7 @@ use crate::{
     errors::ApiError,
     helpers::{
         distinct_peptides, laid_over_input,
-        lineage_helper::{LineageResponse, get_lineage, get_lineage_with_names},
+        lineage_helper::{LineageResponse, lineage_for},
         sanitize_peptides
     }
 };
@@ -36,7 +36,6 @@ pub struct Parameters {
     cutoff: usize
 }
 
-#[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Clone)]
 #[serde(untagged)]
 pub enum TaxaInformation {
@@ -121,11 +120,7 @@ async fn handler(
                 .iter()
                 .filter_map(|&taxon| {
                     let (name, rank, _) = taxon_store.get(taxon)?;
-                    let lineage = match (extra, names) {
-                        (true, true) => get_lineage_with_names(taxon, lineage_store, taxon_store),
-                        (true, false) => get_lineage(taxon, lineage_store),
-                        (false, _) => None
-                    };
+                    let lineage = lineage_for(taxon, extra, names, lineage_store, taxon_store);
 
                     Some(TaxaInformation::Dense(DenseTaxaInformation {
                         peptide: sequence.to_string(),

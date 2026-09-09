@@ -23,7 +23,6 @@ pub struct RankMappingResult {
 }
 
 /// Maps taxa to a specific taxonomic rank with caching for duplicate taxa.
-/// Uses a HashMap to cache lineage lookups, which is more efficient when there are many duplicates.
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
     Parameters { taxa, rank }: Parameters
@@ -36,7 +35,6 @@ async fn handler(
 
     let lineage_store = datastore.lineage_store();
 
-    // Build a cache of taxon_id -> taxon_id_at_rank mappings
     let mut cache: HashMap<u32, Option<u32>> = HashMap::new();
 
     let mapped_taxa: Vec<Vec<u32>> = taxa
@@ -60,7 +58,6 @@ async fn handler(
     Ok(RankMappingResult { mapped_taxa })
 }
 
-// Default handler without cache
 generate_handlers!(
     async fn json_handler(
         state => State<AppState>,

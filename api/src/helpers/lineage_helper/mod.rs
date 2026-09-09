@@ -5,11 +5,8 @@
 
 use std::sync::LazyLock;
 
-use datastore::{LineageStore, RANK_NAMES, TaxonStore};
-use serde::{
-    Serialize, Serializer,
-    ser::{Error, SerializeMap}
-};
+use datastore::{LineageStore, RANK_COUNT, RANK_NAMES, TaxonStore};
+use serde::{Serialize, Serializer, ser::SerializeMap};
 
 /// The field names a lineage answers with, built once.
 ///
@@ -38,33 +35,24 @@ fn name_of(taxon_id: Option<i32>, taxon_store: &TaxonStore) -> String {
 }
 
 /// The id of each ancestor, answered as `{rank}_id`.
-#[derive(Debug, Default, Clone)]
+///
+/// Boxed rather than held inline: this is one variant of [`LineageResponse`], and an enum is as
+/// large as its largest variant.
+#[derive(Debug, Clone)]
 pub struct LineageIds {
-    ranks: Vec<Option<i32>>
+    ranks: Box<[Option<i32>; RANK_COUNT]>
 }
 
 /// The same, with the name of each ancestor beside its id.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct LineageWithNames {
-    ranks: Vec<(Option<i32>, String)>
-}
-
-/// Refuses to answer a lineage that does not carry one entry per rank, rather than writing a
-/// shorter object than every other response.
-fn checked<S: Serializer, T>(ranks: &[T]) -> Result<(), S::Error> {
-    if ranks.len() == FIELDS.len() {
-        return Ok(());
-    }
-
-    Err(S::Error::custom(format!("a lineage of {} ranks, where {} are named", ranks.len(), FIELDS.len())))
+    ranks: Box<[(Option<i32>, String); RANK_COUNT]>
 }
 
 impl Serialize for LineageIds {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        checked::<S, _>(&self.ranks)?;
-
         let mut lineage = serializer.serialize_map(Some(FIELDS.len()))?;
-        for ((id_field, _), id) in FIELDS.iter().zip(&self.ranks) {
+        for ((id_field, _), id) in FIELDS.iter().zip(self.ranks.iter()) {
             lineage.serialize_entry(id_field, id)?;
         }
         lineage.end()
@@ -73,10 +61,8 @@ impl Serialize for LineageIds {
 
 impl Serialize for LineageWithNames {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        checked::<S, _>(&self.ranks)?;
-
         let mut lineage = serializer.serialize_map(Some(FIELDS.len() * 2))?;
-        for ((id_field, name_field), (id, name)) in FIELDS.iter().zip(&self.ranks) {
+        for ((id_field, name_field), (id, name)) in FIELDS.iter().zip(self.ranks.iter()) {
             lineage.serialize_entry(id_field, id)?;
             lineage.serialize_entry(name_field, name)?;
         }
@@ -96,15 +82,31 @@ pub enum LineageResponse {
     WithNames(LineageWithNames)
 }
 
+/// The lineage a request asked for, or none if it asked for no lineage at all.
+///
+/// `extra` is what turns a lineage on; `names` chooses between the two shapes.
+pub fn lineage_for(
+    taxon_id: u32,
+    extra: bool,
+    names: bool,
+    lineage_store: &LineageStore,
+    taxon_store: &TaxonStore
+) -> Option<LineageResponse> {
+    match (extra, names) {
+        (true, true) => get_lineage_with_names(taxon_id, lineage_store, taxon_store),
+        (true, false) => get_lineage(taxon_id, lineage_store),
+        (false, _) => None
+    }
+}
+
 pub fn get_lineage(taxon_id: u32, lineage_store: &LineageStore) -> Option<LineageResponse> {
     let lineage = lineage_store.get(taxon_id)?;
-    let ranks = lineage.ranks.iter().map(|&id| reported(id)).collect();
 
-    Some(LineageResponse::Ids(LineageIds { ranks }))
+    Some(LineageResponse::Ids(LineageIds { ranks: Box::new(lineage.ranks.map(reported)) }))
 }
 
 pub fn get_empty_lineage() -> Option<LineageResponse> {
-    Some(LineageResponse::Ids(LineageIds { ranks: vec![None; RANK_NAMES.len()] }))
+    Some(LineageResponse::Ids(LineageIds { ranks: Box::new([None; RANK_COUNT]) }))
 }
 
 pub fn get_lineage_with_names(
@@ -113,15 +115,15 @@ pub fn get_lineage_with_names(
     taxon_store: &TaxonStore
 ) -> Option<LineageResponse> {
     let lineage = lineage_store.get(taxon_id)?;
-    let ranks = lineage.ranks.iter().map(|&id| (reported(id), name_of(id, taxon_store))).collect();
+    let ranks = lineage.ranks.map(|id| (reported(id), name_of(id, taxon_store)));
 
-    Some(LineageResponse::WithNames(LineageWithNames { ranks }))
+    Some(LineageResponse::WithNames(LineageWithNames { ranks: Box::new(ranks) }))
 }
 
 pub fn get_empty_lineage_with_names() -> Option<LineageResponse> {
-    let ranks = vec![(None, String::new()); RANK_NAMES.len()];
+    let ranks = std::array::from_fn(|_| (None, String::new()));
 
-    Some(LineageResponse::WithNames(LineageWithNames { ranks }))
+    Some(LineageResponse::WithNames(LineageWithNames { ranks: Box::new(ranks) }))
 }
 
 /// The ancestor ids alone, in column order, for the endpoints that answer a list rather than an
@@ -165,13 +167,5 @@ mod tests {
             assert!(fields.contains_key(&format!("{rank}_id")), "{rank}_id");
             assert!(fields.contains_key(&format!("{rank}_name")), "{rank}_name");
         }
-    }
-
-    /// A lineage carrying the wrong number of ranks is refused rather than answered short.
-    #[test]
-    fn a_lineage_of_the_wrong_width_is_not_answered() {
-        let short = LineageResponse::Ids(LineageIds { ranks: vec![None; RANK_NAMES.len() - 1] });
-
-        assert!(serde_json::to_value(short).is_err());
     }
 }

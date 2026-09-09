@@ -21,7 +21,7 @@ use crate::{
         interpro_helper::{InterproEntries, interpro_entries_from_map},
         laid_over_input,
         lca_helper::calculate_lca,
-        lineage_helper::{LineageResponse, get_lineage, get_lineage_with_names},
+        lineage_helper::{LineageResponse, lineage_for},
         sanitize_peptides
     }
 };
@@ -94,7 +94,6 @@ async fn handler(
             let fa = calculate_fa(&item.proteins);
 
             let total_protein_count = item.proteins.len();
-            // let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
             let gos = go_terms_from_map(&fa.data, go_store, extra, domains);
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
@@ -106,11 +105,7 @@ async fn handler(
                 validate_taxa
             );
             let (name, rank, _) = taxon_store.get(lca as u32)?;
-            let lineage = match (extra, names) {
-                (true, true) => get_lineage_with_names(lca as u32, lineage_store, taxon_store),
-                (true, false) => get_lineage(lca as u32, lineage_store),
-                (false, _) => None
-            };
+            let lineage = lineage_for(lca as u32, extra, names, lineage_store, taxon_store);
 
             Some((item.sequence, vec![PeptInformation {
                 peptide: item.sequence.to_string(),

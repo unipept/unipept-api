@@ -15,7 +15,7 @@ use crate::{
         ec_helper::{EcNumber, ec_numbers_from_list},
         go_helper::{GoTerms, go_terms_from_list},
         interpro_helper::{InterproEntries, interpro_entries_from_list},
-        lineage_helper::{LineageResponse, get_lineage, get_lineage_with_names},
+        lineage_helper::{LineageResponse, lineage_for},
         sanitize_proteins
     }
 };
@@ -83,11 +83,7 @@ async fn handler(
             let iprs = interpro_entries_from_list(&fa, interpro_store, extra, domains);
 
             let (name, rank, _) = taxon_store.get(entry.taxon_id)?;
-            let lineage = match (extra, names) {
-                (true, true) => get_lineage_with_names(entry.taxon_id, lineage_store, taxon_store),
-                (true, false) => get_lineage(entry.taxon_id, lineage_store),
-                (false, _) => None
-            };
+            let lineage = lineage_for(entry.taxon_id, extra, names, lineage_store, taxon_store);
 
             Some(ProtInformation {
                 protein: entry.uniprot_accession_number,

@@ -31,36 +31,7 @@ macro_rules! generate_handlers {
         }
     };
 
-    // Generates the GET handler alone, for a route whose two methods take different parameters
-    (
-        async fn $handler_name:ident(
-            $state_pattern:pat => State<$state_type:ty>,
-            GetContent($params_pattern:pat) => GetContent<$params_type:ty>
-        ) -> Result<$ret:ty, $err:ty> $body:block
-    ) => {
-        pastey::paste! {
-            pub async fn [<get_ $handler_name>](
-                $state_pattern: State<$state_type>,
-                GetContent($params_pattern): $crate::controllers::request::GetContent<$params_type>
-            ) -> Result<$ret, $err> $body
-        }
-    };
-
-    // Generates the POST handler alone, for the same reason
-    (
-        async fn $handler_name:ident(
-            $state_pattern:pat => State<$state_type:ty>,
-            PostContent($params_pattern:pat) => PostContent<$params_type:ty>
-        ) -> Result<$ret:ty, $err:ty> $body:block
-    ) => {
-        pastey::paste! {
-            pub async fn [<post_ $handler_name>](
-                $state_pattern: State<$state_type>,
-                PostContent($params_pattern): $crate::controllers::request::PostContent<$params_type>
-            ) -> Result<$ret, $err> $body
-        }
-    };
-    // Generates the GET and POST handlers when there are no versions
+    // Generates the GET and POST handlers when both methods take the same parameters
     (
         async fn $handler_name:ident(
             $state_pattern:pat => State<$state_type:ty>,

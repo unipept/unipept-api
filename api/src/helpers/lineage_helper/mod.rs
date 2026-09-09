@@ -1,6 +1,6 @@
 pub mod v2;
 
-use datastore::{LineageStore, TaxonStore};
+use datastore::{LineageStore, RANK_COUNT, TaxonRank, TaxonStore};
 use serde::Serialize;
 
 macro_rules! create_lineages {
@@ -147,18 +147,18 @@ pub fn get_empty_lineage_with_names(version: LineageVersion) -> Option<Lineage> 
 
 pub fn get_amount_of_ranks(version: LineageVersion) -> u8 {
     match version {
-        LineageVersion::V2 => 28
+        LineageVersion::V2 => RANK_COUNT as u8
     }
 }
 
 pub fn get_genus_index(version: LineageVersion) -> u8 {
     match version {
-        LineageVersion::V2 => 19
+        LineageVersion::V2 => TaxonRank::GENUS.lineage_index().expect("genus is a lineage column") as u8
     }
 }
 
 pub fn get_species_index(version: LineageVersion) -> u8 {
     match version {
-        LineageVersion::V2 => 23
+        LineageVersion::V2 => TaxonRank::SPECIES.lineage_index().expect("species is a lineage column") as u8
     }
 }

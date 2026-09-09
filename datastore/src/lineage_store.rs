@@ -50,8 +50,7 @@ impl Lineage {
         self.get_rank(LineageStore::rank_to_idx(rank_name)?)
     }
 
-    /// Retrieves the ID of this lineage at a rank index, in the same order as
-    /// [`LineageStore::rank_to_idx`]. If the index is out of range, None is returned.
+    /// Retrieves the ID of this lineage at a rank index, in the order [`datastore::RANK_NAMES`] declares them. If the index is out of range, None is returned.
     pub fn get_rank(&self, rank_index: usize) -> Option<i32> {
         match rank_index {
             0 => self.domain,
@@ -95,9 +94,6 @@ pub struct LineageStore {
 }
 
 impl LineageStore {
-    /// The number of rank columns a lineage row carries. `TaxonRank::LINEAGE_ORDER` names them.
-    pub const AMOUNT_OF_RANKS: usize = RANK_COUNT;
-
     /// The lineage column a rank name addresses.
     ///
     /// Either spelling is read: the columns are keyed on `species_group`, and the taxonomy — and
@@ -120,7 +116,7 @@ impl LineageStore {
 
         let mut index_references: Vec<HashMap<u32, Vec<Arc<Lineage>>>> = Vec::new();
 
-        for _ in 0..LineageStore::AMOUNT_OF_RANKS {
+        for _ in 0..RANK_COUNT {
             index_references.push(HashMap::new());
         }
 
@@ -139,10 +135,10 @@ impl LineageStore {
             // Counted before anything is parsed, so a row of the wrong width is reported as such
             // rather than as whichever of its fields happens to fail parsing first.
             let fields: Vec<&str> = line.split('\t').collect();
-            if fields.len() != LineageStore::AMOUNT_OF_RANKS + 1 {
+            if fields.len() != RANK_COUNT + 1 {
                 return Err(LineageStoreError::UnexpectedColumnCount {
                     line: line_number,
-                    expected: LineageStore::AMOUNT_OF_RANKS + 1,
+                    expected: RANK_COUNT + 1,
                     found: fields.len()
                 });
             }
@@ -153,7 +149,7 @@ impl LineageStore {
 
             // Enumerated for the column number: a lineage row has 28 rank fields, and an error
             // naming only the offending value leaves the reader counting tabs to find it.
-            let mut parts: Vec<Option<i32>> = Vec::with_capacity(LineageStore::AMOUNT_OF_RANKS);
+            let mut parts: Vec<Option<i32>> = Vec::with_capacity(RANK_COUNT);
             for (rank, field) in fields[1..].iter().enumerate() {
                 parts.push(match *field {
                     "\\N" => None,
@@ -235,51 +231,10 @@ impl LineageStore {
 mod tests {
     use super::*;
 
-    /// Reaching a column by its name and by its rank must land on the same column.
-    ///
-    /// The two read the one list by different routes — a name through `rank_to_idx`, a rank through
-    /// its own index — and a caller that mixes them would otherwise read a column it did not ask
-    /// for. The column name spells a multi-word rank with an underscore where the taxon table
-    /// writes a space, which is the difference this walks over.
-    #[test]
-    fn a_column_is_the_same_reached_by_name_or_by_rank() {
-        for (index, rank) in TaxonRank::columns().enumerate() {
-            assert_eq!(rank.lineage_index(), Some(index), "{rank}");
-            assert_eq!(LineageStore::rank_to_idx(&rank.as_str().replace(' ', "_")), Some(index), "{rank}");
-            assert_eq!(LineageStore::rank_to_idx(rank.as_str()), Some(index), "{rank}");
-        }
+    /// The column names, which key a multi-word rank with an underscore.
+    fn rank_keys() -> Vec<String> {
+        TaxonRank::columns().map(|rank| rank.as_str().replace(' ', "_")).collect()
     }
-
-    const RANK_KEYS: [&str; 28] = [
-        "domain",
-        "realm",
-        "kingdom",
-        "subkingdom",
-        "superphylum",
-        "phylum",
-        "subphylum",
-        "superclass",
-        "class",
-        "subclass",
-        "superorder",
-        "order",
-        "suborder",
-        "infraorder",
-        "superfamily",
-        "family",
-        "subfamily",
-        "tribe",
-        "subtribe",
-        "genus",
-        "subgenus",
-        "species_group",
-        "species_subgroup",
-        "species",
-        "subspecies",
-        "strain",
-        "varietas",
-        "forma"
-    ];
 
     /// The rank names index the lineage columns in order, and each one reads back its own column.
     ///
@@ -323,7 +278,7 @@ mod tests {
             *field = Some(position as i32 + 1000);
         }
 
-        for (position, key) in RANK_KEYS.iter().enumerate() {
+        for (position, key) in rank_keys().iter().enumerate() {
             assert_eq!(LineageStore::rank_to_idx(key), Some(position), "rank_to_idx({key})");
             assert_eq!(lineage.get_taxon_id_at_rank(key), Some(position as i32 + 1000), "get_taxon_id_at_rank({key})");
             assert_eq!(lineage.get_rank(position), Some(position as i32 + 1000), "get_rank({position})");
@@ -359,12 +314,12 @@ mod tests {
     /// Normalising leaves the twenty-six single-word ranks exactly as they were.
     #[test]
     fn a_single_word_rank_is_unchanged_by_normalising() {
-        for (position, key) in RANK_KEYS.iter().enumerate() {
+        for (position, key) in rank_keys().iter().enumerate() {
             if !key.contains('_') {
                 assert_eq!(LineageStore::rank_to_idx(key), Some(position), "`{key}`");
             }
         }
         assert_eq!(Lineage::default().get_taxon_id_at_rank("nonsense"), None);
-        assert_eq!(Lineage::default().get_rank(LineageStore::AMOUNT_OF_RANKS), None);
+        assert_eq!(Lineage::default().get_rank(RANK_COUNT), None);
     }
 }

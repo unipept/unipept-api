@@ -24,7 +24,7 @@ async fn an_unrecorded_rank_is_null_rather_than_absent() {
     let lineage = body[0]["lineage"].as_array().expect("a lineage");
 
     assert!(lineage[8].is_null(), "class is not recorded for Crocodylus niloticus");
-    assert_eq!(lineage[19], 8500, "but genus is");
+    assert_eq!(lineage[datastore::TaxonRank::GENUS.lineage_index().expect("genus is a column")], 8500, "but genus is");
 }
 
 #[tokio::test(flavor = "multi_thread")]

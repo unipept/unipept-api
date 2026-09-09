@@ -81,7 +81,7 @@ pub const TAXONS_TSV: &str = include_str!("../data/taxons.tsv");
 
 /// Lineages: a taxon id followed by one column per rank, `\N` where the taxonomy records nothing.
 ///
-/// The column count is `LineageStore::AMOUNT_OF_RANKS`.
+/// The column count is `datastore::RANK_COUNT`.
 pub const LINEAGES_TSV: &str = include_str!("../data/lineages.tsv");
 
 /// Every accession in the corpus, in file order.
@@ -288,6 +288,22 @@ mod tests {
 
     /// `ACCESSIONS` is written out by hand beside the file it describes, so nothing but this stops
     /// the two drifting when a protein is added.
+    /// The lineage rows carry a column per rank, which nothing else checks.
+    ///
+    /// Add a rank and this fails naming the file to edit, rather than every corpus-backed test in
+    /// the workspace failing inside the parser.
+    #[test]
+    fn every_lineage_row_carries_a_column_per_rank() {
+        for (number, line) in LINEAGES_TSV.lines().filter(|line| !line.trim().is_empty()).enumerate() {
+            assert_eq!(
+                line.split('\t').count(),
+                datastore::RANK_COUNT + 1,
+                "data/lineages.tsv line {}: a taxon id and one column per rank",
+                number + 1
+            );
+        }
+    }
+
     #[test]
     fn accessions_match_the_protein_corpus() {
         let from_file: Vec<&str> = proteins().iter().map(|(accession, _, _)| *accession).collect();
@@ -345,8 +361,8 @@ mod tests {
     fn the_corpus_holds_a_taxon_at_each_multi_word_rank() {
         let ranks: BTreeSet<&str> = taxon_rows().iter().map(|(_, _, rank, _)| *rank).collect();
 
-        assert!(ranks.contains("species group"), "{ranks:?}");
-        assert!(ranks.contains("species subgroup"), "{ranks:?}");
+        assert!(ranks.contains(TaxonRank::named("species group").as_str()), "{ranks:?}");
+        assert!(ranks.contains(TaxonRank::named("species subgroup").as_str()), "{ranks:?}");
     }
 
     #[test]

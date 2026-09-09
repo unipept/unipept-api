@@ -30,7 +30,7 @@ fn outcome<T, E>(result: Result<T, E>) -> Result<(), E> {
 
 /// A well-formed lineage row: a taxon id followed by 28 unrecorded rank columns.
 fn valid_row(taxon_id: u32) -> String {
-    let ranks = ["\\N"; 28].join("\t");
+    let ranks = vec!["\\N"; datastore::RANK_COUNT].join("\t");
     format!("{taxon_id}\t{ranks}")
 }
 
@@ -88,7 +88,7 @@ fn a_row_with_too_many_columns_is_an_error() {
 
 #[test]
 fn a_non_numeric_taxon_id_is_an_error() {
-    let ranks = ["\\N"; 28].join("\t");
+    let ranks = vec!["\\N"; datastore::RANK_COUNT].join("\t");
 
     match rejection(&format!("crocodile\t{ranks}\n")) {
         LineageStoreError::InvalidTaxonId { line, value } => {
@@ -102,7 +102,7 @@ fn a_non_numeric_taxon_id_is_an_error() {
 #[test]
 fn a_non_numeric_rank_id_is_an_error() {
     let mut fields = vec!["8501".to_string()];
-    fields.extend(std::iter::repeat_n("\\N".to_string(), 28));
+    fields.extend(std::iter::repeat_n("\\N".to_string(), datastore::RANK_COUNT));
     fields[9] = "not-a-taxon".to_string();
 
     match rejection(&fields.join("\t")) {
@@ -130,7 +130,7 @@ fn a_row_of_only_delimiters_is_an_error() {
     // 28 tabs is 29 fields, so this row is the right width and fails on its empty taxon id. A
     // shorter run of tabs fails on the width. Either way it is rejected rather than skipped, which
     // is the property that matters.
-    assert!(matches!(rejection(&"\t".repeat(28)), LineageStoreError::InvalidTaxonId { .. }));
+    assert!(matches!(rejection(&"\t".repeat(datastore::RANK_COUNT)), LineageStoreError::InvalidTaxonId { .. }));
     assert!(matches!(rejection("\t\t\t"), LineageStoreError::UnexpectedColumnCount { .. }));
 }
 

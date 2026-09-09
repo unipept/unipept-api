@@ -40,7 +40,7 @@ async fn handler(
             Some(Taxon {
                 id: taxon_id as u32,
                 name: name.clone(),
-                rank: rank.into(),
+                rank: (*rank).into(),
                 lineage
             })
         })

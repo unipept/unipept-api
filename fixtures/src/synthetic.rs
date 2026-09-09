@@ -22,7 +22,7 @@ use datastore::{LineageStore, TaxonRank, TaxonStore};
 pub const LEAF_BASE: u32 = 10_000_000;
 
 /// The number of ranks a lineage row carries, from the store that reads them.
-const RANKS: usize = LineageStore::AMOUNT_OF_RANKS;
+const RANKS: usize = datastore::RANK_COUNT;
 
 /// Each rank's ancestor ids live in a block this wide, so no two ranks name the same taxon.
 pub const RANK_BLOCK: u32 = 100_000;
@@ -107,9 +107,7 @@ pub fn write_taxonomy(dir: &Path, distinct: u32) -> TaxonomyPaths {
     let mut taxons = format!("1\troot\t{no_rank}\t1\t\u{1}\n");
 
     for (id, rank) in &ancestors {
-        // `TaxonRank::LINEAGE_ORDER` names the columns in the order they are read, and its
-        // string form is the spelling the taxon table's rank column takes.
-        let name = datastore::RANK_NAMES[*rank];
+        let name = TaxonRank::from_index(*rank).expect("a lineage column").as_str();
         writeln!(taxons, "{id}\tancestor_{id}\t{name}\t1\t\u{1}").expect("writing cannot fail");
     }
 

@@ -6,12 +6,9 @@ use crate::errors::TaxonStoreError;
 
 /// Every rank, from the broadest to the narrowest, in the order a lineage row holds its columns.
 ///
-/// **The one place the ranks are named.** The columns of a lineage row, the rank a taxon is stored
-/// with, and the fields a lineage answers with are all derived from this list, so a rank added here
-/// is carried by every one of them.
-///
-/// Spelled as the taxon table spells them. A lineage column keys the two multi-word ranks with an
-/// underscore instead; [`TaxonRank::from_column_name`] reads either.
+/// **The one place the ranks are named.** Spelled as the taxon table spells them; a lineage column
+/// keys the two multi-word ranks with an underscore instead, which
+/// [`TaxonRank::from_column_name`] reads.
 pub const RANK_NAMES: [&str; 28] = [
     "domain",
     "realm",
@@ -50,6 +47,21 @@ pub const RANK_COUNT: usize = RANK_NAMES.len();
 ///
 /// Spelled out rather than `==`, which a `const fn` cannot call: `PartialEq` is not a const trait
 /// yet, and neither is `slice::iter`, so `position` is out too.
+/// What the taxon table writes for a taxon at no rank of its own.
+const NO_RANK_NAME: &str = "no rank";
+
+/// Whether a rank name and a column name are the same, reading a space and an underscore alike.
+///
+/// Compared rather than rewritten: the old spelling allocated a `String` for every call, and a
+/// coarse rank is looked up once per lineage.
+fn spelled_alike(rank: &str, column: &str) -> bool {
+    rank.len() == column.len()
+        && rank
+            .bytes()
+            .zip(column.bytes())
+            .all(|(rank, column)| rank == column || (rank == b' ' && column == b'_'))
+}
+
 const fn is(name: &str, other: &str) -> bool {
     let (name, other) = (name.as_bytes(), other.as_bytes());
     if name.len() != other.len() {
@@ -69,9 +81,8 @@ const fn is(name: &str, other: &str) -> bool {
 
 /// The position of a rank in [`RANK_NAMES`], resolved while compiling.
 ///
-/// A name no rank carries fails the build. A rank renamed in the list therefore stops the build at
-/// the constant that named it, rather than addressing the wrong column — which matters, because
-/// ranks are renamed: `domain` was `superkingdom`.
+/// A name no rank carries fails the build, so a renamed rank stops the build at the constant that
+/// named it rather than addressing the wrong column.
 pub const fn rank_index(name: &str) -> u8 {
     let mut index = 0;
     while index < RANK_NAMES.len() {
@@ -85,10 +96,7 @@ pub const fn rank_index(name: &str) -> u8 {
 }
 
 /// One rank, held as its position in [`RANK_NAMES`].
-///
-/// A rank is an index rather than a variant of its own because the code names only a handful of
-/// them; the rest are carried, compared and written back without ever being mentioned.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TaxonRank(u8);
 
 impl TaxonRank {
@@ -110,19 +118,34 @@ impl TaxonRank {
     /// See [`Self::GENUS`].
     pub const SPECIES: Self = Self(rank_index("species"));
 
+    /// The rank a name addresses, resolved while compiling.
+    ///
+    /// A name no rank carries fails the build, so a caller outside this crate can name a rank
+    /// without repeating the string as a literal.
+    pub const fn named(name: &str) -> Self {
+        Self(rank_index(name))
+    }
+
+    /// The rank at a column position, or `None` past the last column.
+    pub fn from_index(column: usize) -> Option<Self> {
+        (column < RANK_COUNT).then_some(Self(column as u8))
+    }
+
     /// Every rank a lineage row holds a column for, in column order. `NO_RANK` is not among them.
     pub fn columns() -> impl Iterator<Item = Self> {
         (0..RANK_COUNT as u8).map(Self)
     }
 
     /// The name the taxon table spells, and every response carries.
-    pub fn as_str(&self) -> &'static str {
-        RANK_NAMES.get(self.0 as usize).copied().unwrap_or("no rank")
+    pub fn as_str(self) -> &'static str {
+        self.lineage_index().map_or(NO_RANK_NAME, |column| RANK_NAMES[column])
     }
 
     /// The lineage column this rank addresses, or `None` for [`Self::NO_RANK`].
-    pub fn lineage_index(&self) -> Option<usize> {
-        (self.0 as usize).lt(&RANK_COUNT).then_some(self.0 as usize)
+    pub fn lineage_index(self) -> Option<usize> {
+        let column = self.0 as usize;
+
+        (column < RANK_COUNT).then_some(column)
     }
 
     /// The rank a lineage column is keyed on, which spells a multi-word rank with an underscore.
@@ -130,9 +153,11 @@ impl TaxonRank {
     /// Only the separator is read either way. The rest is matched exactly, because a rank names a
     /// column rather than being text a reader typed.
     pub fn from_column_name(name: &str) -> Option<Self> {
-        let spelled = name.replace('_', " ");
+        Self::found(|rank| spelled_alike(rank, name))
+    }
 
-        RANK_NAMES.iter().position(|rank| *rank == spelled).map(|index| Self(index as u8))
+    fn found(is_wanted: impl Fn(&str) -> bool) -> Option<Self> {
+        RANK_NAMES.iter().position(|rank| is_wanted(rank)).map(|index| Self(index as u8))
     }
 }
 
@@ -140,15 +165,11 @@ impl FromStr for TaxonRank {
     type Err = TaxonStoreError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s == "no rank" {
+        if s == NO_RANK_NAME {
             return Ok(Self::NO_RANK);
         }
 
-        RANK_NAMES
-            .iter()
-            .position(|rank| *rank == s)
-            .map(|index| Self(index as u8))
-            .ok_or_else(|| TaxonStoreError::InvalidRankError(s.to_string()))
+        Self::found(|rank| rank == s).ok_or_else(|| TaxonStoreError::InvalidRankError(s.to_string()))
     }
 }
 
@@ -160,12 +181,6 @@ impl fmt::Display for TaxonRank {
 
 impl From<TaxonRank> for String {
     fn from(rank: TaxonRank) -> Self {
-        rank.as_str().to_string()
-    }
-}
-
-impl From<&TaxonRank> for String {
-    fn from(rank: &TaxonRank) -> Self {
         rank.as_str().to_string()
     }
 }
@@ -186,7 +201,6 @@ mod tests {
         }
     }
 
-    /// A rank addresses the column at its own position, and `NO_RANK` addresses none.
     #[test]
     fn a_rank_addresses_its_own_column() {
         for (index, rank) in TaxonRank::columns().enumerate() {
@@ -213,7 +227,6 @@ mod tests {
         assert_eq!("Genus".parse::<TaxonRank>().ok(), None);
     }
 
-    /// An unknown rank is an error rather than a rank of its own.
     #[test]
     fn a_rank_no_column_carries_is_refused() {
         assert!("nonsense".parse::<TaxonRank>().is_err());
@@ -228,7 +241,6 @@ mod tests {
         assert_eq!(TaxonRank::columns().count(), RANK_COUNT);
     }
 
-    /// The broadest rank is the first column, whatever the taxonomy calls it.
     #[test]
     fn the_top_rank_is_the_first_column() {
         assert_eq!(TaxonRank::TOP.lineage_index(), Some(0));

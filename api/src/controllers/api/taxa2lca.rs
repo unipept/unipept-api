@@ -77,7 +77,7 @@ async fn handler(
             taxon: Some(Taxon {
                 taxon_id: lca as u32,
                 taxon_name: taxon_name.to_string(),
-                taxon_rank: taxon_rank.into()
+                taxon_rank: (*taxon_rank).into()
             }),
             lineage
         });

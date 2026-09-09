@@ -50,7 +50,7 @@ impl Lineage {
         self.get_rank(LineageStore::rank_to_idx(rank_name)?)
     }
 
-    /// Retrieves the ID of this lineage at a rank index, in the order [`datastore::RANK_NAMES`] declares them. If the index is out of range, None is returned.
+    /// Retrieves the ID of this lineage at a rank index, in the order [`crate::RANK_NAMES`] declares them. If the index is out of range, None is returned.
     pub fn get_rank(&self, rank_index: usize) -> Option<i32> {
         match rank_index {
             0 => self.domain,
@@ -194,7 +194,7 @@ impl LineageStore {
 
             mapper.insert(taxon_id, Arc::clone(&lin));
 
-            // Zipped rather than indexed: both sides are `AMOUNT_OF_RANKS` long, and pairing them
+            // Zipped rather than indexed: both sides are `RANK_COUNT` long, and pairing them
             // this way says so without a bounds check that could fail.
             for (rank_map, part) in index_references.iter_mut().zip(parts.iter()) {
                 if let Some(id) = part {

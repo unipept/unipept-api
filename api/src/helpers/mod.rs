@@ -62,6 +62,17 @@ pub fn distinct_peptides(input: &[String]) -> Vec<String> {
     input.iter().unique().cloned().collect()
 }
 
+/// How much of an answer to reserve up front, in elements.
+///
+/// The row count follows the request, which names how many peptides it likes: reserving all of it
+/// hands an allocator a number a caller chose, and a refused allocation ends the process rather
+/// than the request. Past this bound the answer grows as it fills instead.
+fn reservation<T>(rows: usize) -> usize {
+    const RESERVE_AT_MOST: usize = 8 * 1024 * 1024;
+
+    rows.min(RESERVE_AT_MOST / size_of::<T>().max(1))
+}
+
 /// Lays the rows built for each distinct peptide back over the input that asked for them.
 ///
 /// A peptide the index matched nothing for has no rows, and takes no position rather than an empty
@@ -75,13 +86,14 @@ pub fn laid_over_input<T: Clone>(input: &[String], mut rows: HashMap<&str, Vec<T
         *remaining.entry(peptide.as_str()).or_default() += 1;
     }
 
-    let total = remaining.iter().map(|(peptide, count)| rows.get(peptide).map_or(0, Vec::len) * count).sum();
-    let mut laid_out = Vec::with_capacity(total);
+    let total: usize = remaining.iter().map(|(peptide, count)| rows.get(peptide).map_or(0, Vec::len) * count).sum();
+    let mut laid_out = Vec::with_capacity(reservation::<T>(total));
 
     for peptide in input {
         let peptide = peptide.as_str();
 
-        let Some(left) = remaining.get_mut(peptide) else { continue };
+        // Present for every peptide of the input, which is what `remaining` was counted over.
+        let left = remaining.get_mut(peptide).expect("a counted peptide");
         *left -= 1;
 
         if *left == 0 {
@@ -129,6 +141,17 @@ mod tests {
         let rows = HashMap::from([("AAA", vec!["a"]), ("BBB", vec!["b"])]);
 
         assert_eq!(laid_over_input(&input, rows), vec!["a", "b"]);
+    }
+
+    /// A row count a caller chose is not reserved in full, so an answer far past the bound still
+    /// comes back — it is filled rather than reserved.
+    #[test]
+    fn a_vast_answer_is_not_reserved_up_front() {
+        assert_eq!(reservation::<u8>(100), 100, "a small answer is reserved exactly");
+        assert_eq!(reservation::<u8>(usize::MAX), 8 * 1024 * 1024, "a vast one is bounded");
+
+        // A row of about a kilobyte, at the count a 50 MB body could ask for.
+        assert!(reservation::<[u8; 1024]>(5_000_000) < 10_000, "a large row bounds the count further");
     }
 
     /// A peptide occupying several positions carries its rows to each, so the rows have to survive

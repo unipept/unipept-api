@@ -47,4 +47,21 @@ impl Node {
 
         self.data.count = self.children.iter().map(|child| child.data.count).sum::<usize>() + self.data.self_count;
     }
+
+    /// Orders the children of every node: the largest branch first, ties broken on the taxon id so
+    /// the order is total.
+    ///
+    /// `build_tree` adds a child the first time a lineage names it, and it walks the keys of a
+    /// `HashMap`. Rust randomises that order per process, so without this the same request answers
+    /// with the branches in a different order each time.
+    ///
+    /// Runs after [`Node::count`], which is what gives a branch the size to rank it by.
+    pub fn sort(&mut self) {
+        self.children
+            .sort_unstable_by(|left, right| right.data.count.cmp(&left.data.count).then(left.id.cmp(&right.id)));
+
+        for child in self.children.iter_mut() {
+            child.sort();
+        }
+    }
 }

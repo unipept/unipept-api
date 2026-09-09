@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use axum::{Json, extract::State};
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -13,9 +12,10 @@ use crate::{
     },
     errors::ApiError,
     helpers::{
+        distinct_peptides,
         ec_helper::{EcNumber, ec_numbers_from_map},
         fa_helper::calculate_fa,
-        sanitize_peptides
+        laid_over_input, sanitize_peptides
     }
 };
 
@@ -50,34 +50,28 @@ async fn handler(
 ) -> Result<Vec<EcInformation>, ApiError> {
     let input = sanitize_peptides(input);
 
-    // Each distinct peptide once. The search reads this list, so the results come back in its
-    // order, and a peptide named twice is searched once.
-    let distinct: Vec<String> = input.iter().cloned().unique().collect();
+    let distinct = distinct_peptides(&input);
 
     let result = tokio::task::block_in_place(|| index.analyse(&distinct, equate_il, false, Some(cutoff)));
 
     let ec_store = datastore.ec_store();
 
-    // One answer per distinct peptide. Aggregating the annotations, ordering the terms and naming
-    // them out of the datastore all depend on the peptide alone, so a peptide asked for twenty
-    // times pays for them once.
-    let answers: HashMap<&str, EcInformation> = result
+    // One answer per distinct peptide, laid back over the input.
+    let rows: HashMap<&str, Vec<EcInformation>> = result
         .iter()
         .map(|item| {
             let fa = calculate_fa(&item.proteins);
 
-            (item.sequence, EcInformation {
+            (item.sequence, vec![EcInformation {
                 peptide: item.sequence.to_string(),
                 cutoff_used: item.cutoff_used,
                 total_protein_count: *fa.counts.get("all").unwrap_or(&0),
                 ec: ec_numbers_from_map(&fa.data, ec_store, extra)
-            })
+            }])
         })
         .collect();
 
-    // Laid back over the input, so a peptide is answered at each position it was named at. A
-    // peptide the index matched nothing for has no answer and is passed over, as it is elsewhere.
-    Ok(input.iter().filter_map(|peptide| answers.get(peptide.as_str()).cloned()).collect())
+    Ok(laid_over_input(&input, &rows))
 }
 
 generate_handlers!(

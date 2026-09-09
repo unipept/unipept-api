@@ -8,7 +8,7 @@ use crate::helpers::{family_from_list, family_from_map, grouped_by_domain, is_ze
 /// The prefix an InterPro annotation carries in the aggregated counts.
 const PREFIX: &str = "IPR:";
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(untagged)]
 pub enum InterproEntry {
     Default {
@@ -41,7 +41,7 @@ pub enum InterproEntry {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(untagged)]
 pub enum InterproEntries {
     Default(Vec<InterproEntry>),

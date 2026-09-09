@@ -1,4 +1,4 @@
-use std::convert::Infallible;
+use std::{cmp::Ordering, convert::Infallible};
 
 use axum::{Json, extract::State};
 use datastore::LineageRank;
@@ -98,31 +98,23 @@ async fn filter_handler(
         .map(|(id, _)| *id)
         .collect();
 
-    // Sort based on the `sort_by` field
+    // A name and a rank are both held by many taxa, and the taxon id breaks every tie, so the order
+    // is total. That matters here more than in a plain listing: this list is paged through, and two
+    // pages cut out of two different orders can repeat one taxon and drop another.
+    //
+    // `sort_descending` reverses the whole ordering, tiebreak included, so a descending page is the
+    // reverse of the ascending one.
+    let reversed_when_descending = |ordering: Ordering| if sort_descending { ordering.reverse() } else { ordering };
+
     match sort_by.as_str() {
-        "name" => {
-            if sort_descending {
-                filtered_taxa.sort_by(|&a_id, &b_id| taxon_store.mapper[&b_id].0.cmp(&taxon_store.mapper[&a_id].0));
-            } else {
-                filtered_taxa.sort_by(|&a_id, &b_id| taxon_store.mapper[&a_id].0.cmp(&taxon_store.mapper[&b_id].0));
-            }
-        }
-        "rank" => {
-            if sort_descending {
-                filtered_taxa.sort_by(|&a_id, &b_id| taxon_store.mapper[&b_id].1.cmp(&taxon_store.mapper[&a_id].1));
-            } else {
-                filtered_taxa.sort_by(|&a_id, &b_id| taxon_store.mapper[&a_id].1.cmp(&taxon_store.mapper[&b_id].1));
-            }
-        }
-        _ => {
-            // Default to sorting by id
-            if sort_descending {
-                filtered_taxa.sort_by(|a, b| b.cmp(a));
-            } else {
-                #[allow(clippy::unnecessary_sort_by)]
-                filtered_taxa.sort_by(|a, b| a.cmp(b));
-            }
-        }
+        "name" => filtered_taxa.sort_by(|a, b| {
+            reversed_when_descending((&taxon_store.mapper[a].0, a).cmp(&(&taxon_store.mapper[b].0, b)))
+        }),
+        "rank" => filtered_taxa.sort_by(|a, b| {
+            reversed_when_descending((&taxon_store.mapper[a].1, a).cmp(&(&taxon_store.mapper[b].1, b)))
+        }),
+        // An id is unique, so it is a total order on its own.
+        _ => filtered_taxa.sort_by(|a, b| reversed_when_descending(a.cmp(b)))
     }
 
     // Take the range [start, end), which is empty when `end` is not past `start`.

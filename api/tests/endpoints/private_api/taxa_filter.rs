@@ -221,3 +221,49 @@ async fn a_rank_filter_still_matches_the_spaced_name_in_any_case() {
     assert_eq!(shouted["count"], 1, "the filter ignores case");
     assert_eq!(keyed["count"], 0, "the filter matches the name, not the column key");
 }
+
+/// Many taxa carry the same rank, and the id settles every one of those ties, so the order is
+/// total. Nothing else could settle them: the taxa are collected out of a `HashMap`, whose
+/// iteration order differs from one process to the next.
+///
+/// A page is a window on this order. Two processes ordering the ties differently would hand a
+/// client paging through the list one taxon twice and another not at all.
+#[tokio::test(flavor = "multi_thread")]
+async fn taxa_of_one_rank_are_ordered_by_id() {
+    let (status, page) = get_json("/private_api/taxa/filter?start=0&end=100&sort_by=rank").await;
+    assert_eq!(status, StatusCode::OK);
+
+    let ids: Vec<u64> = page.as_array().expect("a page").iter().map(|id| id.as_u64().expect("an id")).collect();
+
+    let (_, ranked) = get_json("/private_api/taxa/filter?start=0&end=100&sort_by=id").await;
+    assert_eq!(ids.len(), ranked.as_array().expect("a page").len(), "the same taxa, differently arranged");
+
+    // Ids ascend within each run of one rank, which is what a tiebreak on the id means from here.
+    let mut ties = 0;
+    for pair in ids.windows(2) {
+        let (_, first) = get_json(&format!("/private_api/taxa?taxids[]={}", pair[0])).await;
+        let (_, second) = get_json(&format!("/private_api/taxa?taxids[]={}", pair[1])).await;
+
+        if first[0]["rank"] == second[0]["rank"] {
+            ties += 1;
+            assert!(pair[0] < pair[1], "{} and {} share a rank but are not in id order", pair[0], pair[1]);
+        }
+    }
+
+    assert!(ties > 0, "the corpus should hold at least two taxa of one rank, or this asserts nothing");
+}
+
+/// Descending reverses the whole order, the tiebreak included, so the two directions are exact
+/// mirrors even where the sort field repeats.
+#[tokio::test(flavor = "multi_thread")]
+async fn sorting_by_rank_reverses_exactly() {
+    let (_, ascending) = get_json("/private_api/taxa/filter?start=0&end=100&sort_by=rank").await;
+    let (status, descending) =
+        get_json("/private_api/taxa/filter?start=0&end=100&sort_by=rank&sort_descending=true").await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    let mut reversed = descending.as_array().expect("a page").clone();
+    reversed.reverse();
+    assert_eq!(ascending.as_array().expect("a page"), &reversed);
+}

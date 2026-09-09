@@ -1,4 +1,4 @@
-use std::convert::Infallible;
+use std::{cmp::Ordering, convert::Infallible};
 
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
@@ -93,33 +93,26 @@ async fn filter_handler(
         })
         .collect();
 
-    // Sort based on the `sort_by` field
+    // A taxon name and a protein count are both held by many proteomes, and the proteome id breaks
+    // every tie, so the order is total. That matters here more than in a plain listing: this list is
+    // paged through, and two pages cut out of two different orders can repeat one proteome and drop
+    // another.
+    //
+    // `sort_descending` reverses the whole ordering, tiebreak included, so a descending page is the
+    // reverse of the ascending one.
+    let reversed_when_descending = |ordering: Ordering| if sort_descending { ordering.reverse() } else { ordering };
+
     match sort_by.as_str() {
-        "taxon_name" => {
-            let sort_fn = |a_taxon_id, b_taxon_id| {
-                let taxon_name_a = get_taxon_name_by_id(datastore.taxon_store(), a_taxon_id);
-                let taxon_name_b = get_taxon_name_by_id(datastore.taxon_store(), b_taxon_id);
-
-                if sort_descending { taxon_name_b.cmp(&taxon_name_a) } else { taxon_name_a.cmp(&taxon_name_b) }
-            };
-
-            filtered_proteomes
-                .sort_by(|&(_, &(a_taxon_id, _, _)), &(_, &(b_taxon_id, _, _))| sort_fn(a_taxon_id, b_taxon_id));
-        }
-        "protein_count" => {
-            filtered_proteomes.sort_by(|&(_, &(_, a_protein_count, _)), &(_, &(_, b_protein_count, _))| {
-                if sort_descending {
-                    b_protein_count.cmp(&a_protein_count)
-                } else {
-                    a_protein_count.cmp(&b_protein_count)
-                }
-            });
-        }
-        _ => {
-            filtered_proteomes.sort_by(|(a_proteome_id, _), (b_proteome_id, _)| {
-                if sort_descending { b_proteome_id.cmp(a_proteome_id) } else { a_proteome_id.cmp(b_proteome_id) }
-            });
-        }
+        "taxon_name" => filtered_proteomes.sort_by(|(a_id, (a_taxon_id, _, _)), (b_id, (b_taxon_id, _, _))| {
+            let a_name = get_taxon_name_by_id(datastore.taxon_store(), *a_taxon_id);
+            let b_name = get_taxon_name_by_id(datastore.taxon_store(), *b_taxon_id);
+            reversed_when_descending((a_name, a_id).cmp(&(b_name, b_id)))
+        }),
+        "protein_count" => filtered_proteomes.sort_by(|(a_id, (_, a_count, _)), (b_id, (_, b_count, _))| {
+            reversed_when_descending((a_count, a_id).cmp(&(b_count, b_id)))
+        }),
+        // A proteome id is unique, so it is a total order on its own.
+        _ => filtered_proteomes.sort_by(|(a_id, _), (b_id, _)| reversed_when_descending(a_id.cmp(b_id)))
     }
 
     // Take the range [start, end), which is empty when `end` is not past `start`.

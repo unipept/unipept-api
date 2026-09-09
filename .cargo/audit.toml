@@ -1,0 +1,10 @@
+# Warnings that are known and accepted. Everything else must fail the audit job, so a new
+# advisory is never lost among warnings nobody has triaged.
+
+[advisories]
+ignore = [
+    # async-std is discontinued upstream with no drop-in replacement. It reaches us only through
+    # httpmock, a dev-dependency, so it is never in a release build. Remove this entry when
+    # httpmock moves off it.
+    "RUSTSEC-2025-0052",
+]

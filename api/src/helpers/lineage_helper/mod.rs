@@ -32,23 +32,17 @@ macro_rules! create_lineages {
             pub fn get_lineage(taxon_id: u32, lineage_store: &LineageStore) -> Option<Lineage> {
                 let lineage = lineage_store.get(taxon_id)?;
 
-                // A struct expression fills its fields in the order they are written, which is the
-                // order the ranks are declared in, so the columns line up.
-                let mut ranks = lineage.ranks.iter().copied();
+                let [$($field),*] = lineage.ranks;
 
                 Some(Lineage {
                     $(
-                        [<$field _id>]: get_id(ranks.next().flatten()),
+                        [<$field _id>]: get_id($field),
                     )*
                 })
             }
 
             pub fn get_empty_lineage() -> Option<Lineage> {
-                 Some(Lineage {
-                    $(
-                        [<$field _id>]: None,
-                    )*
-                })
+                Some(Lineage::default())
             }
 
             pub fn get_lineage_array(taxon_id: u32, lineage_store: &LineageStore) -> Vec<Option<i32>> {
@@ -57,20 +51,11 @@ macro_rules! create_lineages {
                 lineage.ranks.iter().map(|&id| get_id(id)).collect()
             }
 
-            pub fn get_lineage_array_numeric(taxon_id: u32, lineage_store: &LineageStore) -> Vec<i32> {
-                let lineage = lineage_store.get(taxon_id).cloned().unwrap_or_default();
-
-                lineage.ranks.iter().map(|&id| get_id(id).unwrap_or(0)).collect()
-            }
 
             pub fn get_lineage_with_names(taxon_id: u32, lineage_store: &LineageStore, taxon_store: &TaxonStore) -> Option<LineageWithNames> {
                 let lineage = lineage_store.get(taxon_id)?;
 
-                // Bound in declaration order, so a rank is read once and used for both.
-                let mut ranks = lineage.ranks.iter().copied();
-                $(
-                    let $field = ranks.next().flatten();
-                )*
+                let [$($field),*] = lineage.ranks;
 
                 Some(LineageWithNames {
                     $(
@@ -81,12 +66,7 @@ macro_rules! create_lineages {
             }
 
             pub fn get_empty_lineage_with_names() -> Option<LineageWithNames> {
-                Some(LineageWithNames {
-                    $(
-                        [<$field _id>]: None,
-                        [<$field _name>]: String::from("")
-                    ),*
-                })
+                Some(LineageWithNames::default())
             }
 
         }
@@ -123,12 +103,6 @@ pub fn get_empty_lineage(version: LineageVersion) -> Option<Lineage> {
 pub fn get_lineage_array(taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore) -> Vec<Option<i32>> {
     match version {
         LineageVersion::V2 => v2::get_lineage_array(taxon_id, lineage_store)
-    }
-}
-
-pub fn get_lineage_array_numeric(taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore) -> Vec<i32> {
-    match version {
-        LineageVersion::V2 => v2::get_lineage_array_numeric(taxon_id, lineage_store)
     }
 }
 

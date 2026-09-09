@@ -4,8 +4,6 @@ use std::{
     sync::Arc
 };
 
-use serde::Serialize;
-
 use crate::{
     errors::LineageStoreError,
     rank::{RANK_COUNT, TaxonRank}
@@ -13,9 +11,8 @@ use crate::{
 
 /// One taxon's ancestor at each rank, in the order [`crate::RANK_NAMES`] declares them.
 ///
-/// A rank the taxonomy records nothing at holds `None`; one it records an invalid taxon at holds a
-/// negative id.
-#[derive(Clone, Debug, Serialize, Default)]
+/// A rank whose taxon the taxonomy marks invalid holds a negative id.
+#[derive(Clone, Debug, Default)]
 pub struct Lineage {
     pub ranks: [Option<i32>; RANK_COUNT]
 }
@@ -27,8 +24,7 @@ impl Lineage {
         self.get_rank(LineageStore::rank_to_idx(rank_name)?)
     }
 
-    /// The id at a rank index, in the order [`crate::RANK_NAMES`] declares them, or `None` past
-    /// the last column.
+    /// The id at a rank index.
     pub fn get_rank(&self, rank_index: usize) -> Option<i32> {
         self.ranks.get(rank_index).copied().flatten()
     }
@@ -97,27 +93,25 @@ impl LineageStore {
 
             // Enumerated for the column number: a lineage row has one field per rank, and an error
             // naming only the offending value leaves the reader counting tabs to find it.
-            let mut parts: Vec<Option<i32>> = Vec::with_capacity(RANK_COUNT);
-            for (rank, field) in fields[1..].iter().enumerate() {
-                parts.push(match *field {
+            let mut ranks = [None; RANK_COUNT];
+            for (column, (rank, field)) in ranks.iter_mut().zip(&fields[1..]).enumerate() {
+                *rank = match *field {
                     "\\N" => None,
                     value => Some(value.parse::<i32>().map_err(|_| LineageStoreError::InvalidRankId {
                         line: line_number,
-                        column: rank + 2,
+                        column: column + 2,
                         value: value.to_string()
                     })?)
-                });
+                };
             }
 
-            let mut ranks = [None; RANK_COUNT];
-            ranks.copy_from_slice(&parts);
             let lin = Arc::new(Lineage { ranks });
 
             mapper.insert(taxon_id, Arc::clone(&lin));
 
             // Zipped rather than indexed: both sides are `RANK_COUNT` long, and pairing them
             // this way says so without a bounds check that could fail.
-            for (rank_map, part) in index_references.iter_mut().zip(parts.iter()) {
+            for (rank_map, part) in index_references.iter_mut().zip(lin.ranks.iter()) {
                 if let Some(id) = part {
                     rank_map.entry(id.unsigned_abs()).or_default().push(Arc::clone(&lin));
                 }
@@ -157,17 +151,13 @@ mod tests {
         TaxonRank::columns().map(|rank| rank.as_str().replace(' ', "_")).collect()
     }
 
-    /// A rank name, a rank and a column index all address the same column.
-    ///
-    /// `rank_to_idx` reads a name, `get_taxon_id_at_rank` reads a name through it, and `get_rank`
-    /// reads a position. A different value in every column is what makes a disagreement visible.
+    /// A rank name and a column index address the same column.
     #[test]
     fn every_rank_key_addresses_its_own_column() {
-        let mut ranks = [None; RANK_COUNT];
-        for (position, rank) in ranks.iter_mut().enumerate() {
-            *rank = Some(position as i32 + 1000);
-        }
-        let lineage = Lineage { ranks };
+        // A different value in every column, so a name reading the wrong one is visible.
+        let lineage = Lineage {
+            ranks: std::array::from_fn(|column| Some(column as i32 + 1000))
+        };
 
         for (position, key) in rank_keys().iter().enumerate() {
             assert_eq!(LineageStore::rank_to_idx(key), Some(position), "rank_to_idx({key})");

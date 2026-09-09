@@ -1,175 +1,131 @@
-/// The response shapes of a lineage, generated from the column names the datastore declares.
-pub mod columns {
-    use datastore::{LineageStore, TaxonStore};
-    pub use pastey::paste;
-    use serde::Serialize;
+//! A taxon's ancestors, in the shape a response carries them.
+//!
+//! Two shapes: ids alone, and ids with the name of each ancestor. Both are written from
+//! [`datastore::RANK_NAMES`], so neither names a rank of its own.
 
-    use super::create_lineages;
+use datastore::{LineageStore, RANK_NAMES, TaxonStore};
+use serde::{Serialize, Serializer, ser::SerializeMap};
 
-    datastore::with_ranks!(create_lineages);
+/// The field names a lineage answers with, built once from the rank names.
+///
+/// `serde` writes a field name it is given rather than one it derives, so the names are held here
+/// as owned strings rather than rebuilt for every lineage in a response.
+static FIELDS: std::sync::LazyLock<Vec<(String, String)>> =
+    std::sync::LazyLock::new(|| RANK_NAMES.iter().map(|rank| (format!("{rank}_id"), format!("{rank}_name"))).collect());
+
+/// A rank whose taxon the store marks invalid holds a negative id, and one it holds no taxon at
+/// holds -1. Neither is reported as an ancestor.
+fn reported(taxon_id: Option<i32>) -> Option<i32> {
+    taxon_id.filter(|&id| id != -1).map(i32::abs)
 }
 
-use datastore::{LineageStore, TaxonStore};
-use serde::Serialize;
+fn name_of(taxon_id: Option<i32>, taxon_store: &TaxonStore) -> String {
+    reported(taxon_id)
+        .and_then(|id| taxon_store.get(id as u32).map(|(name, _, _)| name.to_string()))
+        .unwrap_or_default()
+}
 
-macro_rules! create_lineages {
-    ($($field:ident => $written:literal),*) => {
-        paste! {
-            #[derive(Serialize, Default, Debug)]
-            pub struct Lineage {
-                $(
-                    [<$field _id>]: Option<i32>,
-                )*
-            }
+/// One ancestor id per rank, answered as `{rank}_id`.
+#[derive(Debug, Default)]
+pub struct Lineage {
+    ranks: Vec<Option<i32>>
+}
 
-            #[derive(Serialize, Default, Debug)]
-            pub struct LineageWithNames {
-                $(
-                    [<$field _id>]: Option<i32>,
-                    [<$field _name>]: String
-                ),*
-            }
+/// The same, with the name of each ancestor beside its id.
+#[derive(Debug, Default)]
+pub struct LineageWithNames {
+    ranks: Vec<(Option<i32>, String)>
+}
 
-            fn get_id(taxon_id: Option<i32>) -> Option<i32> {
-                taxon_id.filter(|&id| id != -1).map(|id| id.abs())
-            }
-
-            fn get_name(taxon_id: Option<i32>, taxon_store: &TaxonStore) -> String {
-                get_id(taxon_id).and_then(|id| taxon_store.get(id as u32).map(|(name, _, _)| name.to_string())).unwrap_or_default()
-            }
-
-            pub fn get_lineage(taxon_id: u32, lineage_store: &LineageStore) -> Option<Lineage> {
-                let lineage = lineage_store.get(taxon_id)?;
-                // A struct expression evaluates its fields in the order they are written, and that
-                // order is the order the ranks are declared in, so the columns line up.
-                let mut ranks = lineage.ranks.iter().copied();
-
-                Some(Lineage {
-                    $(
-                        [<$field _id>]: get_id(ranks.next().flatten()),
-                    )*
-                })
-            }
-
-            pub fn get_empty_lineage() -> Option<Lineage> {
-                 Some(Lineage {
-                    $(
-                        [<$field _id>]: None,
-                    )*
-                })
-            }
-
-            pub fn get_lineage_array(taxon_id: u32, lineage_store: &LineageStore) -> Vec<Option<i32>> {
-                let lineage = lineage_store.get(taxon_id).cloned().unwrap_or_default();
-
-                lineage.ranks.iter().map(|&id| get_id(id)).collect()
-            }
-
-            pub fn get_lineage_array_numeric(taxon_id: u32, lineage_store: &LineageStore) -> Vec<i32> {
-                let lineage = lineage_store.get(taxon_id).cloned().unwrap_or_default();
-
-                lineage.ranks.iter().map(|&id| get_id(id).unwrap_or(0)).collect()
-            }
-
-            pub fn get_lineage_with_names(taxon_id: u32, lineage_store: &LineageStore, taxon_store: &TaxonStore) -> Option<LineageWithNames> {
-                let lineage = lineage_store.get(taxon_id)?;
-
-                // Bound in declaration order, so each rank is read once and used for both its id
-                // and its name.
-                let mut ranks = lineage.ranks.iter().copied();
-                $(
-                    let $field = ranks.next().flatten();
-                )*
-
-                Some(LineageWithNames {
-                    $(
-                        [<$field _id>]: get_id($field),
-                        [<$field _name>]: get_name($field, taxon_store)
-                    ),*
-                })
-            }
-
-            pub fn get_empty_lineage_with_names() -> Option<LineageWithNames> {
-                Some(LineageWithNames {
-                    $(
-                        [<$field _id>]: None,
-                        [<$field _name>]: String::from("")
-                    ),*
-                })
-            }
-
+impl Serialize for Lineage {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut lineage = serializer.serialize_map(Some(FIELDS.len()))?;
+        for ((id_field, _), id) in FIELDS.iter().zip(&self.ranks) {
+            lineage.serialize_entry(id_field, id)?;
         }
-    };
+        lineage.end()
+    }
 }
 
-pub(crate) use create_lineages;
-
-#[derive(Clone, Copy)]
-pub enum LineageVersion {
-    V2
+impl Serialize for LineageWithNames {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut lineage = serializer.serialize_map(Some(FIELDS.len() * 2))?;
+        for ((id_field, name_field), (id, name)) in FIELDS.iter().zip(&self.ranks) {
+            lineage.serialize_entry(id_field, id)?;
+            lineage.serialize_entry(name_field, name)?;
+        }
+        lineage.end()
+    }
 }
 
+/// Whichever shape a request asked for.
 #[derive(Serialize, Debug)]
 #[serde(untagged)]
-#[allow(clippy::large_enum_variant)]
-pub enum Lineage {
-    DefaultV2(columns::Lineage),
-    NamesV2(columns::LineageWithNames)
+pub enum AnyLineage {
+    Ids(Lineage),
+    WithNames(LineageWithNames)
 }
 
-pub fn get_lineage(taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore) -> Option<Lineage> {
-    match version {
-        LineageVersion::V2 => columns::get_lineage(taxon_id, lineage_store).map(Lineage::DefaultV2)
-    }
+fn ranks_of(taxon_id: u32, lineage_store: &LineageStore) -> Option<Vec<Option<i32>>> {
+    Some(lineage_store.get(taxon_id)?.ranks.to_vec())
 }
 
-pub fn get_empty_lineage(version: LineageVersion) -> Option<Lineage> {
-    match version {
-        LineageVersion::V2 => columns::get_empty_lineage().map(Lineage::DefaultV2)
-    }
+pub fn get_lineage(taxon_id: u32, lineage_store: &LineageStore) -> Option<AnyLineage> {
+    let ranks = ranks_of(taxon_id, lineage_store)?.into_iter().map(reported).collect();
+
+    Some(AnyLineage::Ids(Lineage { ranks }))
 }
 
-pub fn get_lineage_array(taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore) -> Vec<Option<i32>> {
-    match version {
-        LineageVersion::V2 => columns::get_lineage_array(taxon_id, lineage_store)
-    }
-}
-
-pub fn get_lineage_array_numeric(taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore) -> Vec<i32> {
-    match version {
-        LineageVersion::V2 => columns::get_lineage_array_numeric(taxon_id, lineage_store)
-    }
+pub fn get_empty_lineage() -> Option<AnyLineage> {
+    Some(AnyLineage::Ids(Lineage { ranks: vec![None; RANK_NAMES.len()] }))
 }
 
 pub fn get_lineage_with_names(
     taxon_id: u32,
-    _version: LineageVersion,
     lineage_store: &LineageStore,
     taxon_store: &TaxonStore
-) -> Option<Lineage> {
-    columns::get_lineage_with_names(taxon_id, lineage_store, taxon_store).map(Lineage::NamesV2)
+) -> Option<AnyLineage> {
+    let ranks = ranks_of(taxon_id, lineage_store)?
+        .into_iter()
+        .map(|id| (reported(id), name_of(id, taxon_store)))
+        .collect();
+
+    Some(AnyLineage::WithNames(LineageWithNames { ranks }))
 }
 
-pub fn get_empty_lineage_with_names(version: LineageVersion) -> Option<Lineage> {
-    match version {
-        LineageVersion::V2 => columns::get_empty_lineage_with_names().map(Lineage::NamesV2)
-    }
+pub fn get_empty_lineage_with_names() -> Option<AnyLineage> {
+    let ranks = vec![(None, String::new()); RANK_NAMES.len()];
+
+    Some(AnyLineage::WithNames(LineageWithNames { ranks }))
 }
 
-pub fn get_amount_of_ranks(version: LineageVersion) -> u8 {
-    match version {
-        LineageVersion::V2 => 28
-    }
+/// The ancestor ids alone, in column order, for the endpoints that answer a list rather than an
+/// object.
+pub fn get_lineage_array(taxon_id: u32, lineage_store: &LineageStore) -> Vec<Option<i32>> {
+    lineage_store
+        .get(taxon_id)
+        .map_or_else(|| vec![None; RANK_NAMES.len()], |lineage| lineage.ranks.iter().map(|&id| reported(id)).collect())
 }
 
-pub fn get_genus_index(version: LineageVersion) -> u8 {
-    match version {
-        LineageVersion::V2 => 19
-    }
+/// As [`get_lineage_array`], with a rank holding no ancestor written as zero.
+pub fn get_lineage_array_numeric(taxon_id: u32, lineage_store: &LineageStore) -> Vec<i32> {
+    get_lineage_array(taxon_id, lineage_store).into_iter().map(|id| id.unwrap_or(0)).collect()
 }
 
-pub fn get_species_index(version: LineageVersion) -> u8 {
-    match version {
-        LineageVersion::V2 => 23
-    }
+/// Kept as a function rather than read from `RANK_NAMES` at each call site, because the callers
+/// read it as a `u8` bound.
+pub fn get_amount_of_ranks() -> u8 {
+    RANK_NAMES.len() as u8
+}
+
+pub fn get_genus_index() -> u8 {
+    rank_index("genus")
+}
+
+pub fn get_species_index() -> u8 {
+    rank_index("species")
+}
+
+fn rank_index(rank: &str) -> u8 {
+    RANK_NAMES.iter().position(|name| *name == rank).expect("a rank the columns carry") as u8
 }

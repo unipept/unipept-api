@@ -13,10 +13,7 @@ use crate::{
         response::HtmlTemplate
     },
     errors::ApiError,
-    helpers::{
-        lineage_helper::LineageVersion::{self, *},
-        tree_helper::{build_tree, frequency::FrequencyTable, node::Node}
-    }
+    helpers::tree_helper::{build_tree, frequency::FrequencyTable, node::Node}
 };
 
 #[derive(Deserialize)]
@@ -60,11 +57,7 @@ pub struct TreeTemplate {
     json_data: String
 }
 
-fn handler(
-    State(AppState { datastore, .. }): State<AppState>,
-    params: Parameters,
-    version: LineageVersion
-) -> TreeInformation {
+fn handler(State(AppState { datastore, .. }): State<AppState>, params: Parameters) -> TreeInformation {
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
@@ -73,7 +66,7 @@ fn handler(
         Parameters::Post(PostParameters { counts, link: Flag(link) }) => (FrequencyTable::from_counts(counts), link)
     };
 
-    let root = build_tree(frequencies, version, lineage_store, taxon_store);
+    let root = build_tree(frequencies, lineage_store, taxon_store);
 
     if link {
         return TreeInformation::Link { gist: "test".to_string() };
@@ -83,35 +76,29 @@ fn handler(
 }
 
 generate_handlers!(
-    [ V2 ]
     async fn json_handler(
         state => State<AppState>,
-        GetContent(params) => GetContent<GetParameters>,
-        version: LineageVersion
+        GetContent(params) => GetContent<GetParameters>
     ) -> Result<Json<TreeInformation>, Infallible> {
-        Ok(Json(handler(state, Parameters::Get(params), version)))
+        Ok(Json(handler(state, Parameters::Get(params))))
     }
 );
 
 generate_handlers!(
-    [ V2 ]
     async fn json_handler(
         state => State<AppState>,
-        PostContent(params) => PostContent<PostParameters>,
-        version: LineageVersion
+        PostContent(params) => PostContent<PostParameters>
     ) -> Result<Json<TreeInformation>, Infallible> {
-        Ok(Json(handler(state, Parameters::Post(params), version)))
+        Ok(Json(handler(state, Parameters::Post(params))))
     }
 );
 
 generate_handlers!(
-    [ V2 ]
     async fn html_handler(
         state => State<AppState>,
-        GetContent(params) => GetContent<GetParameters>,
-        version: LineageVersion
+        GetContent(params) => GetContent<GetParameters>
     ) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
-        match handler(state, Parameters::Get(params), version) {
+        match handler(state, Parameters::Get(params)) {
             TreeInformation::Tree { root } => Ok(HtmlTemplate(TreeTemplate {
                 json_data: serde_json::to_string(&root)?
             })),
@@ -123,13 +110,11 @@ generate_handlers!(
 );
 
 generate_handlers!(
-    [ V2 ]
     async fn html_handler(
         state => State<AppState>,
-        PostContent(params) => PostContent<PostParameters>,
-        version: LineageVersion
+        PostContent(params) => PostContent<PostParameters>
     ) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
-        match handler(state, Parameters::Post(params), version) {
+        match handler(state, Parameters::Post(params)) {
             TreeInformation::Tree { root } => Ok(HtmlTemplate(TreeTemplate {
                 json_data: serde_json::to_string(&root)?
             })),

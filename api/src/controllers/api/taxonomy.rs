@@ -13,9 +13,7 @@ use crate::{
     },
     errors::{ApiError, ApiError::UnknownRankError},
     helpers::lineage_helper::{
-        Lineage,
-        LineageVersion::{self, *},
-        get_empty_lineage, get_empty_lineage_with_names, get_lineage, get_lineage_with_names
+        AnyLineage, get_empty_lineage, get_empty_lineage_with_names, get_lineage, get_lineage_with_names
     }
 };
 
@@ -40,7 +38,7 @@ pub struct TaxaInformation {
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    lineage: Option<Lineage>,
+    lineage: Option<AnyLineage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     descendants: Option<Vec<u32>>
 }
@@ -111,8 +109,7 @@ async fn handler(
         names: Flag(names),
         descendants: Flag(descendants),
         descendants_ranks
-    }: Parameters,
-    version: LineageVersion
+    }: Parameters
 ) -> Result<Vec<TaxaInformation>, ApiError> {
     if input.is_empty() {
         return Ok(Vec::new());
@@ -157,9 +154,9 @@ async fn handler(
                     children = Some(descendant_ids.into_iter().collect());
                 }
 
-                let lineage: Option<Lineage> = match (extra, names) {
-                    (true, true) => get_empty_lineage_with_names(version),
-                    (true, false) => get_empty_lineage(version),
+                let lineage: Option<AnyLineage> = match (extra, names) {
+                    (true, true) => get_empty_lineage_with_names(),
+                    (true, false) => get_empty_lineage(),
                     (false, _) => None
                 };
 
@@ -176,8 +173,8 @@ async fn handler(
 
             let (name, rank, _) = taxon_store.get(taxon_id)?;
             let lineage = match (extra, names) {
-                (true, true) => get_lineage_with_names(taxon_id, version, lineage_store, taxon_store),
-                (true, false) => get_lineage(taxon_id, version, lineage_store),
+                (true, true) => get_lineage_with_names(taxon_id, lineage_store, taxon_store),
+                (true, false) => get_lineage(taxon_id, lineage_store),
                 (false, _) => None
             };
 
@@ -203,12 +200,10 @@ async fn handler(
 }
 
 generate_handlers!(
-    [ V2 ]
     async fn json_handler(
         state => State<AppState>,
-        params => Parameters,
-        version: LineageVersion
+        params => Parameters
     ) -> Result<Json<Vec<TaxaInformation>>, ApiError> {
-        Ok(Json(handler(state, params, version).await?))
+        Ok(Json(handler(state, params).await?))
     }
 );

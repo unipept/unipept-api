@@ -14,7 +14,7 @@ use std::hint::black_box;
 
 use criterion::Criterion;
 use tempfile::TempDir;
-use unipept_api::helpers::{lca_helper::calculate_lca, lineage_helper::LineageVersion};
+use unipept_api::helpers::lca_helper::calculate_lca;
 
 /// Distinct taxa, and the number of times they are drawn, at the scale of a large request.
 const DISTINCT_TAXA: u32 = 26_919;
@@ -30,14 +30,12 @@ pub fn lca_benchmark(c: &mut Criterion) {
     // Checked, not assumed, and not a `debug_assert`: `[profile.bench]` leaves debug assertions
     // off, so one would never run. This costs a single call outside the timed loop.
     assert_eq!(
-        calculate_lca(taxa.iter().copied(), LineageVersion::V2, &taxon_store, &lineage_store, true),
+        calculate_lca(taxa.iter().copied(), &taxon_store, &lineage_store, true),
         1,
         "the taxa must span two domains, so that all 28 ranks are walked"
     );
 
     c.bench_function("calculate_lca", |b| {
-        b.iter(|| {
-            black_box(calculate_lca(taxa.iter().copied(), LineageVersion::V2, &taxon_store, &lineage_store, true))
-        })
+        b.iter(|| black_box(calculate_lca(taxa.iter().copied(), &taxon_store, &lineage_store, true)))
     });
 }

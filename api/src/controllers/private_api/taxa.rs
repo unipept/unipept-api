@@ -3,11 +3,7 @@ use std::convert::Infallible;
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    AppState,
-    controllers::generate_handlers,
-    helpers::lineage_helper::{LineageVersion, get_lineage_array}
-};
+use crate::{AppState, controllers::generate_handlers, helpers::lineage_helper::get_lineage_array};
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -35,7 +31,7 @@ async fn handler(
         .filter(|&taxon_id| taxon_id > 0)
         .filter_map(|taxon_id| {
             let (name, rank, _) = taxon_store.get(taxon_id as u32)?;
-            let lineage = get_lineage_array(taxon_id as u32, LineageVersion::V2, lineage_store);
+            let lineage = get_lineage_array(taxon_id as u32, lineage_store);
 
             Some(Taxon {
                 id: taxon_id as u32,

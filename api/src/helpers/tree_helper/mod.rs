@@ -2,22 +2,17 @@ use datastore::{LineageRank, LineageStore, TaxonStore};
 use frequency::FrequencyTable;
 use node::Node;
 
-use super::lineage_helper::{LineageVersion, get_lineage_array};
+use super::lineage_helper::get_lineage_array;
 
 pub mod frequency;
 pub mod node;
 
-pub fn build_tree(
-    frequencies: FrequencyTable<u32>,
-    version: LineageVersion,
-    lineage_store: &LineageStore,
-    taxon_store: &TaxonStore
-) -> Node {
+pub fn build_tree(frequencies: FrequencyTable<u32>, lineage_store: &LineageStore, taxon_store: &TaxonStore) -> Node {
     let mut root: Node = Node::new(1, "Organism".to_string(), LineageRank::NoRank.to_string());
     for taxon_id in frequencies.keys() {
         let mut current_node = &mut root;
 
-        let lineage = get_lineage_array(*taxon_id, version, lineage_store);
+        let lineage = get_lineage_array(*taxon_id, lineage_store);
 
         for lineage_id in lineage.into_iter().flatten() {
             if lineage_id < 0 {

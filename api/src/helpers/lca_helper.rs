@@ -1,12 +1,11 @@
 use datastore::{Lineage, LineageStore, TaxonStore};
 
-use super::lineage_helper::{LineageVersion, get_amount_of_ranks, get_genus_index, get_species_index};
+use super::lineage_helper::{get_amount_of_ranks, get_genus_index, get_species_index};
 
 /// Takes the taxa as an iterator rather than a `Vec`: the callers that hold one still pass it, and
 /// the ones that build the list only to hand it over no longer allocate it.
 pub fn calculate_lca(
     taxa: impl IntoIterator<Item = u32>,
-    version: LineageVersion,
     taxon_store: &TaxonStore,
     lineage_store: &LineageStore,
     only_valid_taxa: bool
@@ -25,9 +24,9 @@ pub fn calculate_lca(
         .map(|taxon_id| lineage_store.get(taxon_id).map(|lineage| lineage.as_ref()).unwrap_or(&unknown))
         .collect();
 
-    let amount_of_ranks = get_amount_of_ranks(version);
-    let genus_index = get_genus_index(version);
-    let species_index = get_species_index(version);
+    let amount_of_ranks = get_amount_of_ranks();
+    let genus_index = get_genus_index();
+    let species_index = get_species_index();
 
     for rank in (0..amount_of_ranks).rev() {
         let mut iterator = lineages
@@ -55,10 +54,7 @@ mod tests {
     use fixtures::taxa;
     use tempfile::TempDir;
 
-    use super::super::lineage_helper::LineageVersion;
     use crate::helpers::lca_helper::calculate_lca;
-
-    const VERSION: LineageVersion = LineageVersion::V2;
 
     /// The shared corpus, written out and loaded.
     ///
@@ -94,8 +90,8 @@ mod tests {
         ];
 
         assert_eq!(
-            calculate_lca(with_repeats, VERSION, &taxon_store, &lineage_store, true),
-            calculate_lca(distinct, VERSION, &taxon_store, &lineage_store, true)
+            calculate_lca(with_repeats, &taxon_store, &lineage_store, true),
+            calculate_lca(distinct, &taxon_store, &lineage_store, true)
         );
     }
 
@@ -106,7 +102,7 @@ mod tests {
 
         let taxa = vec![taxa::CROCODYLUS_NILOTICUS, taxa::SPHENODONTIA, taxa::ALOUATTA_SENICULUS];
 
-        assert_eq!(calculate_lca(taxa, VERSION, &taxon_store, &lineage_store, true), taxa::SARCOPTERYGII as i32);
+        assert_eq!(calculate_lca(taxa, &taxon_store, &lineage_store, true), taxa::SARCOPTERYGII as i32);
     }
 
     /// Taxa from different domains share no rank, so the reduction runs out and answers root.
@@ -116,7 +112,7 @@ mod tests {
 
         let taxa = vec![taxa::CROCODYLUS_NILOTICUS, taxa::AZORHIZOBIUM_CAULINODANS, taxa::BUCHNERA_APHIDICOLA];
 
-        assert_eq!(calculate_lca(taxa, VERSION, &taxon_store, &lineage_store, true), taxa::ROOT as i32);
+        assert_eq!(calculate_lca(taxa, &taxon_store, &lineage_store, true), taxa::ROOT as i32);
     }
 
     /// `validate_taxa=false` lets a caller-supplied taxon ID reach the lineage store, and
@@ -135,17 +131,11 @@ mod tests {
         let mut with_unknown = known.clone();
         with_unknown.push(UNKNOWN);
 
-        assert_eq!(calculate_lca(known, VERSION, &taxon_store, &lineage_store, false), taxa::SARCOPTERYGII as i32);
-        assert_eq!(
-            calculate_lca(with_unknown.clone(), VERSION, &taxon_store, &lineage_store, false),
-            taxa::ROOT as i32
-        );
+        assert_eq!(calculate_lca(known, &taxon_store, &lineage_store, false), taxa::SARCOPTERYGII as i32);
+        assert_eq!(calculate_lca(with_unknown.clone(), &taxon_store, &lineage_store, false), taxa::ROOT as i32);
 
         // `validate_taxa=true` never reaches that reading: the taxon store rejects the ID first.
-        assert_eq!(
-            calculate_lca(with_unknown, VERSION, &taxon_store, &lineage_store, true),
-            taxa::SARCOPTERYGII as i32
-        );
+        assert_eq!(calculate_lca(with_unknown, &taxon_store, &lineage_store, true), taxa::SARCOPTERYGII as i32);
     }
 
     /// `only_valid_taxa` drops a taxon the taxonomy marks invalid. `Heloderma sp.` is the corpus's
@@ -156,12 +146,9 @@ mod tests {
 
         let taxa = vec![taxa::CROCODYLUS_NILOTICUS, taxa::HELODERMA];
 
-        assert_eq!(
-            calculate_lca(taxa.clone(), VERSION, &taxon_store, &lineage_store, true),
-            taxa::CROCODYLUS_NILOTICUS as i32
-        );
+        assert_eq!(calculate_lca(taxa.clone(), &taxon_store, &lineage_store, true), taxa::CROCODYLUS_NILOTICUS as i32);
         assert_ne!(
-            calculate_lca(taxa, VERSION, &taxon_store, &lineage_store, false),
+            calculate_lca(taxa, &taxon_store, &lineage_store, false),
             taxa::CROCODYLUS_NILOTICUS as i32,
             "with the filter off the invalid taxon must still count"
         );

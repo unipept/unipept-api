@@ -97,10 +97,9 @@ pub fn create_app_with_timeout(state: AppState, timeout: Duration) -> NormalizeP
 
 /// `/api/v1` is a deprecated alias for `/api/v2`, on purpose.
 ///
-/// v1 is deprecated but stays mounted, because many tools still call it. It no longer serves
-/// what it originally did: v1 taxonomy differed slightly from v2, and that difference is gone.
-/// A v1 caller now gets v2 semantics, since there is no `create_api_v1_routes` and
-/// `LineageVersion` has no `V1` variant.
+/// v1 is deprecated but stays mounted, because many tools still call it. It no longer serves what
+/// it originally did: v1 taxonomy differed slightly from v2, and that difference is gone. A v1
+/// caller gets v2 semantics, since both prefixes are given the same routes.
 ///
 /// The two prefixes therefore change together, and `the_two_api_versions_answer_identically`
 /// in `tests/endpoints/routing.rs` fails if one is given routes the other does not have.
@@ -135,23 +134,23 @@ fn create_api_v2_routes() -> Router<AppState> {
         "/pept2interpro",
         get(pept2interpro::get_json_handler).post(pept2interpro::post_json_handler),
         "/pept2lca",
-        get(pept2lca::get_json_handler_v2).post(pept2lca::post_json_handler_v2),
+        get(pept2lca::get_json_handler).post(pept2lca::post_json_handler),
         "/pept2prot",
         get(pept2prot::get_json_handler).post(pept2prot::post_json_handler),
         "/pept2taxa",
-        get(pept2taxa::get_json_handler_v2).post(pept2taxa::post_json_handler_v2),
+        get(pept2taxa::get_json_handler).post(pept2taxa::post_json_handler),
         "/peptinfo",
-        get(peptinfo::get_json_handler_v2).post(peptinfo::post_json_handler_v2),
+        get(peptinfo::get_json_handler).post(peptinfo::post_json_handler),
         "/protinfo",
-        get(protinfo::get_json_handler_v2).post(protinfo::post_json_handler_v2),
+        get(protinfo::get_json_handler).post(protinfo::post_json_handler),
         "/taxa2lca",
-        get(taxa2lca::get_json_handler_v2).post(taxa2lca::post_json_handler_v2),
+        get(taxa2lca::get_json_handler).post(taxa2lca::post_json_handler),
         "/taxa2tree",
-        get(taxa2tree::get_json_handler_v2).post(taxa2tree::post_json_handler_v2),
+        get(taxa2tree::get_json_handler).post(taxa2tree::post_json_handler),
         "/taxonomy",
-        get(taxonomy::get_json_handler_v2).post(taxonomy::post_json_handler_v2)
+        get(taxonomy::get_json_handler).post(taxonomy::post_json_handler)
     )
-    .route("/taxa2tree.html", get(taxa2tree::get_html_handler_v2).post(taxa2tree::post_html_handler_v2))
+    .route("/taxa2tree.html", get(taxa2tree::get_html_handler).post(taxa2tree::post_html_handler))
 }
 
 fn create_datasets_routes() -> Router<AppState> {

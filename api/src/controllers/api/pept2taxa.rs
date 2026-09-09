@@ -10,11 +10,7 @@ use crate::{
     },
     errors::ApiError,
     helpers::{
-        lineage_helper::{
-            Lineage,
-            LineageVersion::{self, *},
-            get_lineage, get_lineage_with_names
-        },
+        lineage_helper::{AnyLineage, get_lineage, get_lineage_with_names},
         sanitize_peptides
     }
 };
@@ -52,7 +48,7 @@ pub struct DenseTaxaInformation {
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    lineage: Option<Lineage>
+    lineage: Option<AnyLineage>
 }
 
 #[derive(Serialize)]
@@ -79,8 +75,7 @@ async fn handler(
         tryptic: Flag(tryptic),
         compact: Flag(compact),
         cutoff
-    }: Parameters,
-    version: LineageVersion
+    }: Parameters
 ) -> Result<Vec<TaxaInformation>, ApiError> {
     let input = sanitize_peptides(input);
     // Neither shape reads anything but the taxon, and `taxa` is already distinct and ascending.
@@ -116,8 +111,8 @@ async fn handler(
             item.taxa.into_iter().filter_map(move |taxon| {
                 let (name, rank, _) = taxon_store.get(taxon)?;
                 let lineage = match (extra, names) {
-                    (true, true) => get_lineage_with_names(taxon, version, lineage_store, taxon_store),
-                    (true, false) => get_lineage(taxon, version, lineage_store),
+                    (true, true) => get_lineage_with_names(taxon, lineage_store, taxon_store),
+                    (true, false) => get_lineage(taxon, lineage_store),
                     (false, _) => None
                 };
 
@@ -137,12 +132,10 @@ async fn handler(
 }
 
 generate_handlers! (
-    [ V2 ]
     async fn json_handler(
         state => State<AppState>,
-        params => Parameters,
-        version: LineageVersion
+        params => Parameters
     ) -> Result<Json<Vec<TaxaInformation>>, ApiError> {
-        Ok(Json(handler(state, params, version).await?))
+        Ok(Json(handler(state, params).await?))
     }
 );

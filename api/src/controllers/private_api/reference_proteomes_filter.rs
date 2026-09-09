@@ -42,9 +42,9 @@ pub struct ReferenceProteomeCountResult {
 
 /// A proteome is kept when the filter appears in its accession, its taxon id, or its taxon name.
 ///
-/// The filter arrives folded rather than folded here, which would repeat that per proteome. A
-/// taxon id is matched against the same folded filter: an id is digits, and no character folds to
-/// a digit, so a filter that differs from its folded form matches neither.
+/// The filter arrives folded, rather than being folded here once per proteome. A taxon id is
+/// matched against that same folded filter: an id is digits, and no character folds to a digit, so
+/// a filter that differs from its folded form matches neither.
 fn matches(filter: &str, key: &str, taxon_id: u32, taxon_store: &datastore::TaxonStore) -> bool {
     // An empty filter keeps every proteome, and answering that before folding a case saves an
     // allocation per row on what the browser asks for by default.

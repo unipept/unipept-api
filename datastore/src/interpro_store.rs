@@ -35,6 +35,12 @@ impl InterproStore {
                 });
             }
 
+            // A row of the right width can still name nothing. Its entry would be reachable by no
+            // lookup, and would be counted as though it were one.
+            if parts[1].is_empty() {
+                return Err(InterproStoreError::EmptyKey { line: index + 1 });
+            }
+
             mapper.insert(parts[1].to_string(), (parts[2].to_string(), parts[3].to_string()));
         }
 

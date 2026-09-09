@@ -38,6 +38,12 @@ impl ReferenceProteomeStore {
                 });
             }
 
+            // A row of the right width can still name nothing. Its entry would be reachable by no
+            // lookup, and would be counted as though it were one.
+            if parts[1].is_empty() {
+                return Err(ReferenceProteomeStoreError::EmptyKey { line: index + 1 });
+            }
+
             let taxon_id = parts[2].parse::<u32>().map_err(|_| ReferenceProteomeStoreError::InvalidTaxonId {
                 line: line_number,
                 value: parts[2].to_string()

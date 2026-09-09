@@ -293,3 +293,41 @@ fn a_trailing_delimiter_is_counted_as_a_column() {
         other => panic!("expected UnexpectedColumnCount with six columns, got {other:?}")
     }
 }
+
+/// A row of the right width whose key column is empty is refused, in every store keyed on one.
+///
+/// Such a row parses: it has the columns the loader counts. What it does not have is a name, so the
+/// entry it makes is reachable by no lookup, and is counted as though it were a real one — the
+/// proteome count is the number of entries in that map.
+#[test]
+fn a_row_with_an_empty_key_is_an_error() {
+    let ec = with_file("ec.tsv", "1\t\tno key here\n", EcStore::try_from_file);
+    assert!(matches!(outcome(ec), Err(EcStoreError::EmptyKey { line: 1 })), "ec");
+
+    let go = with_file("go.tsv", "1\t\tnamespace\tname\n", GoStore::try_from_file);
+    assert!(matches!(outcome(go), Err(GoStoreError::EmptyKey { line: 1 })), "go");
+
+    let ipr = with_file("ipr.tsv", "1\t\ttype\tname\n", InterproStore::try_from_file);
+    assert!(matches!(outcome(ipr), Err(InterproStoreError::EmptyKey { line: 1 })), "interpro");
+
+    let proteomes = with_file("proteomes.tsv", "1\t\t8501\t3\tP00001\n", ReferenceProteomeStore::try_from_file);
+    assert!(matches!(outcome(proteomes), Err(ReferenceProteomeStoreError::EmptyKey { line: 1 })), "proteomes");
+}
+
+/// The line is named, so an operator can find the row rather than bisecting the file.
+#[test]
+fn the_empty_key_error_names_its_line() {
+    let contents = "1\tEC:1.1.1.1\tAlcohol dehydrogenase\n2\t\tno key here\n";
+
+    match outcome(with_file("ec.tsv", contents, EcStore::try_from_file)) {
+        Err(EcStoreError::EmptyKey { line }) => assert_eq!(line, 2),
+        other => panic!("expected an EmptyKey error on line 2, got {other:?}")
+    }
+}
+
+/// A row of nothing but delimiters is the same fault, and was the shape that made it visible.
+#[test]
+fn a_row_of_delimiters_is_an_empty_key_rather_than_an_entry() {
+    let go = with_file("go.tsv", "\t\t\t\n", GoStore::try_from_file);
+    assert!(matches!(outcome(go), Err(GoStoreError::EmptyKey { line: 1 })));
+}

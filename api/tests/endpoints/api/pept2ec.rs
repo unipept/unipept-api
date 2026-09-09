@@ -66,9 +66,8 @@ fn peptides(body: &serde_json::Value) -> Vec<&str> {
 
 /// The results follow the input.
 ///
-/// This endpoint deduplicates its input and searched the keys of that map, which Rust iterates in a
-/// random order per process, so the results came back shuffled (#204). Sending the same two
-/// peptides both ways round is what separates "in input order" from "in some fixed order".
+/// Sending the same two peptides both ways round is what separates "in input order" from "in some
+/// fixed order".
 #[tokio::test(flavor = "multi_thread")]
 async fn results_follow_the_order_of_the_input() {
     let (status, body) = get_json(&format!("/api/v2/pept2ec?input[]={GENUS_SHARED}&input[]={UNIQUE}")).await;
@@ -85,10 +84,9 @@ async fn results_follow_the_order_of_the_input() {
 /// `analyse` drops a peptide with no matches, so the result list is shorter than the list of unique
 /// peptides that was searched, and each result has to carry the count of the peptide it names.
 ///
-/// The whole sequence is asserted, which #204 made possible. Note where the repeats sit: a peptide
-/// asked for three times is answered three times together, at the position of its first mention,
-/// rather than at each position it was asked at. The other five peptide endpoints pass their input
-/// through as it stands and so answer in exact input position.
+/// Note where the repeats sit: a peptide given three times is answered three times together, at the
+/// position of its first mention, rather than at each position it occupies. The other five peptide
+/// endpoints pass their input through as it stands and so answer in exact input position.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_peptide_that_matches_nothing_does_not_shift_the_other_counts() {
     let input = format!(

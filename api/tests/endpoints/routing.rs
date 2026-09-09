@@ -12,9 +12,8 @@ use crate::{
 
 /// Asserts that a query string and the JSON body meaning the same thing answer the same way.
 ///
-/// Compared as they arrive. Every list here used to be sorted first, because several controllers
-/// built one by iterating a `HashMap` and no two identical requests agreed on the order (#204).
-/// Sorting hid a real ordering difference between the two methods on any of these routes.
+/// Bodies are compared as they arrive, lists included, so a route ordering its answer differently
+/// under one method than the other is something this catches.
 fn assert_get_and_post_agree(query: &str, from_get: (StatusCode, Value), from_post: (StatusCode, Value)) {
     let (get_status, get_body) = from_get;
     let (post_status, post_body) = from_post;

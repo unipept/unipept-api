@@ -104,10 +104,7 @@ async fn extra_and_names_add_a_named_lineage() {
     assert_eq!(named[0]["genus_name"], "Crocodylus");
 }
 
-/// A repeated peptide carries all of its taxa to each position it occupies.
-///
-/// This is the shape the shared helper holds a list for: `pept2taxa` answers with a row per taxon,
-/// so a repeat multiplies with the taxa rather than adding one row.
+/// A repeat multiplies with the taxa rather than adding one row.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_repeated_peptide_carries_all_of_its_taxa_to_each_position() {
     let (status, once) = get_json(&format!("/api/v2/pept2taxa?input[]={GENUS_SHARED}&extra=true&names=true")).await;
@@ -126,7 +123,7 @@ async fn a_repeated_peptide_carries_all_of_its_taxa_to_each_position() {
     assert_eq!(&twice[once.len()..], &once[..], "and so does the second, to the byte");
 }
 
-/// The compact shape answers one row per peptide, so a repeat adds one row rather than multiplying.
+/// The compact shape answers one row per peptide, so a repeat adds one row.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_repeated_peptide_answers_once_per_position_when_compact() {
     let (status, body) =

@@ -95,7 +95,6 @@ async fn handler(
     let lineage_store = datastore.lineage_store();
 
     if compact {
-        // One row per peptide, as everywhere else.
         let rows: HashMap<&str, Vec<TaxaInformation>> = result
             .iter()
             .filter_map(|item| {
@@ -114,11 +113,10 @@ async fn handler(
             })
             .collect();
 
-        return Ok(laid_over_input(&input, &rows));
+        return Ok(laid_over_input(&input, rows));
     }
 
-    // A row per taxon, so this is the shape `laid_over_input` holds a list for: a repeated peptide
-    // carries all of its taxa to each position, not one of them.
+    // A row per taxon: a repeated peptide carries all of them to each position it occupies.
     let rows: HashMap<&str, Vec<TaxaInformation>> = result
         .iter()
         .map(|item| {
@@ -151,7 +149,7 @@ async fn handler(
         })
         .collect();
 
-    Ok(laid_over_input(&input, &rows))
+    Ok(laid_over_input(&input, rows))
 }
 
 generate_handlers! (

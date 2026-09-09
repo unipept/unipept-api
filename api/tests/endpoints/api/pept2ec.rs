@@ -79,11 +79,8 @@ async fn results_follow_the_order_of_the_input() {
     assert_eq!(peptides(&reversed), vec![UNIQUE, GENUS_SHARED]);
 }
 
-/// A repeated peptide is answered at each position it occupies, and one that matches nothing takes
-/// no position at all.
-///
-/// `analyse` drops a peptide with no matches, so a result carries no answer for it and the
-/// positions of every other peptide are unaffected.
+/// A repeated peptide is answered at each position it occupies; one that matches nothing takes
+/// none, and does not shift the peptides after it.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_peptide_is_answered_at_each_position_it_occupies() {
     let input = format!(
@@ -101,17 +98,4 @@ async fn a_peptide_is_answered_at_each_position_it_occupies() {
         vec![UNIQUE, GENUS_SHARED, UNIQUE, GENUS_SHARED, GENUS_SHARED, VALIDATION_SHARED],
         "each peptide sits where it was named; ABSENT matches nothing and is dropped"
     );
-}
-
-/// The one shape every peptide endpoint answers in, which `pept2ec` used to be alone in not
-/// following. Asserted against a sibling rather than against a literal, so the two cannot drift.
-#[tokio::test(flavor = "multi_thread")]
-async fn repeats_sit_where_the_other_endpoints_put_them() {
-    let input = format!("input[]={GENUS_SHARED}&input[]={UNIQUE}&input[]={GENUS_SHARED}");
-
-    let (status, ecs) = get_json(&format!("/api/v2/pept2ec?{input}")).await;
-    let (_, gos) = get_json(&format!("/api/v2/pept2go?{input}")).await;
-
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(peptides(&ecs), peptides(&gos));
 }

@@ -96,9 +96,8 @@ async fn handler(
 
     let taxon_store = datastore.taxon_store();
 
-    // A row per protein, so a repeated peptide carries all of its proteins to each position it was
-    // named at. The cluster lookup above is keyed on accession and is unaffected: it was built from
-    // the distinct peptides, which reach the same proteins.
+    // A row per protein. The cluster lookup above is keyed on accession, so the distinct peptides
+    // reach the same proteins the input did.
     let rows: HashMap<&str, Vec<ProtInformation>> = result
         .iter()
         .map(|item| {
@@ -161,7 +160,7 @@ async fn handler(
         })
         .collect();
 
-    Ok(laid_over_input(&input, &rows))
+    Ok(laid_over_input(&input, rows))
 }
 
 generate_handlers!(

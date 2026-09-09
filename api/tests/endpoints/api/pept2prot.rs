@@ -211,10 +211,7 @@ async fn equate_il_reaches_a_second_protein() {
     assert_eq!(together.as_array().map(Vec::len), Some(2));
 }
 
-/// A repeated peptide carries all of its proteins to each position it occupies.
-///
-/// The cluster is asked for each accession once regardless: the lookup is keyed on accession and
-/// built from the distinct peptides, which reach the same proteins.
+/// A repeat multiplies with the proteins. The cluster is asked for each accession once either way.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_repeated_peptide_carries_all_of_its_proteins_to_each_position() {
     let server = cluster_holding_the_corpus().await;

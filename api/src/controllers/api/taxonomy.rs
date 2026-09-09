@@ -61,6 +61,9 @@ pub struct Taxon {
 /// * `descendants_rank` - The rank from which the children should be retrieved.
 /// * `lineage_store` - A reference to the LineageStore that can be used to retrieve lineages and
 ///   taxonomic information from the database.
+/// What a lineage holds at a rank with no taxon of its own.
+const NO_TAXON: i32 = -1;
+
 fn get_children_at_rank(
     taxon_id: u32,
     rank: LineageRank,
@@ -75,10 +78,14 @@ fn get_children_at_rank(
         return;
     };
 
+    // A lineage writes a negative id where the taxon at that rank is invalid, and -1 where it holds
+    // no taxon at all. Taking the absolute value turned that -1 into taxon 1 and reported the root
+    // as a descendant; every other negative names a real taxon and stays.
     descendant_ids.extend(
         lineages_at_rank
             .iter()
             .filter_map(|lin| lin.get_taxon_id_at_rank(descendants_rank))
+            .filter(|&id| id != NO_TAXON)
             .map(i32::unsigned_abs)
     );
 }

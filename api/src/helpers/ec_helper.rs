@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use crate::helpers::{by_count_then_key, is_zero};
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(untagged)]
 pub enum EcNumber {
     Default {

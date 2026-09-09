@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use axum::{Json, extract::State};
 use datastore::{LineageRank, LineageStore};
 use serde::{Deserialize, Serialize};
@@ -64,25 +62,47 @@ pub struct Taxon {
 fn get_children_at_rank(
     taxon_id: u32,
     rank: LineageRank,
-    descendants_rank: String,
+    descendants_rank: &str,
     lineage_store: &LineageStore
-) -> Option<BTreeSet<u32>> {
+) -> Vec<u32> {
     // Taken as it arrived: `handler` rejects a rank `rank_to_idx` does not know before any of them
     // reaches here. That check reads either separator, a space or an underscore, and is
     // case-sensitive.
-    let lineages_at_rank = lineage_store.get_lineages_at_rank(&rank, taxon_id);
+    let Some(lineages_at_rank) = lineage_store.get_lineages_at_rank(&rank, taxon_id) else {
+        return Vec::new();
+    };
 
-    // Ordered rather than hashed: this set becomes a list in the response.
-    let mut children_id_set = BTreeSet::new();
-
-    lineages_at_rank?
+    // In no order and with repeats: one rank is a part of the answer rather than the whole of it,
+    // and `ascending` puts the parts in order once they are all collected.
+    lineages_at_rank
         .iter()
-        .filter_map(|lin| lin.get_taxon_id_at_rank(descendants_rank.as_str()))
-        .for_each(|id| {
-            children_id_set.insert(id.unsigned_abs());
-        });
+        .filter_map(|lin| lin.get_taxon_id_at_rank(descendants_rank))
+        .map(i32::unsigned_abs)
+        .collect()
+}
 
-    Some(children_id_set)
+/// The descendant ids of one taxon, over every rank the request named.
+fn descendants_at_ranks(
+    taxon_id: u32,
+    rank: LineageRank,
+    descendants_ranks: &[String],
+    lineage_store: &LineageStore
+) -> Vec<u32> {
+    descendants_ranks
+        .iter()
+        .flat_map(|descendants_rank| get_children_at_rank(taxon_id, rank.clone(), descendants_rank, lineage_store))
+        .collect()
+}
+
+/// Ascending, without repeats.
+///
+/// Applied once to the whole answer rather than to each rank: a request naming two ranks reads one
+/// list of taxon ids, not one run per rank. Sorting once is also cheaper than placing every id in
+/// an ordered set on the way in.
+fn ascending(mut ids: Vec<u32>) -> Vec<u32> {
+    ids.sort_unstable();
+    ids.dedup();
+    ids
 }
 
 async fn handler(
@@ -124,22 +144,20 @@ async fn handler(
                 // If descendants is true, we need to get all the taxa at the requested level and
                 // report those as children of the root.
                 if descendants {
-                    children = Some(
+                    children = Some(ascending(
                         lineage_store
                             .get_all_taxon_ids_at_rank(&LineageRank::Domain)?
                             .iter()
-                            .flat_map(|sk_taxon| {
-                                descendants_ranks
-                                    .iter()
-                                    .cloned()
-                                    .filter_map(|desc_rank| {
-                                        get_children_at_rank(*sk_taxon, LineageRank::Domain, desc_rank, lineage_store)
-                                    })
-                                    .flat_map(|set| set.into_iter())
-                                    .collect::<Vec<u32>>()
+                            .flat_map(|domain_taxon| {
+                                descendants_at_ranks(
+                                    *domain_taxon,
+                                    LineageRank::Domain,
+                                    &descendants_ranks,
+                                    lineage_store
+                                )
                             })
                             .collect()
-                    );
+                    ));
                 }
 
                 let lineage: Option<Lineage> = match (extra, names) {
@@ -168,24 +186,8 @@ async fn handler(
 
             // If the user would like to get all the descendants of the given taxon, we'll try to
             // retrieve these here. These descendants are just a list of taxon IDs.
-            let children: Option<Vec<u32>> = match descendants {
-                true => {
-                    // Retrieve information for all descendant ranks that are provided to this
-                    // function
-                    let mut child_vector: Vec<u32> = Vec::new();
-
-                    for desc_rank in descendants_ranks.clone() {
-                        let items = get_children_at_rank(taxon_id, rank.clone(), desc_rank, lineage_store);
-
-                        if let Some(values) = items {
-                            child_vector.extend(values)
-                        }
-                    }
-
-                    Some(child_vector)
-                }
-                false => None
-            };
+            let children: Option<Vec<u32>> = descendants
+                .then(|| ascending(descendants_at_ranks(taxon_id, rank.clone(), &descendants_ranks, lineage_store)));
 
             Some(TaxaInformation {
                 taxon: Taxon {

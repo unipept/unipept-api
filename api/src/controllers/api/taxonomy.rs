@@ -79,8 +79,7 @@ fn get_children_at_rank(
     };
 
     // A lineage writes a negative id where the taxon at that rank is invalid, and -1 where it holds
-    // no taxon at all. Taking the absolute value turned that -1 into taxon 1 and reported the root
-    // as a descendant; every other negative names a real taxon and stays.
+    // no taxon at all. Only the second is not a descendant.
     descendant_ids.extend(
         lineages_at_rank
             .iter()

@@ -44,7 +44,9 @@ impl Database {
 /// # Arguments
 /// * `conn` - Database connection handle
 /// * `accessions` - UniProt accession IDs to retrieve data for, in the order the answer should
-///   take. An id the database does not hold is left out rather than reported.
+///   take. An id the database does not hold is left out rather than reported. Deduplicate before
+///   calling: an id given twice is asked for twice and answered twice, where a set could not have
+///   expressed the repeat.
 ///
 /// # Returns
 /// * Vector of `UniprotEntry` records containing protein info from the database, in the order the

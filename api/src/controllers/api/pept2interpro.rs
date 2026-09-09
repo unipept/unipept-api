@@ -58,7 +58,6 @@ async fn handler(
 
     let interpro_store = datastore.interpro_store();
 
-    // One answer per distinct peptide, laid back over the input.
     let rows: HashMap<&str, Vec<InterproInformation>> = result
         .iter()
         .map(|item| {
@@ -76,7 +75,7 @@ async fn handler(
         })
         .collect();
 
-    Ok(laid_over_input(&input, &rows))
+    Ok(laid_over_input(&input, rows))
 }
 
 generate_handlers!(

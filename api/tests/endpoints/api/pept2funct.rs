@@ -92,22 +92,7 @@ async fn the_same_request_answers_identically() {
     assert_eq!(first, again);
 }
 
-/// A repeated peptide is searched once and answered at each position it occupies.
-///
-/// `pept2funct` reads three stores off one aggregation, so it is where searching twice cost most of
-/// the annotation endpoints. Each row is compared against the row the peptide gets alone.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_repeated_peptide_answers_at_each_position() {
-    let (status, once) = get_json(&format!("/api/v2/pept2funct?input[]={UNIQUE}&extra=true&domains=true")).await;
-    assert_eq!(status, StatusCode::OK);
-
-    let repeated = format!("input[]={UNIQUE}&input[]={GENUS_SHARED}&input[]={UNIQUE}&extra=true&domains=true");
-    let (status, body) = get_json(&format!("/api/v2/pept2funct?{repeated}")).await;
-    assert_eq!(status, StatusCode::OK);
-
-    let rows = body.as_array().expect("a list");
-    assert_eq!(rows.len(), 3, "one row per position: {body}");
-    assert_eq!(rows[0], once[0]);
-    assert_eq!(rows[2], once[0], "the second occurrence answers to the byte like the first");
-    assert_eq!(rows[1]["peptide"], GENUS_SHARED);
+    super::a_repeat_answers_like_a_single("pept2funct", "extra=true&domains=true").await;
 }

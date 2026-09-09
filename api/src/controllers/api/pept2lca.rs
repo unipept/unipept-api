@@ -78,7 +78,6 @@ async fn handler(
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
-    // One answer per distinct peptide, laid back over the input.
     let rows: HashMap<&str, Vec<LcaInformation>> = result
         .iter()
         .filter_map(|item| {
@@ -106,7 +105,7 @@ async fn handler(
         })
         .collect();
 
-    Ok(laid_over_input(&input, &rows))
+    Ok(laid_over_input(&input, rows))
 }
 
 generate_handlers! (

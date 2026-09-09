@@ -49,14 +49,12 @@ async fn handler(
     }: Parameters
 ) -> Result<Vec<EcInformation>, ApiError> {
     let input = sanitize_peptides(input);
-
     let distinct = distinct_peptides(&input);
 
     let result = tokio::task::block_in_place(|| index.analyse(&distinct, equate_il, false, Some(cutoff)));
 
     let ec_store = datastore.ec_store();
 
-    // One answer per distinct peptide, laid back over the input.
     let rows: HashMap<&str, Vec<EcInformation>> = result
         .iter()
         .map(|item| {
@@ -71,7 +69,7 @@ async fn handler(
         })
         .collect();
 
-    Ok(laid_over_input(&input, &rows))
+    Ok(laid_over_input(&input, rows))
 }
 
 generate_handlers!(

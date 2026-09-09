@@ -49,18 +49,12 @@ async fn handler(
     }: Parameters
 ) -> Result<Vec<EcInformation>, ApiError> {
     let input = sanitize_peptides(input);
-
-    // Each distinct peptide once. The search reads this list, so the results come back in its
-    // order, and a peptide named twice is searched once.
-    let distinct: Vec<String> = input.iter().cloned().unique().collect();
+    let distinct: Vec<String> = input.iter().unique().cloned().collect();
 
     let result = tokio::task::block_in_place(|| index.analyse(&distinct, equate_il, false, Some(cutoff)));
 
     let ec_store = datastore.ec_store();
 
-    // One answer per distinct peptide. Aggregating the annotations, ordering the terms and naming
-    // them out of the datastore all depend on the peptide alone, so a peptide asked for twenty
-    // times pays for them once.
     let answers: HashMap<&str, EcInformation> = result
         .iter()
         .map(|item| {
@@ -75,8 +69,7 @@ async fn handler(
         })
         .collect();
 
-    // Laid back over the input, so a peptide is answered at each position it was named at. A
-    // peptide the index matched nothing for has no answer and is passed over, as it is elsewhere.
+    // A peptide the index matched nothing for has no answer and takes no position.
     Ok(input.iter().filter_map(|peptide| answers.get(peptide.as_str()).cloned()).collect())
 }
 

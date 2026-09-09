@@ -14,7 +14,7 @@ pub use errors::{
 };
 pub use go_store::GoStore;
 pub use interpro_store::InterproStore;
-pub use lineage_store::{Lineage, LineageStore};
+pub use lineage_store::{Lineage, LineageStore, RANK_COUNT, RANK_NAMES};
 pub use reference_proteome_store::ReferenceProteomeStore;
 pub use sample_store::SampleStore;
 pub use taxon_store::{LineageRank, TaxonStore};

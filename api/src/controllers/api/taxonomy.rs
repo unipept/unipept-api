@@ -52,6 +52,9 @@ pub struct Taxon {
     taxon_rank: String
 }
 
+/// What a lineage holds at a rank with no taxon of its own.
+const NO_TAXON: i32 = -1;
+
 /// Retrieve all child IDs for a specific taxon.
 ///
 /// # Arguments
@@ -61,9 +64,6 @@ pub struct Taxon {
 /// * `descendants_rank` - The rank from which the children should be retrieved.
 /// * `lineage_store` - A reference to the LineageStore that can be used to retrieve lineages and
 ///   taxonomic information from the database.
-/// What a lineage holds at a rank with no taxon of its own.
-const NO_TAXON: i32 = -1;
-
 fn get_children_at_rank(
     taxon_id: u32,
     rank: LineageRank,

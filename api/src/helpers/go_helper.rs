@@ -8,7 +8,7 @@ use crate::helpers::{family_from_list, family_from_map, grouped_by_domain, is_ze
 /// The prefix a GO annotation carries in the aggregated counts, and keeps in the response.
 const PREFIX: &str = "GO:";
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(untagged)]
 pub enum GoTerm {
     Default {
@@ -24,7 +24,7 @@ pub enum GoTerm {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(untagged)]
 pub enum GoTerms {
     Default(Vec<GoTerm>),

@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
+use itertools::Itertools;
+
 pub mod ec_helper;
 pub mod fa_helper;
 pub mod filters;
@@ -52,6 +54,31 @@ pub fn grouped_by_domain<T>(terms: impl Iterator<Item = (String, T)>) -> Vec<Has
     domains.into_iter().map(|(domain, terms)| HashMap::from([(domain, terms)])).collect()
 }
 
+/// The distinct peptides of an input, in first-appearance order.
+///
+/// The index is searched with this rather than with the input, so a peptide named twice is searched
+/// once. `search_all_peptides` answers in the order of the list it is given, so this order is what
+/// [`laid_over_input`] reads the results back out of.
+pub fn distinct_peptides(input: &[String]) -> Vec<String> {
+    input.iter().cloned().unique().collect()
+}
+
+/// Lays the rows built for each distinct peptide back over the input that asked for them.
+///
+/// A peptide named twice was searched once, so its rows are copied to each position it occupies. A
+/// peptide the index matched nothing for has no rows, and takes no position rather than an empty
+/// one.
+///
+/// Copying is what makes searching once worth doing rather than what it costs: a row of forty terms
+/// copies in under two microseconds, where aggregating the proteins behind it again takes half a
+/// millisecond for a thousand proteins and five for ten thousand.
+///
+/// The rows of one peptide are a list because two endpoints answer with more than one — `pept2taxa`
+/// with a row per taxon, `pept2prot` with a row per protein. The rest hold a list of one.
+pub fn laid_over_input<T: Clone>(input: &[String], rows: &HashMap<&str, Vec<T>>) -> Vec<T> {
+    input.iter().filter_map(|peptide| rows.get(peptide.as_str())).flatten().cloned().collect()
+}
+
 pub fn sanitize_peptides(peptides: Vec<String>) -> Vec<String> {
     peptides.into_iter().map(|s| s.trim_end().to_uppercase()).collect()
 }
@@ -63,6 +90,49 @@ pub fn sanitize_proteins(proteins: Vec<String>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_peptide_named_twice_is_searched_once() {
+        let input = ["AAA".to_string(), "BBB".to_string(), "AAA".to_string()];
+
+        assert_eq!(distinct_peptides(&input), vec!["AAA".to_string(), "BBB".to_string()]);
+    }
+
+    #[test]
+    fn the_rows_of_one_peptide_land_at_each_of_its_positions() {
+        let input = ["AAA".to_string(), "BBB".to_string(), "AAA".to_string()];
+        let rows = HashMap::from([("AAA", vec!["a"]), ("BBB", vec!["b"])]);
+
+        assert_eq!(laid_over_input(&input, &rows), vec!["a", "b", "a"]);
+    }
+
+    /// A peptide the index matched nothing for is not in the map, and takes no position rather than
+    /// shifting the peptides after it.
+    #[test]
+    fn a_peptide_with_no_rows_takes_no_position() {
+        let input = ["AAA".to_string(), "MISSING".to_string(), "BBB".to_string()];
+        let rows = HashMap::from([("AAA", vec!["a"]), ("BBB", vec!["b"])]);
+
+        assert_eq!(laid_over_input(&input, &rows), vec!["a", "b"]);
+    }
+
+    /// `pept2taxa` and `pept2prot` answer with more than one row per peptide, and each repeat
+    /// carries all of them.
+    #[test]
+    fn a_peptide_answering_with_several_rows_repeats_all_of_them() {
+        let input = ["AAA".to_string(), "AAA".to_string()];
+        let rows = HashMap::from([("AAA", vec!["a1", "a2"])]);
+
+        assert_eq!(laid_over_input(&input, &rows), vec!["a1", "a2", "a1", "a2"]);
+    }
+
+    #[test]
+    fn no_input_answers_with_nothing() {
+        let rows: HashMap<&str, Vec<&str>> = HashMap::from([("AAA", vec!["a"])]);
+
+        assert!(laid_over_input(&[], &rows).is_empty());
+        assert!(distinct_peptides(&[]).is_empty());
+    }
 
     #[test]
     fn the_most_frequent_term_comes_first() {

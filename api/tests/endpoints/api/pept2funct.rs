@@ -59,10 +59,9 @@ async fn a_protein_with_no_annotations_still_answers() {
     assert_eq!(body[0]["ec"].as_array().map(Vec::len), Some(0));
 }
 
-/// The terms come out of a `HashMap`, so before #204 their order was whatever that map iterated
-/// in. The rule now is: most frequent first, ties broken on the identifier.
+/// The terms come out most frequent first, ties broken on the identifier.
 ///
-/// `AAGGK` states both halves of it. Its InterPro entries rank 2 before 1, which alphabetical
+/// `AAGGK` states both halves of the rule. Its InterPro entries rank 2 before 1, which alphabetical
 /// order alone would reverse; its two GO terms both count 2, so only the tiebreak separates them.
 #[tokio::test(flavor = "multi_thread")]
 async fn terms_come_back_most_frequent_first() {
@@ -80,8 +79,8 @@ async fn terms_come_back_most_frequent_first() {
     assert_eq!(body[0]["go"][1]["go_term"], "GO:0009279");
 }
 
-/// Two `HashMap`s in one thread hash with different seeds, so this compares two separately built
-/// answers rather than one map read twice.
+/// Two `HashMap`s in one thread hash with different seeds, so the two calls here build their
+/// answers separately rather than reading one map twice.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_same_request_answers_identically() {
     let query = format!("/api/v2/pept2funct?input[]={COMMON}&equate_il=true&extra=true&domains=true");

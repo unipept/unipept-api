@@ -14,12 +14,7 @@ pub struct FunctionalAggregation {
     pub data: HashMap<String, u32>
 }
 
-/// Writes a map in key order. `mpa/pept2data` serialises both fields as they stand, and serde
-/// writes a `HashMap` in its iteration order, which Rust randomises per process. Two identical
-/// requests would otherwise answer with byte-different bodies, which no cache can deduplicate.
-///
-/// The map itself stays a `HashMap`: `calculate_fa` looks a key up once per annotation occurrence,
-/// while this runs once per response over the terms that response reports.
+/// Writes a map in key order.
 fn in_key_order<S, V>(map: &HashMap<String, V>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -144,9 +139,8 @@ mod tests {
         assert_eq!(fa.data.get("GO:0001"), Some(&2));
     }
 
-    /// `mpa/pept2data` serialises both maps as they stand. A `HashMap` writes in its own iteration
-    /// order, which is random per process, so two identical requests answered with byte-different
-    /// bodies.
+    /// `mpa/pept2data` serialises both maps as they stand, so their key order is part of the
+    /// response body.
     #[test]
     fn the_maps_serialise_in_key_order() {
         let (a, b) = (encoded("GO:0002;EC:1.1.1.1"), encoded("GO:0001"));

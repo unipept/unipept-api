@@ -31,10 +31,13 @@ macro_rules! create_lineages {
 
             pub fn get_lineage(taxon_id: u32, lineage_store: &LineageStore) -> Option<Lineage> {
                 let lineage = lineage_store.get(taxon_id)?;
+                // A struct expression evaluates its fields in the order they are written, and that
+                // order is the order the ranks are declared in, so the columns line up.
+                let mut ranks = lineage.ranks.iter().copied();
 
                 Some(Lineage {
                     $(
-                        [<$field _id>]: get_id(lineage.$field),
+                        [<$field _id>]: get_id(ranks.next().flatten()),
                     )*
                 })
             }
@@ -50,30 +53,29 @@ macro_rules! create_lineages {
             pub fn get_lineage_array(taxon_id: u32, lineage_store: &LineageStore) -> Vec<Option<i32>> {
                 let lineage = lineage_store.get(taxon_id).cloned().unwrap_or_default();
 
-                vec![
-                    $(
-                        get_id(lineage.$field),
-                    )*
-                ]
+                lineage.ranks.iter().map(|&id| get_id(id)).collect()
             }
 
             pub fn get_lineage_array_numeric(taxon_id: u32, lineage_store: &LineageStore) -> Vec<i32> {
                 let lineage = lineage_store.get(taxon_id).cloned().unwrap_or_default();
 
-                vec![
-                    $(
-                        get_id(lineage.$field).unwrap_or(0),
-                    )*
-                ]
+                lineage.ranks.iter().map(|&id| get_id(id).unwrap_or(0)).collect()
             }
 
             pub fn get_lineage_with_names(taxon_id: u32, lineage_store: &LineageStore, taxon_store: &TaxonStore) -> Option<LineageWithNames> {
                 let lineage = lineage_store.get(taxon_id)?;
 
+                // Bound in declaration order, so each rank is read once and used for both its id
+                // and its name.
+                let mut ranks = lineage.ranks.iter().copied();
+                $(
+                    let $field = ranks.next().flatten();
+                )*
+
                 Some(LineageWithNames {
                     $(
-                        [<$field _id>]: get_id(lineage.$field),
-                        [<$field _name>]: get_name(lineage.$field, taxon_store)
+                        [<$field _id>]: get_id($field),
+                        [<$field _name>]: get_name($field, taxon_store)
                     ),*
                 })
             }

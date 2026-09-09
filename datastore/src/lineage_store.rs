@@ -9,102 +9,62 @@ use serde::Serialize;
 
 use crate::{errors::LineageStoreError, taxon_store::LineageRank};
 
-/// Declares the lineage columns once: the struct that holds them, the index each answers to, and
-/// the name that addresses it.
+/// The lineage columns, in the order a lineage row carries them.
 ///
-/// The order is the order of the columns in the lineage file, and every one of the three follows
-/// from it, so a rank cannot be added to one and forgotten in another.
-macro_rules! lineage_columns {
-    ($($rank:ident),*) => {
-        #[derive(Clone, Debug, Serialize, Default)]
-        pub struct Lineage {
-            $(pub $rank: Option<i32>),*
-        }
+/// The one place they are named. Every index below is a position in this list, and
+/// [`Lineage::ranks`] holds one value per entry.
+pub const RANK_NAMES: [&str; RANK_COUNT] = [
+    "domain",
+    "realm",
+    "kingdom",
+    "subkingdom",
+    "superphylum",
+    "phylum",
+    "subphylum",
+    "superclass",
+    "class",
+    "subclass",
+    "superorder",
+    "order",
+    "suborder",
+    "infraorder",
+    "superfamily",
+    "family",
+    "subfamily",
+    "tribe",
+    "subtribe",
+    "genus",
+    "subgenus",
+    "species_group",
+    "species_subgroup",
+    "species",
+    "subspecies",
+    "strain",
+    "varietas",
+    "forma"
+];
 
-        impl Lineage {
-            /// Fills every column from one row's parsed values, in declaration order.
-            pub fn set_ranks(&mut self, values: &[Option<i32>]) {
-                let mut index = 0;
-                $(
-                    self.$rank = values.get(index).copied().flatten();
-                    index += 1;
-                )*
-                let _ = index;
-            }
-
-            /// The id at a rank index, in the order the columns are declared in.
-            pub fn get_rank(&self, rank_index: usize) -> Option<i32> {
-                let mut index = 0;
-                $(
-                    if index == rank_index {
-                        return self.$rank;
-                    }
-                    index += 1;
-                )*
-                let _ = index;
-                None
-            }
-        }
-
-        impl LineageStore {
-            /// The index a rank name addresses, or `None` for a name no column carries.
-            fn index_of(name: &str) -> Option<usize> {
-                let mut index = 0;
-                $(
-                    if name == stringify!($rank) {
-                        return Some(index);
-                    }
-                    index += 1;
-                )*
-                let _ = index;
-                None
-            }
-        }
-
-        /// Every column name, in order.
-        pub const RANK_NAMES: [&str; RANK_COUNT] = [$(stringify!($rank)),*];
-    };
-}
-
-/// How many columns a lineage row carries after its taxon id.
+/// How many rank columns a lineage row carries after its taxon id.
 pub const RANK_COUNT: usize = 28;
 
-lineage_columns!(
-    domain,
-    realm,
-    kingdom,
-    subkingdom,
-    superphylum,
-    phylum,
-    subphylum,
-    superclass,
-    class,
-    subclass,
-    superorder,
-    order,
-    suborder,
-    infraorder,
-    superfamily,
-    family,
-    subfamily,
-    tribe,
-    subtribe,
-    genus,
-    subgenus,
-    species_group,
-    species_subgroup,
-    species,
-    subspecies,
-    strain,
-    varietas,
-    forma
-);
+/// One taxon's ancestor at each rank, indexed by position in [`RANK_NAMES`].
+///
+/// A rank the lineage records nothing at holds `None`; one it records an invalid taxon at holds a
+/// negative id.
+#[derive(Clone, Debug, Serialize, Default)]
+pub struct Lineage {
+    pub ranks: [Option<i32>; RANK_COUNT]
+}
 
 impl Lineage {
-    /// Retrieves the ID of this lineage at a specific rank name. If the provided rank is invalid
-    /// None is returned.
+    /// The id at a rank name, or `None` for a name no column carries.
     pub fn get_taxon_id_at_rank(&self, rank_name: &str) -> Option<i32> {
         self.get_rank(LineageStore::rank_to_idx(rank_name)?)
+    }
+
+    /// The id at a position in [`RANK_NAMES`].
+    pub fn get_rank(&self, rank_index: usize) -> Option<i32> {
+        self.ranks.get(rank_index).copied().flatten()
     }
 }
 
@@ -133,7 +93,7 @@ impl LineageStore {
     pub fn rank_to_idx(s: &str) -> Option<usize> {
         let key = if s.contains(' ') { Cow::Owned(s.replace(' ', "_")) } else { Cow::Borrowed(s) };
 
-        Self::index_of(key.as_ref())
+        RANK_NAMES.iter().position(|name| *name == key)
     }
 
     pub fn try_from_file(file: &str) -> Result<Self, LineageStoreError> {
@@ -188,9 +148,9 @@ impl LineageStore {
                 });
             }
 
-            let mut lin = Lineage::default();
-            lin.set_ranks(&parts);
-            let lin = Arc::new(lin);
+            let mut ranks = [None; RANK_COUNT];
+            ranks.copy_from_slice(&parts);
+            let lin = Arc::new(Lineage { ranks });
 
             mapper.insert(taxon_id, Arc::clone(&lin));
 
@@ -239,9 +199,11 @@ mod tests {
     #[test]
     fn every_rank_key_addresses_its_own_column() {
         // A different value in every column, so a name reading the wrong one is visible.
-        let mut lineage = Lineage::default();
-        let columns: Vec<Option<i32>> = (0..RANK_COUNT).map(|position| Some(position as i32 + 1000)).collect();
-        lineage.set_ranks(&columns);
+        let mut ranks = [None; RANK_COUNT];
+        for (position, rank) in ranks.iter_mut().enumerate() {
+            *rank = Some(position as i32 + 1000);
+        }
+        let lineage = Lineage { ranks };
 
         for (position, key) in RANK_NAMES.iter().enumerate() {
             assert_eq!(LineageStore::rank_to_idx(key), Some(position), "rank_to_idx({key})");

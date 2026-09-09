@@ -94,12 +94,12 @@ fn lineage_store_records_an_unrecorded_rank_as_none() {
     // than as a zero that compares equal to another lineage's missing class.
     let lineage = store.lineage_store().get(fixtures::taxa::CROCODYLUS_NILOTICUS).expect("8501 has a lineage");
 
-    assert_eq!(lineage.class, None);
-    assert_eq!(lineage.domain, Some(2759));
-    assert_eq!(lineage.superclass, Some(fixtures::taxa::SARCOPTERYGII as i32));
-    assert_eq!(lineage.family, Some(fixtures::taxa::CROCODYLIDAE as i32));
-    assert_eq!(lineage.genus, Some(fixtures::taxa::CROCODYLUS as i32));
-    assert_eq!(lineage.species, Some(fixtures::taxa::CROCODYLUS_NILOTICUS as i32));
+    assert_eq!(lineage.get_taxon_id_at_rank("class"), None);
+    assert_eq!(lineage.get_taxon_id_at_rank("domain"), Some(2759));
+    assert_eq!(lineage.get_taxon_id_at_rank("superclass"), Some(fixtures::taxa::SARCOPTERYGII as i32));
+    assert_eq!(lineage.get_taxon_id_at_rank("family"), Some(fixtures::taxa::CROCODYLIDAE as i32));
+    assert_eq!(lineage.get_taxon_id_at_rank("genus"), Some(fixtures::taxa::CROCODYLUS as i32));
+    assert_eq!(lineage.get_taxon_id_at_rank("species"), Some(fixtures::taxa::CROCODYLUS_NILOTICUS as i32));
 }
 
 #[test]
@@ -110,9 +110,9 @@ fn lineage_store_resolves_a_lineage_that_diverges_at_class() {
     // not, which is exactly why their common ancestor sits above it.
     let lineage = store.lineage_store().get(fixtures::taxa::ALOUATTA_SENICULUS).expect("9503 has a lineage");
 
-    assert_eq!(lineage.class, Some(40674));
-    assert_eq!(lineage.superclass, Some(fixtures::taxa::SARCOPTERYGII as i32));
-    assert_eq!(lineage.species, Some(fixtures::taxa::ALOUATTA_SENICULUS as i32));
+    assert_eq!(lineage.get_taxon_id_at_rank("class"), Some(40674));
+    assert_eq!(lineage.get_taxon_id_at_rank("superclass"), Some(fixtures::taxa::SARCOPTERYGII as i32));
+    assert_eq!(lineage.get_taxon_id_at_rank("species"), Some(fixtures::taxa::ALOUATTA_SENICULUS as i32));
 }
 
 #[test]

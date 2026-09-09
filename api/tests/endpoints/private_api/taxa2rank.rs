@@ -106,8 +106,7 @@ async fn no_taxa_is_an_empty_answer() {
 
 /// `rank` is read spelled either way, so a caller can hand back the name a response carries.
 ///
-/// Only the separator is normalised. Whether the name is matched without regard to case is a
-/// separate question, settled in #200.
+/// Only the separator is normalised: the name is matched with regard to case.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_rank_is_read_with_a_space_or_an_underscore() {
     let taxa = json!([[fixtures::taxa::MELANOGASTER_SUBGROUP]]);

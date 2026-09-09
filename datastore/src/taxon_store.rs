@@ -5,42 +5,64 @@ use std::{
     str::FromStr
 };
 
-use crate::{errors::TaxonStoreError, lineage_store::LineageStore};
+use crate::{errors::TaxonStoreError, lineage_store::RANK_COUNT};
 
 pub type TaxonInformation = (String, LineageRank, bool);
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum LineageRank {
-    NoRank,
-    Domain,
-    Realm,
-    Kingdom,
-    Subkingdom,
-    Superphylum,
-    Phylum,
-    Subphylum,
-    Superclass,
-    Class,
-    Subclass,
-    Superorder,
-    Order,
-    Suborder,
-    Infraorder,
-    Superfamily,
-    Family,
-    Subfamily,
-    Tribe,
-    Subtribe,
-    Genus,
-    Subgenus,
-    SpeciesGroup,
-    SpeciesSubgroup,
-    Species,
-    Subspecies,
-    Strain,
-    Varietas,
-    Forma
+/// Declares every rank a taxon can carry, from the list the lineage columns are declared in.
+///
+/// The variant, the name it is written as, its position among the lineage columns and the parse
+/// back all follow from one entry, so a rank cannot be added to one table and missed in another.
+macro_rules! lineage_ranks {
+    ($($rank:ident => $written:literal),*) => {
+        pastey::paste! {
+            #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+            pub enum LineageRank {
+                NoRank,
+                $([<$rank:camel>]),*
+            }
+
+            impl LineageRank {
+                /// The ranks a lineage row carries, in the order `LineageStore` reads its columns.
+                ///
+                /// `NoRank` is not among them: it is a rank a taxon can have, not a column a
+                /// lineage has.
+                pub const LINEAGE_ORDER: [LineageRank; RANK_COUNT] = [$(LineageRank::[<$rank:camel>]),*];
+
+                /// The rank name as the taxon table spells it, and as every response carries it.
+                ///
+                /// Three ranks are written with a space where the lineage column keys them with an
+                /// underscore, which is why the list carries both spellings.
+                pub fn as_str(&self) -> &'static str {
+                    match self {
+                        LineageRank::NoRank => "no rank",
+                        $(LineageRank::[<$rank:camel>] => $written),*
+                    }
+                }
+
+                /// The lineage column this rank addresses, as a position in
+                /// [`Self::LINEAGE_ORDER`]. `NoRank` addresses none.
+                pub fn lineage_index(&self) -> Option<usize> {
+                    Self::LINEAGE_ORDER.iter().position(|rank| rank == self)
+                }
+            }
+
+            impl FromStr for LineageRank {
+                type Err = TaxonStoreError;
+
+                fn from_str(s: &str) -> Result<Self, Self::Err> {
+                    match s {
+                        "no rank" => Ok(Self::NoRank),
+                        $($written => Ok(Self::[<$rank:camel>]),)*
+                        _ => Err(TaxonStoreError::InvalidRankError(s.to_string()))
+                    }
+                }
+            }
+        }
+    };
 }
+
+crate::with_ranks!(lineage_ranks);
 
 impl fmt::Display for LineageRank {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -108,129 +130,6 @@ impl TaxonStore {
     }
 }
 
-impl LineageRank {
-    /// The 28 ranks a lineage row carries, in the order `LineageStore` reads its columns.
-    ///
-    /// `NoRank` is not among them: it is a rank a taxon can have, not a column a lineage has.
-    /// `LineageStore::rank_to_idx` indexes the same ranks in the same order, and
-    /// `the_lineage_order_matches_the_column_index` holds the two together.
-    pub const LINEAGE_ORDER: [LineageRank; LineageStore::AMOUNT_OF_RANKS] = [
-        LineageRank::Domain,
-        LineageRank::Realm,
-        LineageRank::Kingdom,
-        LineageRank::Subkingdom,
-        LineageRank::Superphylum,
-        LineageRank::Phylum,
-        LineageRank::Subphylum,
-        LineageRank::Superclass,
-        LineageRank::Class,
-        LineageRank::Subclass,
-        LineageRank::Superorder,
-        LineageRank::Order,
-        LineageRank::Suborder,
-        LineageRank::Infraorder,
-        LineageRank::Superfamily,
-        LineageRank::Family,
-        LineageRank::Subfamily,
-        LineageRank::Tribe,
-        LineageRank::Subtribe,
-        LineageRank::Genus,
-        LineageRank::Subgenus,
-        LineageRank::SpeciesGroup,
-        LineageRank::SpeciesSubgroup,
-        LineageRank::Species,
-        LineageRank::Subspecies,
-        LineageRank::Strain,
-        LineageRank::Varietas,
-        LineageRank::Forma
-    ];
-
-    /// The rank name as the taxon table spells it, and as every response carries it.
-    ///
-    /// `Display` and `From<LineageRank> for String` both read this table.
-    /// `FromStr` holds the same names in its own match, so that reading a rank is a switch rather
-    /// than a scan; `every_rank_round_trips_through_its_string_form` is what holds the two together.
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            LineageRank::NoRank => "no rank",
-            LineageRank::Domain => "domain",
-            LineageRank::Realm => "realm",
-            LineageRank::Kingdom => "kingdom",
-            LineageRank::Subkingdom => "subkingdom",
-            LineageRank::Superphylum => "superphylum",
-            LineageRank::Phylum => "phylum",
-            LineageRank::Subphylum => "subphylum",
-            LineageRank::Superclass => "superclass",
-            LineageRank::Class => "class",
-            LineageRank::Subclass => "subclass",
-            LineageRank::Superorder => "superorder",
-            LineageRank::Order => "order",
-            LineageRank::Suborder => "suborder",
-            LineageRank::Infraorder => "infraorder",
-            LineageRank::Superfamily => "superfamily",
-            LineageRank::Family => "family",
-            LineageRank::Subfamily => "subfamily",
-            LineageRank::Tribe => "tribe",
-            LineageRank::Subtribe => "subtribe",
-            LineageRank::Genus => "genus",
-            LineageRank::Subgenus => "subgenus",
-            LineageRank::SpeciesGroup => "species group",
-            LineageRank::SpeciesSubgroup => "species subgroup",
-            LineageRank::Species => "species",
-            LineageRank::Subspecies => "subspecies",
-            LineageRank::Strain => "strain",
-            LineageRank::Varietas => "varietas",
-            LineageRank::Forma => "forma"
-        }
-    }
-
-    /// The lineage column this rank addresses, as a position in [`Self::LINEAGE_ORDER`].
-    ///
-    /// `NoRank` is not in that table, so it addresses no column.
-    pub fn lineage_index(&self) -> Option<usize> {
-        Self::LINEAGE_ORDER.iter().position(|rank| rank == self)
-    }
-}
-
-impl FromStr for LineageRank {
-    type Err = TaxonStoreError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "no rank" => Ok(Self::NoRank),
-            "domain" => Ok(Self::Domain),
-            "realm" => Ok(Self::Realm),
-            "kingdom" => Ok(Self::Kingdom),
-            "subkingdom" => Ok(Self::Subkingdom),
-            "superphylum" => Ok(Self::Superphylum),
-            "phylum" => Ok(Self::Phylum),
-            "subphylum" => Ok(Self::Subphylum),
-            "superclass" => Ok(Self::Superclass),
-            "class" => Ok(Self::Class),
-            "subclass" => Ok(Self::Subclass),
-            "superorder" => Ok(Self::Superorder),
-            "order" => Ok(Self::Order),
-            "suborder" => Ok(Self::Suborder),
-            "infraorder" => Ok(Self::Infraorder),
-            "superfamily" => Ok(Self::Superfamily),
-            "family" => Ok(Self::Family),
-            "subfamily" => Ok(Self::Subfamily),
-            "tribe" => Ok(Self::Tribe),
-            "subtribe" => Ok(Self::Subtribe),
-            "genus" => Ok(Self::Genus),
-            "subgenus" => Ok(Self::Subgenus),
-            "species group" => Ok(Self::SpeciesGroup),
-            "species subgroup" => Ok(Self::SpeciesSubgroup),
-            "species" => Ok(Self::Species),
-            "subspecies" => Ok(Self::Subspecies),
-            "strain" => Ok(Self::Strain),
-            "varietas" => Ok(Self::Varietas),
-            "forma" => Ok(Self::Forma),
-            _ => Err(TaxonStoreError::InvalidRankError(s.to_string()))
-        }
-    }
-}
-
 impl From<LineageRank> for String {
     fn from(val: LineageRank) -> Self {
         val.as_str().to_string()
@@ -240,6 +139,7 @@ impl From<LineageRank> for String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lineage_store::LineageStore;
 
     /// Every rank the taxon table can hold: the lineage columns, plus the one that is not a column.
     fn all_ranks() -> Vec<LineageRank> {

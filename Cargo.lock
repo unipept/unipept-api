@@ -953,6 +953,7 @@ name = "datastore"
 version = "2.3.2"
 dependencies = [
  "fixtures",
+ "pastey",
  "serde",
  "serde_json",
  "tempfile",

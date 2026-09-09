@@ -1,10 +1,19 @@
-pub mod v2;
+/// The response shapes of a lineage, generated from the column names the datastore declares.
+pub mod columns {
+    use datastore::{LineageStore, TaxonStore};
+    pub use pastey::paste;
+    use serde::Serialize;
+
+    use super::create_lineages;
+
+    datastore::with_ranks!(create_lineages);
+}
 
 use datastore::{LineageStore, TaxonStore};
 use serde::Serialize;
 
 macro_rules! create_lineages {
-    ($($field:ident),*) => {
+    ($($field:ident => $written:literal),*) => {
         paste! {
             #[derive(Serialize, Default, Debug)]
             pub struct Lineage {
@@ -104,31 +113,31 @@ pub enum LineageVersion {
 #[serde(untagged)]
 #[allow(clippy::large_enum_variant)]
 pub enum Lineage {
-    DefaultV2(v2::Lineage),
-    NamesV2(v2::LineageWithNames)
+    DefaultV2(columns::Lineage),
+    NamesV2(columns::LineageWithNames)
 }
 
 pub fn get_lineage(taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore) -> Option<Lineage> {
     match version {
-        LineageVersion::V2 => v2::get_lineage(taxon_id, lineage_store).map(Lineage::DefaultV2)
+        LineageVersion::V2 => columns::get_lineage(taxon_id, lineage_store).map(Lineage::DefaultV2)
     }
 }
 
 pub fn get_empty_lineage(version: LineageVersion) -> Option<Lineage> {
     match version {
-        LineageVersion::V2 => v2::get_empty_lineage().map(Lineage::DefaultV2)
+        LineageVersion::V2 => columns::get_empty_lineage().map(Lineage::DefaultV2)
     }
 }
 
 pub fn get_lineage_array(taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore) -> Vec<Option<i32>> {
     match version {
-        LineageVersion::V2 => v2::get_lineage_array(taxon_id, lineage_store)
+        LineageVersion::V2 => columns::get_lineage_array(taxon_id, lineage_store)
     }
 }
 
 pub fn get_lineage_array_numeric(taxon_id: u32, version: LineageVersion, lineage_store: &LineageStore) -> Vec<i32> {
     match version {
-        LineageVersion::V2 => v2::get_lineage_array_numeric(taxon_id, lineage_store)
+        LineageVersion::V2 => columns::get_lineage_array_numeric(taxon_id, lineage_store)
     }
 }
 
@@ -138,12 +147,12 @@ pub fn get_lineage_with_names(
     lineage_store: &LineageStore,
     taxon_store: &TaxonStore
 ) -> Option<Lineage> {
-    v2::get_lineage_with_names(taxon_id, lineage_store, taxon_store).map(Lineage::NamesV2)
+    columns::get_lineage_with_names(taxon_id, lineage_store, taxon_store).map(Lineage::NamesV2)
 }
 
 pub fn get_empty_lineage_with_names(version: LineageVersion) -> Option<Lineage> {
     match version {
-        LineageVersion::V2 => v2::get_empty_lineage_with_names().map(Lineage::NamesV2)
+        LineageVersion::V2 => columns::get_empty_lineage_with_names().map(Lineage::NamesV2)
     }
 }
 

@@ -9,43 +9,57 @@ use serde::Serialize;
 
 use crate::{errors::LineageStoreError, taxon_store::LineageRank};
 
-/// The lineage columns, in the order a lineage row carries them.
+/// Hands the lineage ranks to a macro that expands them, in column order.
 ///
-/// The one place they are named. Every index below is a position in this list, and
-/// [`Lineage::ranks`] holds one value per entry.
-pub const RANK_NAMES: [&str; RANK_COUNT] = [
-    "domain",
-    "realm",
-    "kingdom",
-    "subkingdom",
-    "superphylum",
-    "phylum",
-    "subphylum",
-    "superclass",
-    "class",
-    "subclass",
-    "superorder",
-    "order",
-    "suborder",
-    "infraorder",
-    "superfamily",
-    "family",
-    "subfamily",
-    "tribe",
-    "subtribe",
-    "genus",
-    "subgenus",
-    "species_group",
-    "species_subgroup",
-    "species",
-    "subspecies",
-    "strain",
-    "varietas",
-    "forma"
-];
+/// The one place they are named. Each is given as the identifier the lineage column is keyed on
+/// and the name the taxonomy writes, which differ for the three that hold a space.
+#[macro_export]
+macro_rules! with_ranks {
+    ($receiver:ident) => {
+        $receiver!(
+            domain => "domain",
+            realm => "realm",
+            kingdom => "kingdom",
+            subkingdom => "subkingdom",
+            superphylum => "superphylum",
+            phylum => "phylum",
+            subphylum => "subphylum",
+            superclass => "superclass",
+            class => "class",
+            subclass => "subclass",
+            superorder => "superorder",
+            order => "order",
+            suborder => "suborder",
+            infraorder => "infraorder",
+            superfamily => "superfamily",
+            family => "family",
+            subfamily => "subfamily",
+            tribe => "tribe",
+            subtribe => "subtribe",
+            genus => "genus",
+            subgenus => "subgenus",
+            species_group => "species group",
+            species_subgroup => "species subgroup",
+            species => "species",
+            subspecies => "subspecies",
+            strain => "strain",
+            varietas => "varietas",
+            forma => "forma"
+        );
+    };
+}
+
+macro_rules! rank_names {
+    ($($rank:ident => $written:literal),*) => {
+        /// Every lineage column, in order, keyed as the lineage file writes them.
+        pub const RANK_NAMES: &[&str] = &[$(stringify!($rank)),*];
+    };
+}
+
+with_ranks!(rank_names);
 
 /// How many rank columns a lineage row carries after its taxon id.
-pub const RANK_COUNT: usize = 28;
+pub const RANK_COUNT: usize = RANK_NAMES.len();
 
 /// One taxon's ancestor at each rank, indexed by position in [`RANK_NAMES`].
 ///

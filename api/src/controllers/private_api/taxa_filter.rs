@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, convert::Infallible};
+use std::convert::Infallible;
 
 use axum::{Json, extract::State};
 use datastore::LineageRank;
@@ -6,7 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
-    controllers::{generate_handlers, private_api::default_sort_descending, request::Flag},
+    controllers::{
+        generate_handlers,
+        private_api::{default_sort_descending, reversed_when_descending},
+        request::Flag
+    },
     errors::ApiError
 };
 
@@ -104,17 +108,16 @@ async fn filter_handler(
     //
     // `sort_descending` reverses the whole ordering, tiebreak included, so a descending page is the
     // reverse of the ascending one.
-    let reversed_when_descending = |ordering: Ordering| if sort_descending { ordering.reverse() } else { ordering };
 
     match sort_by.as_str() {
         "name" => filtered_taxa.sort_by(|a, b| {
-            reversed_when_descending((&taxon_store.mapper[a].0, a).cmp(&(&taxon_store.mapper[b].0, b)))
+            reversed_when_descending((&taxon_store.mapper[a].0, a).cmp(&(&taxon_store.mapper[b].0, b)), sort_descending)
         }),
         "rank" => filtered_taxa.sort_by(|a, b| {
-            reversed_when_descending((&taxon_store.mapper[a].1, a).cmp(&(&taxon_store.mapper[b].1, b)))
+            reversed_when_descending((&taxon_store.mapper[a].1, a).cmp(&(&taxon_store.mapper[b].1, b)), sort_descending)
         }),
         // An id is unique, so it is a total order on its own.
-        _ => filtered_taxa.sort_by(|a, b| reversed_when_descending(a.cmp(b)))
+        _ => filtered_taxa.sort_by(|a, b| reversed_when_descending(a.cmp(b), sort_descending))
     }
 
     // Take the range [start, end), which is empty when `end` is not past `start`.

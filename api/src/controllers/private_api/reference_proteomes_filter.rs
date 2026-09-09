@@ -1,11 +1,15 @@
-use std::{cmp::Ordering, convert::Infallible};
+use std::convert::Infallible;
 
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
-    controllers::{generate_handlers, private_api::default_sort_descending, request::Flag},
+    controllers::{
+        generate_handlers,
+        private_api::{default_sort_descending, reversed_when_descending},
+        request::Flag
+    },
     errors::ApiError
 };
 
@@ -100,19 +104,20 @@ async fn filter_handler(
     //
     // `sort_descending` reverses the whole ordering, tiebreak included, so a descending page is the
     // reverse of the ascending one.
-    let reversed_when_descending = |ordering: Ordering| if sort_descending { ordering.reverse() } else { ordering };
 
     match sort_by.as_str() {
         "taxon_name" => filtered_proteomes.sort_by(|(a_id, (a_taxon_id, _, _)), (b_id, (b_taxon_id, _, _))| {
             let a_name = get_taxon_name_by_id(datastore.taxon_store(), *a_taxon_id);
             let b_name = get_taxon_name_by_id(datastore.taxon_store(), *b_taxon_id);
-            reversed_when_descending((a_name, a_id).cmp(&(b_name, b_id)))
+            reversed_when_descending((a_name, a_id).cmp(&(b_name, b_id)), sort_descending)
         }),
         "protein_count" => filtered_proteomes.sort_by(|(a_id, (_, a_count, _)), (b_id, (_, b_count, _))| {
-            reversed_when_descending((a_count, a_id).cmp(&(b_count, b_id)))
+            reversed_when_descending((a_count, a_id).cmp(&(b_count, b_id)), sort_descending)
         }),
         // A proteome id is unique, so it is a total order on its own.
-        _ => filtered_proteomes.sort_by(|(a_id, _), (b_id, _)| reversed_when_descending(a_id.cmp(b_id)))
+        _ => {
+            filtered_proteomes.sort_by(|(a_id, _), (b_id, _)| reversed_when_descending(a_id.cmp(b_id), sort_descending))
+        }
     }
 
     // Take the range [start, end), which is empty when `end` is not past `start`.

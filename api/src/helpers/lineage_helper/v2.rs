@@ -1,5 +1,5 @@
 use datastore::{LineageStore, TaxonStore};
-pub use paste::paste;
+pub use pastey::paste;
 use serde::Serialize;
 
 use super::create_lineages;

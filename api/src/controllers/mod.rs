@@ -16,7 +16,7 @@ macro_rules! generate_handlers {
             $state_pattern: State<$state_type>
         ) -> Result<$ret, $err> $body
 
-        paste::paste! {
+        pastey::paste! {
             pub async fn [<get_ $handler_name>](
                 state: State<$state_type>
             ) -> Result<$ret, $err> {
@@ -43,7 +43,7 @@ macro_rules! generate_handlers {
             $params_pattern: $params_type
         ) -> Result<$ret, $err> $body
 
-        paste::paste! {
+        pastey::paste! {
             pub async fn [<get_ $handler_name>](
                 state: State<$state_type>,
                 $crate::controllers::request::GetContent(params): $crate::controllers::request::GetContent<$params_type>
@@ -69,7 +69,7 @@ macro_rules! generate_handlers {
             $version_param:ident : LineageVersion
         ) -> Result<$ret:ty, $err:ty> $body:block
     ) => {
-        paste::paste! {
+        pastey::paste! {
             async fn [<get_ $handler_name>](
                 $state_pattern: State<$state_type>,
                 GetContent($params_pattern): $crate::controllers::request::GetContent<$params_type>,
@@ -96,7 +96,7 @@ macro_rules! generate_handlers {
             $version_param:ident : LineageVersion
         ) -> Result<$ret:ty, $err:ty> $body:block
     ) => {
-        paste::paste! {
+        pastey::paste! {
             async fn [<post_ $handler_name>](
                 $state_pattern: State<$state_type>,
                 PostContent($params_pattern): crate::controllers::request::PostContent<$params_type>,
@@ -123,7 +123,7 @@ macro_rules! generate_handlers {
             $version_param:ident : LineageVersion
         ) -> Result<$ret:ty, $err:ty> $body:block
     ) => {
-        paste::paste! {
+        pastey::paste! {
             async fn $handler_name(
                 $state_pattern: State<$state_type>,
                 $params_pattern: $params_type,

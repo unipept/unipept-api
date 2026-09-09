@@ -6,6 +6,16 @@ use serde_json::json;
 
 use crate::common::post_json;
 
+/// The peptide each row names, in the order they arrive.
+fn sequences(body: &serde_json::Value) -> Vec<&str> {
+    body["peptides"]
+        .as_array()
+        .expect("a list of peptides")
+        .iter()
+        .map(|item| item["sequence"].as_str().expect("a sequence"))
+        .collect()
+}
+
 /// The endpoint the desktop and web applications actually post to.
 #[tokio::test(flavor = "multi_thread")]
 async fn pept2data_answers_with_an_lca_and_a_lineage() {
@@ -178,25 +188,38 @@ async fn the_annotations_come_from_the_surviving_proteins_only() {
     assert_eq!(fa["counts"]["all"], 1, "one protein survived the filter");
 }
 
-/// This endpoint sorts and deduplicates its peptides before searching, so a repeat is neither
-/// searched again nor answered again, and the answer comes back in sorted order rather than in the
-/// order the peptides were sent.
+/// The peptides that reach the index are the distinct ones, in the order they were sent.
 ///
-/// That makes it the one peptide endpoint that already searched each distinct peptide once, and the
-/// only one that does not answer positionally. Recorded rather than changed: the deduplication is
-/// what unipept#218 asks the others to do, and the sorting is a separate question.
+/// This endpoint answers one row per distinct peptide rather than one per position, unlike the
+/// seven others: it is what a whole sample is posted to, and a sample names the same peptide many
+/// times. What it shares with them is the order — the answer follows the request.
 #[tokio::test(flavor = "multi_thread")]
-async fn peptides_are_deduplicated_and_sorted_before_the_search() {
+async fn peptides_are_answered_once_each_in_the_order_they_were_sent() {
     let (status, body) = post_json("/mpa/pept2data", json!({ "peptides": [GENUS_SHARED, UNIQUE, GENUS_SHARED] })).await;
 
     assert_eq!(status, StatusCode::OK);
 
-    let sequences: Vec<&str> = body["peptides"]
-        .as_array()
-        .expect("a list")
-        .iter()
-        .map(|item| item["sequence"].as_str().expect("a sequence"))
-        .collect();
+    assert_eq!(sequences(&body), vec![GENUS_SHARED, UNIQUE], "one row each, in first-appearance order");
 
-    assert_eq!(sequences, vec![UNIQUE, GENUS_SHARED], "one row per distinct peptide, in sorted order");
+    // And the other way round, so this cannot pass on a fixed order that happens to match.
+    let (_, reversed) = post_json("/mpa/pept2data", json!({ "peptides": [UNIQUE, GENUS_SHARED] })).await;
+    assert_eq!(sequences(&reversed), vec![UNIQUE, GENUS_SHARED]);
+}
+
+/// Two spellings that differ only in case, or in trailing space, are one peptide.
+///
+/// Sanitising upper-cases and trims, and the deduplication runs after it. When it ran before, both
+/// spellings survived it: the same peptide was searched twice and answered twice, in two rows a
+/// caller could not tell apart.
+#[tokio::test(flavor = "multi_thread")]
+async fn spellings_that_sanitise_alike_are_one_peptide() {
+    let lowercased = GENUS_SHARED.to_lowercase();
+    let (status, body) = post_json("/mpa/pept2data", json!({ "peptides": [GENUS_SHARED, lowercased] })).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(sequences(&body), vec![GENUS_SHARED], "one row, not two identical ones");
+
+    let trailing = format!("{GENUS_SHARED} ");
+    let (_, trimmed) = post_json("/mpa/pept2data", json!({ "peptides": [GENUS_SHARED, trailing] })).await;
+    assert_eq!(sequences(&trimmed), vec![GENUS_SHARED]);
 }

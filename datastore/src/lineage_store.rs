@@ -91,19 +91,23 @@ impl LineageStore {
                 .parse()
                 .map_err(|_| LineageStoreError::InvalidTaxonId { line: line_number, value: fields[0].to_string() })?;
 
-            // Enumerated for the column number: a lineage row has one field per rank, and an error
-            // naming only the offending value leaves the reader counting tabs to find it.
-            let mut ranks = [None; RANK_COUNT];
-            for (column, (rank, field)) in ranks.iter_mut().zip(&fields[1..]).enumerate() {
-                *rank = match *field {
+            let mut parts: Vec<Option<i32>> = Vec::with_capacity(RANK_COUNT);
+            for (column, field) in fields[1..].iter().enumerate() {
+                parts.push(match *field {
                     "\\N" => None,
+                    // The taxon id is column one, and a reader counts columns from one.
                     value => Some(value.parse::<i32>().map_err(|_| LineageStoreError::InvalidRankId {
                         line: line_number,
                         column: column + 2,
                         value: value.to_string()
                     })?)
-                };
+                });
             }
+
+            // Both are `RANK_COUNT` long: the row was refused above if it carried a different
+            // number of columns.
+            let mut ranks = [None; RANK_COUNT];
+            ranks.copy_from_slice(&parts);
 
             let lin = Arc::new(Lineage { ranks });
 

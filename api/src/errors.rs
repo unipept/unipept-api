@@ -1,7 +1,9 @@
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response}
 };
+use serde::Serialize;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -33,6 +35,23 @@ pub enum ApiError {
     InvalidParameter(String)
 }
 
+/// The body every error answers with.
+///
+/// A client parses one shape whatever went wrong, rather than a JSON body for a result and bare
+/// text for a failure.
+#[derive(Serialize)]
+pub struct ErrorBody {
+    error: String
+}
+
+/// A status and a JSON body saying what went wrong.
+///
+/// Rejections from the extractors answer through this too, so the shape does not depend on whether
+/// a request failed before or inside a handler.
+pub fn error_response(status: StatusCode, message: impl Into<String>) -> Response {
+    (status, Json(ErrorBody { error: message.into() })).into_response()
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         // Log the full error details
@@ -47,6 +66,6 @@ impl IntoResponse for ApiError {
             ApiError::JoinError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
         };
 
-        Response::builder().status(status).body(message.into()).unwrap()
+        error_response(status, message)
     }
 }

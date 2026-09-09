@@ -19,6 +19,8 @@ use axum::{
 use tower::ServiceExt;
 use unipept_api::routes::{create_app, create_app_with_timeout};
 
+use crate::common::{offline_state, request_parts};
+
 /// 50 MiB, the ceiling `create_router` installs.
 const BODY_LIMIT: usize = 50 * 1024 * 1024;
 
@@ -208,4 +210,37 @@ async fn a_body_refused_for_its_declared_size_still_carries_the_cors_headers() {
         Some("*"),
         "a 413 the browser cannot read is a 413 nobody receives"
     );
+}
+
+/// Every failure answers as JSON, whether it comes from a handler or from an extractor that
+/// rejected the request before one ran.
+///
+/// A client parses one shape either way; a bare text body meant it had to know which happened.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failure_answers_as_json() {
+    let cases = [
+        // Rejected by an extractor, before any handler.
+        ("/private_api/taxa/filter?start=notanumber", StatusCode::BAD_REQUEST, "invalid query string"),
+        // Refused by a handler.
+        ("/private_api/taxa/filter?start=5&end=1", StatusCode::BAD_REQUEST, "end (1) must be at least start (5)"),
+        // A rank no lineage column names.
+        (
+            "/api/v2/taxonomy?input[]=1&descendants=true&descendants_ranks[]=nonsense",
+            StatusCode::BAD_REQUEST,
+            "An unknown rank has been passed for the `descendant_rank` parameter."
+        )
+    ];
+
+    for (path, expected_status, expected_message) in cases {
+        let (dir, state) = offline_state();
+        let (status, content_type, body) = request_parts(state, Request::get(path).body(Body::empty()).unwrap()).await;
+        drop(dir);
+
+        assert_eq!(status, expected_status, "{path}");
+        assert!(content_type.starts_with("application/json"), "{path}: content type was {content_type:?}");
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&body).unwrap_or_else(|err| panic!("{path}: body was not JSON ({err}): {body}"));
+        assert_eq!(parsed["error"], expected_message, "{path}");
+    }
 }

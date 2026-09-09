@@ -40,7 +40,7 @@ async fn get(query: &str) -> Result<Parameters, StatusCode> {
     GetContent::<Parameters>::from_request_parts(&mut parts, &())
         .await
         .map(|GetContent(parameters)| parameters)
-        .map_err(|(status, _)| status)
+        .map_err(|rejection| rejection.status())
 }
 
 async fn post(content_type: &str, body: &'static str) -> Result<Parameters, StatusCode> {

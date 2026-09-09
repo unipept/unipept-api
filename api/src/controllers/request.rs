@@ -10,6 +10,8 @@ use serde::{
 };
 use serde_qs::{Config, DuplicateKeyBehavior};
 
+use crate::errors::error_response;
+
 /// The query-string parser every body path shares.
 ///
 /// Both settings are non-default. `DuplicateKeyBehavior::Error` refuses `?tryptic=true&tryptic=false`
@@ -87,7 +89,7 @@ where
     S: Send + Sync,
     T: serde::de::DeserializeOwned
 {
-    type Rejection = (StatusCode, &'static str);
+    type Rejection = Response;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let query = parts.uri.query().unwrap_or_default();
@@ -97,7 +99,10 @@ where
         // that value. Decoding the whole string first turned `filter=A%26equate_il%3Dtrue` into two
         // parameters and let a request set a flag it never sent. Invalid UTF-8 comes back as a
         // deserialisation error rather than a panic, which is what the unwrap here used to be.
-        Ok(Self(QS.deserialize_str(query).map_err(|_| (StatusCode::BAD_REQUEST, "invalid query string"))?))
+        Ok(Self(
+            QS.deserialize_str(query)
+                .map_err(|_| error_response(StatusCode::BAD_REQUEST, "invalid query string"))?
+        ))
     }
 }
 
@@ -114,10 +119,13 @@ where
         let RawForm(form) = req
             .extract()
             .await
-            .map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body").into_response())?;
+            .map_err(|_| error_response(StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body"))?;
 
         // Undecoded, for the same reason as `GetContent` above.
-        Ok(Self(QS.deserialize_bytes(&form).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
+        Ok(Self(
+            QS.deserialize_bytes(&form)
+                .map_err(|_| error_response(StatusCode::BAD_REQUEST, "invalid form body"))?
+        ))
     }
 }
 
@@ -133,7 +141,7 @@ where
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
         let mut multipart = Multipart::from_request(req, state)
             .await
-            .map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body").into_response())?;
+            .map_err(|_| error_response(StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body"))?;
 
         // Every step here reads client-supplied bytes and every one of them used to unwrap: a
         // truncated body, a field with no name, or a read that fails part-way through a field each
@@ -195,7 +203,7 @@ where
                 let Json(payload) = req
                     .extract()
                     .await
-                    .map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body").into_response())?;
+                    .map_err(|_| error_response(StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body"))?;
                 return Ok(Self(payload));
             }
 
@@ -203,7 +211,7 @@ where
                 let Form(payload) = req
                     .extract()
                     .await
-                    .map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body").into_response())?;
+                    .map_err(|_| error_response(StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body"))?;
                 return Ok(Self(payload));
             }
 
@@ -211,7 +219,7 @@ where
                 let MultiPart(payload) = req
                     .extract()
                     .await
-                    .map_err(|_| (StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body").into_response())?;
+                    .map_err(|_| error_response(StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body"))?;
                 return Ok(Self(payload));
             }
         }

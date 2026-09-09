@@ -71,8 +71,8 @@ fn get_children_at_rank(
     // Taken as it arrived: `handler` rejects a rank `rank_to_idx` does not know before any of them
     // reaches here. That check reads either separator, a space or an underscore, and is
     // case-sensitive.
-    // Resolved once rather than inside the loop: `get_taxon_id_at_rank` reads the name for every
-    // lineage, and a coarse rank is reached through a million of them.
+    // The column is the same for every lineage below the taxon, and a coarse rank reaches a
+    // million of them.
     let Some(column) = LineageStore::rank_to_idx(descendants_rank) else {
         return;
     };

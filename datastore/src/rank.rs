@@ -52,8 +52,9 @@ const NO_RANK_NAME: &str = "no rank";
 
 /// Whether a rank name and a column name are the same, reading a space and an underscore alike.
 ///
-/// Compared rather than rewritten: the old spelling allocated a `String` for every call, and a
-/// coarse rank is looked up once per lineage.
+/// Whether a rank name and a column name are the same, reading a space and an underscore alike.
+///
+/// Compares in place, because a coarse rank is looked up once per lineage.
 fn spelled_alike(rank: &str, column: &str) -> bool {
     rank.len() == column.len()
         && rank
@@ -79,10 +80,8 @@ const fn is(name: &str, other: &str) -> bool {
     true
 }
 
-/// The position of a rank in [`RANK_NAMES`], resolved while compiling.
-///
-/// A name no rank carries fails the build, so a renamed rank stops the build at the constant that
-/// named it rather than addressing the wrong column.
+/// The position of a rank in [`RANK_NAMES`], resolved while compiling. An unknown name fails the
+/// build.
 pub const fn rank_index(name: &str) -> u8 {
     let mut index = 0;
     while index < RANK_NAMES.len() {
@@ -103,25 +102,18 @@ impl TaxonRank {
     /// A taxon the taxonomy places at no rank of its own. Not a lineage column.
     pub const NO_RANK: Self = Self(u8::MAX);
 
-    /// The broadest rank, which is the first column of a lineage.
-    ///
-    /// Named for where it sits rather than for what it is called, because what it is called
-    /// changes: this rank was `superkingdom` before it was `domain`. Everything below the root is
-    /// reached by walking the taxa at this rank.
+    /// The first column of a lineage, whatever the taxonomy calls it. Every taxon below the root
+    /// is reached through it.
     pub const TOP: Self = Self(0);
 
-    /// Named rather than positional, because the rule that reads them is about these two ranks.
-    ///
     /// `calculate_lca` will not let two taxa agree at genus or species by both recording nothing
-    /// there. Rename either in the list and the build stops here.
+    /// there, so these two are named. A rename stops the build here.
     pub const GENUS: Self = Self(rank_index("genus"));
     /// See [`Self::GENUS`].
     pub const SPECIES: Self = Self(rank_index("species"));
 
-    /// The rank a name addresses, resolved while compiling.
-    ///
-    /// A name no rank carries fails the build, so a caller outside this crate can name a rank
-    /// without repeating the string as a literal.
+    /// The rank a name addresses, resolved while compiling, so a caller may name one without
+    /// repeating the string as a literal.
     pub const fn named(name: &str) -> Self {
         Self(rank_index(name))
     }
@@ -150,8 +142,7 @@ impl TaxonRank {
 
     /// The rank a lineage column is keyed on, which spells a multi-word rank with an underscore.
     ///
-    /// Only the separator is read either way. The rest is matched exactly, because a rank names a
-    /// column rather than being text a reader typed.
+    /// Either separator is read; the rest is matched exactly, since a rank names a column.
     pub fn from_column_name(name: &str) -> Option<Self> {
         Self::found(|rank| spelled_alike(rank, name))
     }
@@ -214,7 +205,7 @@ mod tests {
         assert_eq!(TaxonRank::from_column_name("genus"), Some(TaxonRank::GENUS));
     }
 
-    /// The case is not normalised: a rank names a column rather than being text a reader typed.
+    /// A rank names a column, so the case is not normalised.
     #[test]
     fn a_column_name_is_matched_with_regard_to_case() {
         assert_eq!(TaxonRank::from_column_name("Genus"), None);

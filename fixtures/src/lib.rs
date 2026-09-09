@@ -288,10 +288,7 @@ mod tests {
 
     /// `ACCESSIONS` is written out by hand beside the file it describes, so nothing but this stops
     /// the two drifting when a protein is added.
-    /// The lineage rows carry a column per rank, which nothing else checks.
-    ///
-    /// Add a rank and this fails naming the file to edit, rather than every corpus-backed test in
-    /// the workspace failing inside the parser.
+    /// Add a rank and this names the file to edit, where the parser only reports a bad line.
     #[test]
     fn every_lineage_row_carries_a_column_per_rank() {
         for (number, line) in LINEAGES_TSV.lines().filter(|line| !line.trim().is_empty()).enumerate() {

@@ -8,7 +8,7 @@ use crate::{
     AppState,
     controllers::{
         generate_handlers,
-        private_api::{default_sort_descending, reversed_when_descending},
+        private_api::{default_sort_descending, page_of},
         request::Flag
     },
     errors::ApiError
@@ -95,12 +95,10 @@ async fn filter_handler(
 
     let filter = filter.to_lowercase();
 
-    let mut filtered_taxa: Vec<_> = taxon_store
+    let filtered_taxa = taxon_store
         .mapper
         .iter()
-        .filter(|(taxon_id, (name, rank, is_valid))| matches(&filter, **taxon_id, name, rank, *is_valid))
-        .map(|(id, _)| *id)
-        .collect();
+        .filter(|(taxon_id, (name, rank, is_valid))| matches(&filter, **taxon_id, name, rank, *is_valid));
 
     // A name and a rank are both held by many taxa, and the taxon id breaks every tie, so the order
     // is total. That matters here more than in a plain listing: this list is paged through, and two
@@ -108,22 +106,17 @@ async fn filter_handler(
     //
     // `sort_descending` reverses the whole ordering, tiebreak included, so a descending page is the
     // reverse of the ascending one.
-
-    match sort_by.as_str() {
-        "name" => filtered_taxa.sort_by(|a, b| {
-            reversed_when_descending((&taxon_store.mapper[a].0, a).cmp(&(&taxon_store.mapper[b].0, b)), sort_descending)
-        }),
-        "rank" => filtered_taxa.sort_by(|a, b| {
-            reversed_when_descending((&taxon_store.mapper[a].1, a).cmp(&(&taxon_store.mapper[b].1, b)), sort_descending)
-        }),
+    //
+    // The sort key is carried beside the id rather than read through `mapper` while sorting,
+    // which would repeat that lookup for every comparison rather than doing it once per taxon.
+    let mut rows: Vec<(&str, u32)> = match sort_by.as_str() {
+        "name" => filtered_taxa.map(|(id, (name, _, _))| (name.as_str(), *id)).collect(),
+        "rank" => filtered_taxa.map(|(id, (_, rank, _))| (rank.as_str(), *id)).collect(),
         // An id is unique, so it is a total order on its own.
-        _ => filtered_taxa.sort_by(|a, b| reversed_when_descending(a.cmp(b), sort_descending))
-    }
+        _ => filtered_taxa.map(|(id, _)| ("", *id)).collect()
+    };
 
-    // Take the range [start, end), which is empty when `end` is not past `start`.
-    let taxa: Vec<u32> = filtered_taxa.into_iter().skip(start).take(end - start).collect();
-
-    Ok(taxa)
+    Ok(page_of(&mut rows, start, end, sort_descending).iter().map(|(_, id)| *id).collect())
 }
 
 generate_handlers!(

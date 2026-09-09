@@ -7,7 +7,7 @@ use crate::{
     AppState,
     controllers::{
         generate_handlers,
-        private_api::{default_sort_descending, reversed_when_descending},
+        private_api::{default_sort_descending, page_of},
         request::Flag
     },
     errors::ApiError
@@ -40,8 +40,20 @@ pub struct ReferenceProteomeCountResult {
     count: u32
 }
 
-fn get_taxon_name_by_id(taxon_store: &datastore::TaxonStore, taxon_id: u32) -> String {
-    taxon_store.get_name(taxon_id).cloned().unwrap_or_else(|| "Unknown".to_string())
+/// A proteome is kept when the filter appears in its accession, its taxon id, or its taxon name.
+///
+/// `lowercased` is the filter folded once by the caller rather than per proteome; `filter` as given
+/// is what the taxon id is matched against, which is numeric and has no case.
+fn matches(lowercased: &str, filter: &str, key: &str, taxon_id: u32, taxon_store: &datastore::TaxonStore) -> bool {
+    key.to_lowercase().contains(lowercased)
+        || taxon_id.to_string().contains(filter)
+        || get_taxon_name_by_id(taxon_store, taxon_id).to_lowercase().contains(lowercased)
+}
+
+/// Borrowed rather than cloned: this is read once per proteome by the filter and once more to sort,
+/// and the store owns the name for as long as either needs it.
+fn get_taxon_name_by_id(taxon_store: &datastore::TaxonStore, taxon_id: u32) -> &str {
+    taxon_store.get_name(taxon_id).map(String::as_str).unwrap_or("Unknown")
 }
 
 async fn count_handler(
@@ -53,17 +65,14 @@ async fn count_handler(
     if filter.is_empty() {
         Ok(ReferenceProteomeCountResult { count: proteome_store.mapper.values().count() as u32 })
     } else {
+        let lowercased = filter.to_lowercase();
+        let taxon_store = datastore.taxon_store();
+
         Ok(ReferenceProteomeCountResult {
             count: proteome_store
                 .mapper
                 .iter()
-                .filter(|(key, (taxon_id, _, _))| {
-                    let taxon_name = get_taxon_name_by_id(datastore.taxon_store(), *taxon_id);
-
-                    key.to_lowercase().contains(&filter.to_lowercase())
-                        || taxon_id.to_string().contains(&filter)
-                        || taxon_name.to_lowercase().contains(&filter.to_lowercase())
-                })
+                .filter(|(key, (taxon_id, _, _))| matches(&lowercased, &filter, key, *taxon_id, taxon_store))
                 .count() as u32
         })
     }
@@ -85,17 +94,13 @@ async fn filter_handler(
 
     let proteome_store = datastore.reference_proteome_store();
 
-    let mut filtered_proteomes: Vec<(&String, &(u32, u32, String))> = proteome_store
+    let lowercased = filter.to_lowercase();
+    let taxon_store = datastore.taxon_store();
+
+    let filtered_proteomes = proteome_store
         .mapper
         .iter()
-        .filter(|(key, (taxon_id, _, _))| {
-            let taxon_name = get_taxon_name_by_id(datastore.taxon_store(), *taxon_id);
-
-            key.to_lowercase().contains(&filter.to_lowercase())
-                || taxon_id.to_string().contains(&filter)
-                || taxon_name.to_lowercase().contains(&filter.to_lowercase())
-        })
-        .collect();
+        .filter(|(key, (taxon_id, _, _))| matches(&lowercased, &filter, key, *taxon_id, taxon_store));
 
     // A taxon name and a protein count are both held by many proteomes, and the proteome id breaks
     // every tie, so the order is total. That matters here more than in a plain listing: this list is
@@ -105,28 +110,28 @@ async fn filter_handler(
     // `sort_descending` reverses the whole ordering, tiebreak included, so a descending page is the
     // reverse of the ascending one.
 
-    match sort_by.as_str() {
-        "taxon_name" => filtered_proteomes.sort_by(|(a_id, (a_taxon_id, _, _)), (b_id, (b_taxon_id, _, _))| {
-            let a_name = get_taxon_name_by_id(datastore.taxon_store(), *a_taxon_id);
-            let b_name = get_taxon_name_by_id(datastore.taxon_store(), *b_taxon_id);
-            reversed_when_descending((a_name, a_id).cmp(&(b_name, b_id)), sort_descending)
-        }),
-        "protein_count" => filtered_proteomes.sort_by(|(a_id, (_, a_count, _)), (b_id, (_, b_count, _))| {
-            reversed_when_descending((a_count, a_id).cmp(&(b_count, b_id)), sort_descending)
-        }),
+    // The sort key is carried beside the id rather than read from the taxon store while sorting,
+    // which would repeat that lookup for every comparison rather than doing it once per proteome.
+    let page = match sort_by.as_str() {
+        "taxon_name" => {
+            let mut rows: Vec<(&str, &String)> = filtered_proteomes
+                .map(|(key, (taxon_id, _, _))| (get_taxon_name_by_id(taxon_store, *taxon_id), key))
+                .collect();
+            page_of(&mut rows, start, end, sort_descending).iter().map(|(_, key)| key.to_string()).collect()
+        }
+        "protein_count" => {
+            let mut rows: Vec<(u32, &String)> =
+                filtered_proteomes.map(|(key, (_, protein_count, _))| (*protein_count, key)).collect();
+            page_of(&mut rows, start, end, sort_descending).iter().map(|(_, key)| key.to_string()).collect()
+        }
         // A proteome id is unique, so it is a total order on its own.
         _ => {
-            filtered_proteomes.sort_by(|(a_id, _), (b_id, _)| reversed_when_descending(a_id.cmp(b_id), sort_descending))
+            let mut rows: Vec<&String> = filtered_proteomes.map(|(key, _)| key).collect();
+            page_of(&mut rows, start, end, sort_descending).iter().map(|key| key.to_string()).collect()
         }
-    }
+    };
 
-    // Take the range [start, end), which is empty when `end` is not past `start`.
-    Ok(filtered_proteomes
-        .into_iter()
-        .skip(start)
-        .take(end - start)
-        .map(|(key, _)| key.to_string())
-        .collect())
+    Ok(page)
 }
 
 generate_handlers!(

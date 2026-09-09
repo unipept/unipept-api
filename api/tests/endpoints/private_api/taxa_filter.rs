@@ -267,3 +267,39 @@ async fn sorting_by_rank_reverses_exactly() {
     reversed.reverse();
     assert_eq!(ascending.as_array().expect("a page"), &reversed);
 }
+
+/// Every window is the slice of the whole listing that sits at the same offsets, on each sort field
+/// and in both directions.
+///
+/// A page is taken by partitioning around its bounds rather than by ordering the whole table, so
+/// what is asserted is that the cheaper route answers exactly what the ordering would have.
+#[tokio::test(flavor = "multi_thread")]
+async fn every_window_matches_the_whole_listing() {
+    // `rank` is the field many taxa share, so it is where a partition could pick differently from a
+    // sort; `id` covers the branch that needs no tiebreak.
+    for field in ["id", "rank"] {
+        for descending in ["false", "true"] {
+            let sorted = format!("sort_by={field}&sort_descending={descending}");
+            let (status, whole) = get_json(&format!("/private_api/taxa/filter?start=0&end=1000&{sorted}")).await;
+
+            assert_eq!(status, StatusCode::OK, "{sorted}");
+            let whole = whole.as_array().expect("a page");
+            assert!(whole.len() > 3, "{sorted}: too few taxa to page through");
+
+            for start in 0..whole.len() {
+                for size in [1usize, 3] {
+                    let end = start + size;
+                    let (_, window) =
+                        get_json(&format!("/private_api/taxa/filter?start={start}&end={end}&{sorted}")).await;
+
+                    let expected: Vec<_> = whole.iter().skip(start).take(size).cloned().collect();
+                    assert_eq!(
+                        window.as_array().expect("a page"),
+                        &expected,
+                        "{sorted}: the window [{start}, {end}) differs from the same slice of the listing"
+                    );
+                }
+            }
+        }
+    }
+}

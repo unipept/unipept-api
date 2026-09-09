@@ -100,7 +100,7 @@ async fn handler(
                 taxon: Taxon {
                     taxon_id: entry.taxon_id,
                     taxon_name: name.to_string(),
-                    taxon_rank: rank.clone().into()
+                    taxon_rank: rank.into()
                 },
                 ec: ecs,
                 go: gos,

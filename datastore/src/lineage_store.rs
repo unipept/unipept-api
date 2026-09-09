@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     collections::HashMap,
     io::{BufRead, BufReader},
     sync::Arc
@@ -7,7 +6,10 @@ use std::{
 
 use serde::Serialize;
 
-use crate::{errors::LineageStoreError, taxon_store::LineageRank};
+use crate::{
+    errors::LineageStoreError,
+    rank::{RANK_COUNT, TaxonRank}
+};
 
 #[derive(Clone, Debug, Serialize, Default)]
 pub struct Lineage {
@@ -93,8 +95,8 @@ pub struct LineageStore {
 }
 
 impl LineageStore {
-    /// The number of rank columns a lineage row carries. `LineageRank::LINEAGE_ORDER` names them.
-    pub const AMOUNT_OF_RANKS: usize = 28;
+    /// The number of rank columns a lineage row carries. `TaxonRank::LINEAGE_ORDER` names them.
+    pub const AMOUNT_OF_RANKS: usize = RANK_COUNT;
 
     /// The lineage column a rank name addresses.
     ///
@@ -106,41 +108,9 @@ impl LineageStore {
     /// filter, which matches a rank as text a user typed, does its own lowercasing and does not
     /// come through here.
     ///
-    /// A caller that holds a `LineageRank` has [`LineageRank::lineage_index`] instead.
+    /// A caller that holds a `TaxonRank` has [`TaxonRank::lineage_index`] instead.
     pub fn rank_to_idx(s: &str) -> Option<usize> {
-        let key = if s.contains(' ') { Cow::Owned(s.replace(' ', "_")) } else { Cow::Borrowed(s) };
-
-        match key.as_ref() {
-            "domain" => Some(0),
-            "realm" => Some(1),
-            "kingdom" => Some(2),
-            "subkingdom" => Some(3),
-            "superphylum" => Some(4),
-            "phylum" => Some(5),
-            "subphylum" => Some(6),
-            "superclass" => Some(7),
-            "class" => Some(8),
-            "subclass" => Some(9),
-            "superorder" => Some(10),
-            "order" => Some(11),
-            "suborder" => Some(12),
-            "infraorder" => Some(13),
-            "superfamily" => Some(14),
-            "family" => Some(15),
-            "subfamily" => Some(16),
-            "tribe" => Some(17),
-            "subtribe" => Some(18),
-            "genus" => Some(19),
-            "subgenus" => Some(20),
-            "species_group" => Some(21),
-            "species_subgroup" => Some(22),
-            "species" => Some(23),
-            "subspecies" => Some(24),
-            "strain" => Some(25),
-            "varietas" => Some(26),
-            "forma" => Some(27),
-            _ => None
-        }
+        TaxonRank::from_column_name(s)?.lineage_index()
     }
 
     pub fn try_from_file(file: &str) -> Result<Self, LineageStoreError> {
@@ -244,7 +214,7 @@ impl LineageStore {
         self.mapper.get(&key)
     }
 
-    pub fn get_lineages_at_rank(&self, rank: &LineageRank, taxon_id: u32) -> Option<&Vec<Arc<Lineage>>> {
+    pub fn get_lineages_at_rank(&self, rank: TaxonRank, taxon_id: u32) -> Option<&Vec<Arc<Lineage>>> {
         rank.lineage_index()
             .and_then(|idx| self.index_references.get(idx))
             .and_then(|map| map.get(&taxon_id))
@@ -252,7 +222,7 @@ impl LineageStore {
 
     /// Returns all unique taxon IDs at a specific rank in the NCBI taxonomy.
     /// Ascending by taxon id.
-    pub fn get_all_taxon_ids_at_rank(&self, rank: &LineageRank) -> Option<Vec<u32>> {
+    pub fn get_all_taxon_ids_at_rank(&self, rank: TaxonRank) -> Option<Vec<u32>> {
         rank.lineage_index().and_then(|idx| self.index_references.get(idx)).map(|map| {
             let mut ids: Vec<u32> = map.keys().cloned().collect();
             ids.sort_unstable();
@@ -264,6 +234,21 @@ impl LineageStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Reaching a column by its name and by its rank must land on the same column.
+    ///
+    /// The two read the one list by different routes — a name through `rank_to_idx`, a rank through
+    /// its own index — and a caller that mixes them would otherwise read a column it did not ask
+    /// for. The column name spells a multi-word rank with an underscore where the taxon table
+    /// writes a space, which is the difference this walks over.
+    #[test]
+    fn a_column_is_the_same_reached_by_name_or_by_rank() {
+        for (index, rank) in TaxonRank::columns().enumerate() {
+            assert_eq!(rank.lineage_index(), Some(index), "{rank}");
+            assert_eq!(LineageStore::rank_to_idx(&rank.as_str().replace(' ', "_")), Some(index), "{rank}");
+            assert_eq!(LineageStore::rank_to_idx(rank.as_str()), Some(index), "{rank}");
+        }
+    }
 
     const RANK_KEYS: [&str; 28] = [
         "domain",

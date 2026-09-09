@@ -4,7 +4,7 @@
 //! concern and lives beside these, so that a change to the error policy cannot quietly alter what
 //! well-formed input parses to.
 
-use datastore::{DataStore, LineageRank};
+use datastore::{DataStore, TaxonRank};
 use tempfile::TempDir;
 
 /// Loads the whole corpus from a temporary directory.
@@ -43,7 +43,7 @@ fn taxon_store_reads_name_rank_and_validity() {
 
     let (name, rank, valid) = taxons.get(fixtures::taxa::CROCODYLUS_NILOTICUS).expect("8501 is in the corpus");
     assert_eq!(name, "Crocodylus niloticus");
-    assert_eq!(*rank, LineageRank::Species);
+    assert_eq!(*rank, TaxonRank::SPECIES);
     assert!(valid);
 
     assert_eq!(taxons.get_name(fixtures::taxa::CROCODYLUS).map(String::as_str), Some("Crocodylus"));
@@ -75,7 +75,7 @@ fn taxon_store_reads_the_root_taxon() {
     // row is the one that catches a `FromStr` arm going missing.
     let (name, rank, _) = store.taxon_store().get(fixtures::taxa::ROOT).expect("root is in the corpus");
     assert_eq!(name, "root");
-    assert_eq!(*rank, LineageRank::NoRank);
+    assert_eq!(*rank, TaxonRank::NO_RANK);
 }
 
 #[test]

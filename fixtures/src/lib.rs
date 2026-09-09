@@ -33,7 +33,7 @@ use std::{
     path::{Path, PathBuf}
 };
 
-use datastore::LineageRank;
+use datastore::TaxonRank;
 
 pub mod synthetic;
 
@@ -76,7 +76,7 @@ pub const SAMPLEDATA_JSON: &str = include_str!("../data/sampledata.json");
 pub const VERSION: &str = include_str!("../data/version.txt");
 
 /// Taxa: `id`, `name`, `rank`, `parent`, validity. The rank strings are the ones
-/// `LineageRank::from_str` accepts, and the fifth column is a raw `0x01`/`0x00` byte.
+/// `TaxonRank::from_str` accepts, and the fifth column is a raw `0x01`/`0x00` byte.
 pub const TAXONS_TSV: &str = include_str!("../data/taxons.tsv");
 
 /// Lineages: a taxon id followed by one column per rank, `\N` where the taxonomy records nothing.
@@ -198,7 +198,7 @@ fn taxon_rows() -> Vec<(u32, &'static str, &'static str, bool)> {
 pub fn ranked_and_valid_taxa() -> u64 {
     taxon_rows()
         .iter()
-        .filter(|(_, _, rank, is_valid)| *is_valid && *rank != LineageRank::NoRank.as_str())
+        .filter(|(_, _, rank, is_valid)| *is_valid && *rank != TaxonRank::NO_RANK.as_str())
         .count() as u64
 }
 
@@ -345,8 +345,8 @@ mod tests {
     fn the_corpus_holds_a_taxon_at_each_multi_word_rank() {
         let ranks: BTreeSet<&str> = taxon_rows().iter().map(|(_, _, rank, _)| *rank).collect();
 
-        assert!(ranks.contains(LineageRank::SpeciesGroup.as_str()), "{ranks:?}");
-        assert!(ranks.contains(LineageRank::SpeciesSubgroup.as_str()), "{ranks:?}");
+        assert!(ranks.contains("species group"), "{ranks:?}");
+        assert!(ranks.contains("species subgroup"), "{ranks:?}");
     }
 
     #[test]

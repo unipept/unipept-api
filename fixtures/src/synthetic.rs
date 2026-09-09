@@ -16,7 +16,7 @@ use std::{
     path::{Path, PathBuf}
 };
 
-use datastore::{LineageRank, LineageStore, TaxonStore};
+use datastore::{LineageStore, TaxonRank, TaxonStore};
 
 /// Leaf taxon ids start here, clear of the ancestor ids [`ancestor`] hands out.
 pub const LEAF_BASE: u32 = 10_000_000;
@@ -103,19 +103,19 @@ pub fn write_taxonomy(dir: &Path, distinct: u32) -> TaxonomyPaths {
     }
 
     // The fifth column is the validity byte, 0x01 for a valid taxon.
-    let no_rank = LineageRank::NoRank.as_str();
+    let no_rank = TaxonRank::NO_RANK.as_str();
     let mut taxons = format!("1\troot\t{no_rank}\t1\t\u{1}\n");
 
     for (id, rank) in &ancestors {
-        // `LineageRank::LINEAGE_ORDER` names the columns in the order they are read, and its
+        // `TaxonRank::LINEAGE_ORDER` names the columns in the order they are read, and its
         // string form is the spelling the taxon table's rank column takes.
-        let name = LineageRank::LINEAGE_ORDER[*rank].as_str();
+        let name = datastore::RANK_NAMES[*rank];
         writeln!(taxons, "{id}\tancestor_{id}\t{name}\t1\t\u{1}").expect("writing cannot fail");
     }
 
     for leaf in 0..distinct {
         let id = LEAF_BASE + leaf;
-        let species = LineageRank::Species.as_str();
+        let species = TaxonRank::SPECIES.as_str();
         writeln!(taxons, "{id}\ttaxon_{leaf}\t{species}\t1\t\u{1}").expect("writing to a String cannot fail");
     }
 

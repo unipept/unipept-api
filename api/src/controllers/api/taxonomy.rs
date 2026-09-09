@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use axum::{Json, extract::State};
-use datastore::{LineageRank, LineageStore};
+use datastore::{LineageStore, TaxonRank};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -63,7 +63,7 @@ pub struct Taxon {
 ///   taxonomic information from the database.
 fn get_children_at_rank(
     taxon_id: u32,
-    rank: LineageRank,
+    rank: TaxonRank,
     descendants_rank: &str,
     lineage_store: &LineageStore,
     descendant_ids: &mut BTreeSet<u32>
@@ -71,7 +71,7 @@ fn get_children_at_rank(
     // Taken as it arrived: `handler` rejects a rank `rank_to_idx` does not know before any of them
     // reaches here. That check reads either separator, a space or an underscore, and is
     // case-sensitive.
-    let Some(lineages_at_rank) = lineage_store.get_lineages_at_rank(&rank, taxon_id) else {
+    let Some(lineages_at_rank) = lineage_store.get_lineages_at_rank(rank, taxon_id) else {
         return;
     };
 
@@ -93,13 +93,13 @@ fn get_children_at_rank(
 /// the ids first and ordering them afterwards would hold every repeat at once.
 fn descendants_at_ranks(
     taxon_id: u32,
-    rank: LineageRank,
+    rank: TaxonRank,
     descendants_ranks: &[String],
     lineage_store: &LineageStore,
     descendant_ids: &mut BTreeSet<u32>
 ) {
     for descendants_rank in descendants_ranks {
-        get_children_at_rank(taxon_id, rank.clone(), descendants_rank, lineage_store, descendant_ids);
+        get_children_at_rank(taxon_id, rank, descendants_rank, lineage_store, descendant_ids);
     }
 }
 
@@ -144,10 +144,10 @@ async fn handler(
                 if descendants {
                     let mut descendant_ids = BTreeSet::new();
 
-                    for domain_taxon in lineage_store.get_all_taxon_ids_at_rank(&LineageRank::Domain)? {
+                    for domain_taxon in lineage_store.get_all_taxon_ids_at_rank(TaxonRank::DOMAIN)? {
                         descendants_at_ranks(
                             domain_taxon,
-                            LineageRank::Domain,
+                            TaxonRank::DOMAIN,
                             &descendants_ranks,
                             lineage_store,
                             &mut descendant_ids
@@ -167,7 +167,7 @@ async fn handler(
                     taxon: Taxon {
                         taxon_id,
                         taxon_name: String::from("root"),
-                        taxon_rank: LineageRank::NoRank.to_string()
+                        taxon_rank: TaxonRank::NO_RANK.to_string()
                     },
                     lineage,
                     descendants: children
@@ -185,7 +185,7 @@ async fn handler(
             // retrieve these here. These descendants are just a list of taxon IDs.
             let children: Option<Vec<u32>> = descendants.then(|| {
                 let mut descendant_ids = BTreeSet::new();
-                descendants_at_ranks(taxon_id, rank.clone(), &descendants_ranks, lineage_store, &mut descendant_ids);
+                descendants_at_ranks(taxon_id, *rank, &descendants_ranks, lineage_store, &mut descendant_ids);
                 descendant_ids.into_iter().collect()
             });
 
@@ -193,7 +193,7 @@ async fn handler(
                 taxon: Taxon {
                     taxon_id,
                     taxon_name: name.to_string(),
-                    taxon_rank: rank.clone().into()
+                    taxon_rank: rank.into()
                 },
                 lineage,
                 descendants: children

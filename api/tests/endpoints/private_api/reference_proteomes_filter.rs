@@ -172,11 +172,13 @@ async fn proteomes_alike_on_the_sort_field_are_ordered_by_id() {
 /// mirrors even on a field two proteomes share.
 #[tokio::test(flavor = "multi_thread")]
 async fn sorting_by_protein_count_reverses_exactly() {
-    let (_, ascending) = get_json("/private_api/proteomes/filter?start=0&end=100&sort_by=protein_count").await;
-    let (status, descending) =
+    let (ascending_status, ascending) =
+        get_json("/private_api/proteomes/filter?start=0&end=100&sort_by=protein_count").await;
+    let (descending_status, descending) =
         get_json("/private_api/proteomes/filter?start=0&end=100&sort_by=protein_count&sort_descending=true").await;
 
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(ascending_status, StatusCode::OK, "ascending");
+    assert_eq!(descending_status, StatusCode::OK, "descending");
 
     let mut reversed = descending.as_array().expect("a page").clone();
     reversed.reverse();

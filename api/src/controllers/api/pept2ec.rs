@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map::Entry};
 
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
@@ -49,12 +49,20 @@ async fn handler(
 ) -> Result<Vec<EcInformation>, ApiError> {
     let input = sanitize_peptides(input);
 
+    // Deduplicated, and in the order the caller asked for. Searching `peptide_counts.keys()` read
+    // a `HashMap`, which Rust iterates in a random order per process, so the results came back
+    // shuffled — the one peptide endpoint that did not answer in input order.
     let mut peptide_counts: HashMap<String, usize> = HashMap::new();
+    let mut unique_peptides: Vec<String> = Vec::new();
     for peptide in input.into_iter() {
-        *peptide_counts.entry(peptide).or_insert(0) += 1;
+        match peptide_counts.entry(peptide) {
+            Entry::Occupied(mut seen) => *seen.get_mut() += 1,
+            Entry::Vacant(unseen) => {
+                unique_peptides.push(unseen.key().clone());
+                unseen.insert(1);
+            }
+        }
     }
-
-    let unique_peptides: Vec<String> = peptide_counts.keys().cloned().collect();
     let result = tokio::task::block_in_place(|| index.analyse(&unique_peptides, equate_il, false, Some(cutoff)));
 
     let ec_store = datastore.ec_store();

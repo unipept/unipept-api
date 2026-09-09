@@ -93,8 +93,6 @@ async fn handler(
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
-    // One answer per distinct peptide, laid back over the input. This endpoint both aggregates the
-    // annotations and reduces the taxa, so a repeat cost the most of any peptide endpoint.
     let rows: HashMap<&str, Vec<PeptInformation>> = result
         .iter()
         .filter_map(|item| {
@@ -137,7 +135,7 @@ async fn handler(
         })
         .collect();
 
-    Ok(laid_over_input(&input, &rows))
+    Ok(laid_over_input(&input, rows))
 }
 
 generate_handlers! (

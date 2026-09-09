@@ -107,16 +107,28 @@ async fn filter_handler(
     // `sort_descending` reverses the whole ordering, tiebreak included, so a descending page is the
     // reverse of the ascending one.
     //
-    // The sort key is carried beside the id rather than read through `mapper` while sorting,
-    // which would repeat that lookup for every comparison rather than doing it once per taxon.
-    let mut rows: Vec<(&str, u32)> = match sort_by.as_str() {
-        "name" => filtered_taxa.map(|(id, (name, _, _))| (name.as_str(), *id)).collect(),
-        "rank" => filtered_taxa.map(|(id, (_, rank, _))| (rank.as_str(), *id)).collect(),
+    // The sort key is carried beside the id rather than read through `mapper` while sorting, which
+    // would repeat that lookup for every comparison rather than doing it once per taxon.
+    //
+    // Each arm keeps its own row type. Sorting by id is the default, and giving it the tuple the
+    // other two need would carry an empty key over every taxon in the table.
+    let page = match sort_by.as_str() {
+        "name" => {
+            let mut rows: Vec<(&str, u32)> = filtered_taxa.map(|(id, (name, _, _))| (name.as_str(), *id)).collect();
+            page_of(&mut rows, start, end, sort_descending).iter().map(|(_, id)| *id).collect()
+        }
+        "rank" => {
+            let mut rows: Vec<(&str, u32)> = filtered_taxa.map(|(id, (_, rank, _))| (rank.as_str(), *id)).collect();
+            page_of(&mut rows, start, end, sort_descending).iter().map(|(_, id)| *id).collect()
+        }
         // An id is unique, so it is a total order on its own.
-        _ => filtered_taxa.map(|(id, _)| ("", *id)).collect()
+        _ => {
+            let mut rows: Vec<u32> = filtered_taxa.map(|(id, _)| *id).collect();
+            page_of(&mut rows, start, end, sort_descending).to_vec()
+        }
     };
 
-    Ok(page_of(&mut rows, start, end, sort_descending).iter().map(|(_, id)| *id).collect())
+    Ok(page)
 }
 
 generate_handlers!(

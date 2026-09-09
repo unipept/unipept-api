@@ -1,15 +1,26 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use index::{ProteinInfo, fa_compression::algorithm1::decode_into};
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
 /// A struct that represents the functional annotations once aggregated
 #[derive(Debug, Serialize)]
 pub struct FunctionalAggregation {
     /// A HashMap representing how many GO, EC and IPR terms were found
+    #[serde(serialize_with = "in_key_order")]
     pub counts: HashMap<String, usize>,
     /// A HashMap representing how often a certain functional annotation was found
+    #[serde(serialize_with = "in_key_order")]
     pub data: HashMap<String, u32>
+}
+
+/// Writes a map in key order.
+fn in_key_order<S, V>(map: &HashMap<String, V>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    V: Serialize
+{
+    map.iter().collect::<BTreeMap<_, _>>().serialize(serializer)
 }
 
 pub fn calculate_fa(proteins: &[ProteinInfo]) -> FunctionalAggregation {
@@ -126,6 +137,19 @@ mod tests {
         assert_eq!(fa.counts.get("all"), Some(&1));
         assert_eq!(fa.counts.get("GO"), Some(&1));
         assert_eq!(fa.data.get("GO:0001"), Some(&2));
+    }
+
+    /// `mpa/pept2data` serialises both maps as they stand, so their key order is part of the
+    /// response body.
+    #[test]
+    fn the_maps_serialise_in_key_order() {
+        let (a, b) = (encoded("GO:0002;EC:1.1.1.1"), encoded("GO:0001"));
+        let fa = calculate_fa(&[protein("P1", &a), protein("P2", &b)]);
+
+        let json = serde_json::to_string(&fa).expect("serialisable");
+
+        assert!(json.contains(r#""counts":{"EC":1,"GO":2,"IPR":0,"all":2}"#), "{json}");
+        assert!(json.contains(r#""data":{"EC:1.1.1.1":1,"GO:0001":1,"GO:0002":1}"#), "{json}");
     }
 
     #[test]

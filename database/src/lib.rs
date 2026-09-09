@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    time::Duration
-};
+use std::{collections::HashMap, time::Duration};
 
 pub use errors::DatabaseError;
 use models::UniprotEntry;
@@ -42,20 +39,20 @@ impl Database {
     }
 }
 
-/// Retrieves protein information from the database for a given set of UniProt accession IDs
+/// Retrieves protein information from the database for a given list of UniProt accession IDs
 ///
 /// # Arguments
 /// * `conn` - Database connection handle
-/// * `accessions` - Set of UniProt accession IDs to retrieve data for
+/// * `accessions` - UniProt accession IDs to retrieve data for, in the order the answer should
+///   take. An id the database does not hold is left out rather than reported. Deduplicate before
+///   calling: an id given twice is asked for twice and answered twice, where a set could not have
+///   expressed the repeat.
 ///
 /// # Returns
-/// * Vector of `UniprotEntry` records containing protein info from the database, ordered to match
-///   the order of accessions in the input set
+/// * Vector of `UniprotEntry` records containing protein info from the database, in the order the
+///   accessions were given
 /// * `DatabaseError` if the database operation fails
-pub async fn get_accessions(
-    client: &OpenSearch,
-    accessions: &HashSet<String>
-) -> Result<Vec<UniprotEntry>, DatabaseError> {
+pub async fn get_accessions(client: &OpenSearch, accessions: &[String]) -> Result<Vec<UniprotEntry>, DatabaseError> {
     if accessions.is_empty() {
         return Ok(vec![]);
     }
@@ -91,7 +88,7 @@ pub async fn get_accessions(
 ///
 /// # Arguments
 /// * `conn` - Database connection handle
-/// * `accessions` - Set of UniProt accession IDs to retrieve data for
+/// * `accessions` - UniProt accession IDs to retrieve data for
 ///
 /// # Returns
 /// * HashMap mapping UniProt accession IDs to their corresponding UniprotEntry records
@@ -101,7 +98,7 @@ pub async fn get_accessions(
 /// instead of a vector, allowing direct access to entries by their accession ID.
 pub async fn get_accessions_map(
     client: &OpenSearch,
-    accessions: &HashSet<String>
+    accessions: &[String]
 ) -> Result<HashMap<String, UniprotEntry>, DatabaseError> {
     Ok(get_accessions(client, accessions)
         .await?

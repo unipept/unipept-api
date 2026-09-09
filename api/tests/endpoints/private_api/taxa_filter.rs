@@ -221,3 +221,92 @@ async fn a_rank_filter_still_matches_the_spaced_name_in_any_case() {
     assert_eq!(shouted["count"], 1, "the filter ignores case");
     assert_eq!(keyed["count"], 0, "the filter matches the name, not the column key");
 }
+
+/// Many taxa carry the same rank, and the id settles every one of those ties, so the order is
+/// total. Nothing else could settle them: the taxa are collected out of a `HashMap`, whose
+/// iteration order differs from one process to the next.
+///
+/// A page is a window on this order. Two processes ordering the ties differently would hand a
+/// client paging through the list one taxon twice and another not at all.
+#[tokio::test(flavor = "multi_thread")]
+async fn taxa_of_one_rank_are_ordered_by_id() {
+    let (status, page) = get_json("/private_api/taxa/filter?start=0&end=100&sort_by=rank").await;
+    assert_eq!(status, StatusCode::OK);
+
+    let ids: Vec<u64> = page.as_array().expect("a page").iter().map(|id| id.as_u64().expect("an id")).collect();
+
+    let (_, ranked) = get_json("/private_api/taxa/filter?start=0&end=100&sort_by=id").await;
+    assert_eq!(ids.len(), ranked.as_array().expect("a page").len(), "the same taxa, differently arranged");
+
+    // Every rank in one call rather than one call per taxon: `/private_api/taxa` takes the ids
+    // repeated, and answers in the order it is given them.
+    let taxids: String = ids.iter().map(|id| format!("&taxids[]={id}")).collect();
+    let (_, named) = get_json(&format!("/private_api/taxa?{}", taxids.trim_start_matches('&'))).await;
+    let ranks: Vec<&str> = named
+        .as_array()
+        .expect("a taxon per id")
+        .iter()
+        .map(|t| t["rank"].as_str().expect("a rank"))
+        .collect();
+    assert_eq!(ranks.len(), ids.len(), "every taxon on the page should be named");
+
+    // Ids ascend within each run of one rank, which is what a tiebreak on the id means from here.
+    let mut ties = 0;
+    for (pair, rank_pair) in ids.windows(2).zip(ranks.windows(2)) {
+        if rank_pair[0] == rank_pair[1] {
+            ties += 1;
+            assert!(pair[0] < pair[1], "{} and {} share a rank but are not in id order", pair[0], pair[1]);
+        }
+    }
+
+    assert!(ties > 0, "the corpus should hold at least two taxa of one rank, or this asserts nothing");
+}
+
+/// Descending reverses the whole order, the tiebreak included, so the two directions are exact
+/// mirrors even where the sort field repeats.
+#[tokio::test(flavor = "multi_thread")]
+async fn sorting_by_rank_reverses_exactly() {
+    let (_, ascending) = get_json("/private_api/taxa/filter?start=0&end=100&sort_by=rank").await;
+    let (status, descending) =
+        get_json("/private_api/taxa/filter?start=0&end=100&sort_by=rank&sort_descending=true").await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    let mut reversed = descending.as_array().expect("a page").clone();
+    reversed.reverse();
+    assert_eq!(ascending.as_array().expect("a page"), &reversed);
+}
+
+/// A window is the slice of the whole listing at the same offsets, on each sort field and in both
+/// directions.
+///
+/// `page_of` is exhaustively tested where it lives, over every window of a shuffled table. What
+/// this adds is that the endpoint hands it a total order: the sort key alone repeats across taxa,
+/// so a page is only well defined because the taxon id follows it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_window_matches_the_whole_listing() {
+    for field in ["id", "name", "rank"] {
+        for descending in ["false", "true"] {
+            let sorted = format!("sort_by={field}&sort_descending={descending}");
+            let (status, whole) = get_json(&format!("/private_api/taxa/filter?start=0&end=1000&{sorted}")).await;
+
+            assert_eq!(status, StatusCode::OK, "{sorted}");
+            let whole = whole.as_array().expect("a page");
+            assert!(whole.len() > 6, "{sorted}: too few taxa to page through");
+
+            for (start, size) in [(0usize, 3usize), (3, 3), (whole.len() - 2, 2)] {
+                let end = start + size;
+                let (window_status, window) =
+                    get_json(&format!("/private_api/taxa/filter?start={start}&end={end}&{sorted}")).await;
+
+                assert_eq!(window_status, StatusCode::OK, "{sorted}: the window [{start}, {end})");
+                let expected: Vec<_> = whole.iter().skip(start).take(size).cloned().collect();
+                assert_eq!(
+                    window.as_array().expect("a page"),
+                    &expected,
+                    "{sorted}: the window [{start}, {end}) differs from the same slice of the listing"
+                );
+            }
+        }
+    }
+}

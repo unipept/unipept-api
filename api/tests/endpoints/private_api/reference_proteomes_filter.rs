@@ -15,7 +15,7 @@ async fn an_empty_filter_counts_every_proteome() {
     let (status, body) = get_json("/private_api/proteomes/count").await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["count"], 3, "the corpus declares three reference proteomes");
+    assert_eq!(body["count"], 4, "the corpus declares four reference proteomes");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -142,4 +142,78 @@ async fn the_documented_sort_fields_are_not_the_implemented_ones() {
 
 fn as_set(value: &serde_json::Value) -> std::collections::BTreeSet<String> {
     value.as_array().expect("a page").iter().map(|id| id.as_str().expect("an id").to_string()).collect()
+}
+
+/// `UP000000002` and `UP000000004` share a taxon and a protein count, so on both sort fields the
+/// proteome id is what separates them, and the order is total.
+///
+/// Nothing else could separate them: the proteomes are collected out of a `HashMap`, whose
+/// iteration order differs from one process to the next. A page is a window on this order, so two
+/// processes ordering the pair differently would hand a client paging through the list one proteome
+/// twice and another not at all.
+#[tokio::test(flavor = "multi_thread")]
+async fn proteomes_alike_on_the_sort_field_are_ordered_by_id() {
+    for field in ["taxon_name", "protein_count"] {
+        let path = format!("/private_api/proteomes/filter?start=0&end=100&sort_by={field}");
+        let (status, page) = get_json(&path).await;
+
+        assert_eq!(status, StatusCode::OK, "{field}");
+
+        let ids: Vec<&str> =
+            page.as_array().expect("a page").iter().map(|id| id.as_str().expect("an accession")).collect();
+        let second = ids.iter().position(|id| *id == "UP000000002").expect("UP000000002 is in the page");
+        let fourth = ids.iter().position(|id| *id == "UP000000004").expect("UP000000004 is in the page");
+
+        assert_eq!(fourth, second + 1, "sorted by {field} the tied pair is adjacent, in id order: {ids:?}");
+    }
+}
+
+/// Descending reverses the whole order, the tiebreak included, so the two directions are exact
+/// mirrors even on a field two proteomes share.
+#[tokio::test(flavor = "multi_thread")]
+async fn sorting_by_protein_count_reverses_exactly() {
+    let (ascending_status, ascending) =
+        get_json("/private_api/proteomes/filter?start=0&end=100&sort_by=protein_count").await;
+    let (descending_status, descending) =
+        get_json("/private_api/proteomes/filter?start=0&end=100&sort_by=protein_count&sort_descending=true").await;
+
+    assert_eq!(ascending_status, StatusCode::OK, "ascending");
+    assert_eq!(descending_status, StatusCode::OK, "descending");
+
+    let mut reversed = descending.as_array().expect("a page").clone();
+    reversed.reverse();
+    assert_eq!(ascending.as_array().expect("a page"), &reversed);
+}
+
+/// A window is the slice of the whole listing at the same offsets, on each sort field and in both
+/// directions.
+///
+/// `page_of` is exhaustively tested where it lives. What this adds is that the endpoint hands it a
+/// total order: `UP000000002` and `UP000000004` are alike on both sort fields, so a page is only
+/// well defined because the proteome id follows them.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_window_matches_the_whole_listing() {
+    for field in ["id", "taxon_name", "protein_count"] {
+        for descending in ["false", "true"] {
+            let sorted = format!("sort_by={field}&sort_descending={descending}");
+            let (status, whole) = get_json(&format!("/private_api/proteomes/filter?start=0&end=100&{sorted}")).await;
+
+            assert_eq!(status, StatusCode::OK, "{sorted}");
+            let whole = whole.as_array().expect("a page");
+
+            for start in 0..whole.len() {
+                let end = start + 2;
+                let path = format!("/private_api/proteomes/filter?start={start}&end={end}&{sorted}");
+                let (window_status, window) = get_json(&path).await;
+
+                assert_eq!(window_status, StatusCode::OK, "{sorted}: the window [{start}, {end})");
+                let expected: Vec<_> = whole.iter().skip(start).take(2).cloned().collect();
+                assert_eq!(
+                    window.as_array().expect("a page"),
+                    &expected,
+                    "{sorted}: the window [{start}, {end}) differs from the same slice of the listing"
+                );
+            }
+        }
+    }
 }

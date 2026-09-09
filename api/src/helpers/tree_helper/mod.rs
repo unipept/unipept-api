@@ -45,6 +45,7 @@ pub fn build_tree(
     }
 
     root.count();
+    root.sort();
 
     root
 }

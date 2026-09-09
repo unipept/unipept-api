@@ -8,8 +8,6 @@
 //! query was built differently, not that the server was never called. The query DSL travels in the
 //! body; `from` and `size` are query parameters, and they are asserted where they actually appear.
 
-use std::collections::HashSet;
-
 use database::{
     Database, get_accessions, get_accessions_by_filter, get_accessions_count_by_filter, get_accessions_map
 };
@@ -51,7 +49,7 @@ async fn an_empty_accession_set_makes_no_request() {
         .await;
 
     let database = database(&server);
-    let result = get_accessions(database.get_conn(), &HashSet::new()).await.expect("an empty set should succeed");
+    let result = get_accessions(database.get_conn(), &[]).await.expect("an empty set should succeed");
 
     assert!(result.is_empty());
     mock.assert_hits_async(0).await;
@@ -72,7 +70,7 @@ async fn accessions_are_fetched_by_mget_and_parsed() {
         .await;
 
     let database = database(&server);
-    let accessions = HashSet::from(["P00001".to_string()]);
+    let accessions = ["P00001".to_string()];
     let entries = get_accessions(database.get_conn(), &accessions).await.expect("the mocked response should parse");
 
     mock.assert_async().await;
@@ -80,6 +78,32 @@ async fn accessions_are_fetched_by_mget_and_parsed() {
     assert_eq!(entries[0].uniprot_accession_number, "P00001");
     assert_eq!(entries[0].taxon_id, 8501);
     assert_eq!(entries[0].protein, "MKTAYIAKQR");
+}
+
+/// The ids reach OpenSearch in the order they were given, and `mget` answers a `docs` array in
+/// that same order, so the caller's order is what comes back.
+#[tokio::test]
+async fn accessions_are_requested_in_the_order_they_are_given() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/uniprot_entries/_mget")
+                .json_body(json!({ "docs": [ { "_id": "P00003" }, { "_id": "P00001" } ] }));
+            then.status(200).json_body(json!({
+                "docs": [ { "_source": source("P00003", 8502) }, { "_source": source("P00001", 8501) } ]
+            }));
+        })
+        .await;
+
+    let database = database(&server);
+    let accessions = ["P00003".to_string(), "P00001".to_string()];
+    let entries = get_accessions(database.get_conn(), &accessions).await.expect("the mocked response should parse");
+
+    mock.assert_async().await;
+    assert_eq!(entries.iter().map(|entry| entry.uniprot_accession_number.as_str()).collect::<Vec<_>>(), vec![
+        "P00003", "P00001"
+    ]);
 }
 
 #[tokio::test]
@@ -95,7 +119,7 @@ async fn get_accessions_map_keys_entries_by_accession() {
         .await;
 
     let database = database(&server);
-    let accessions = HashSet::from(["P00001".to_string(), "P00003".to_string()]);
+    let accessions = ["P00001".to_string(), "P00003".to_string()];
     let map = get_accessions_map(database.get_conn(), &accessions)
         .await
         .expect("the mocked response should parse");
@@ -120,7 +144,7 @@ async fn a_document_without_a_source_is_skipped() {
         .await;
 
     let database = database(&server);
-    let accessions = HashSet::from(["P00001".to_string(), "P99999".to_string()]);
+    let accessions = ["P00001".to_string(), "P99999".to_string()];
     let entries = get_accessions(database.get_conn(), &accessions).await.expect("a missing document is not an error");
 
     assert_eq!(entries.len(), 1);
@@ -138,7 +162,7 @@ async fn a_non_success_response_is_an_error() {
         .await;
 
     let database = database(&server);
-    let accessions = HashSet::from(["P00001".to_string()]);
+    let accessions = ["P00001".to_string()];
     let error = get_accessions(database.get_conn(), &accessions).await.expect_err("a 500 must not be read as data");
 
     assert!(error.to_string().contains("index is closed"), "the response body should reach the caller: {error}");
@@ -261,7 +285,7 @@ async fn canned_documents_cover_the_corpus_accessions() {
         .await;
 
     let database = database(&server);
-    let requested: HashSet<String> = fixtures::ACCESSIONS.iter().map(|a| a.to_string()).collect();
+    let requested: Vec<String> = fixtures::ACCESSIONS.iter().map(|a| a.to_string()).collect();
     let map = get_accessions_map(database.get_conn(), &requested).await.expect("the corpus batch parses");
 
     for accession in fixtures::ACCESSIONS {

@@ -10,21 +10,10 @@ use crate::{
     database::{get_against, post_against, source, taxon_of}
 };
 
-/// Sorts every list in a response before it is compared: several controllers build a list by
-/// iterating a `HashMap`, so element order differs between two identical requests.
-fn canonical(value: Value) -> Value {
-    match value {
-        Value::Array(items) => {
-            let mut items: Vec<Value> = items.into_iter().map(canonical).collect();
-            items.sort_by_key(Value::to_string);
-            Value::Array(items)
-        }
-        Value::Object(fields) => Value::Object(fields.into_iter().map(|(key, item)| (key, canonical(item))).collect()),
-        other => other
-    }
-}
-
 /// Asserts that a query string and the JSON body meaning the same thing answer the same way.
+///
+/// Bodies are compared as they arrive, lists included, so a route ordering its answer differently
+/// under one method than the other is something this catches.
 fn assert_get_and_post_agree(query: &str, from_get: (StatusCode, Value), from_post: (StatusCode, Value)) {
     let (get_status, get_body) = from_get;
     let (post_status, post_body) = from_post;
@@ -33,7 +22,7 @@ fn assert_get_and_post_agree(query: &str, from_get: (StatusCode, Value), from_po
     assert_eq!(post_status, StatusCode::OK, "POST {query}: {post_body}");
     assert_ne!(get_body, json!([]), "{query} answered with an empty list, which proves nothing");
     assert_ne!(get_body, Value::Null, "{query} answered with null, which proves nothing");
-    assert_eq!(canonical(get_body), canonical(post_body), "{query}");
+    assert_eq!(get_body, post_body, "{query}");
 }
 
 /// The path a query string is sent to.

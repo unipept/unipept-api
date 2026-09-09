@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use datastore::InterproStore;
 use serde::Serialize;
 
-use crate::helpers::is_zero;
+use crate::helpers::{family_from_list, family_from_map, grouped_by_domain, is_zero};
+
+/// The prefix an InterPro annotation carries in the aggregated counts.
+const PREFIX: &str = "IPR:";
 
 #[derive(Serialize)]
 #[serde(untagged)]
@@ -51,17 +54,7 @@ pub fn interpro_entries_from_map(
     extra: bool,
     domains: bool
 ) -> InterproEntries {
-    let interpro_entries = fa_data.iter().filter(|(key, _)| key.starts_with("IPR:"));
-
-    if domains {
-        handle_domains(interpro_entries.map(|(key, count)| (key.as_str(), count)), interpro_store, extra)
-    } else {
-        InterproEntries::Default(
-            interpro_entries
-                .filter_map(|(key, &count)| interpro_entry(key, count, interpro_store, extra, false))
-                .collect()
-        )
-    }
+    interpro_entries(family_from_map(fa_data, PREFIX), interpro_store, extra, domains)
 }
 
 pub fn interpro_entries_from_list(
@@ -70,41 +63,39 @@ pub fn interpro_entries_from_list(
     extra: bool,
     domains: bool
 ) -> InterproEntries {
-    let interpro_entries = fa_data.iter().filter(|key| key.starts_with("IPR:"));
+    interpro_entries(family_from_list(fa_data, PREFIX), interpro_store, extra, domains)
+}
 
+fn interpro_entries(
+    iprs: Vec<(&str, u32)>,
+    interpro_store: &InterproStore,
+    extra: bool,
+    domains: bool
+) -> InterproEntries {
     if domains {
-        handle_domains(interpro_entries.map(|&key| (key, &0u32)), interpro_store, extra)
+        handle_domains(iprs, interpro_store, extra)
     } else {
         InterproEntries::Default(
-            interpro_entries.filter_map(|key| interpro_entry(key, 0, interpro_store, extra, false)).collect()
+            iprs.into_iter()
+                .filter_map(|(key, count)| interpro_entry(key, count, interpro_store, extra, false))
+                .collect()
         )
     }
 }
 
-fn handle_domains<'a>(
-    iprs: impl Iterator<Item = (&'a str, &'a u32)>,
-    interpro_store: &InterproStore,
-    extra: bool
-) -> InterproEntries {
-    let mut interpro_domains = HashMap::new();
-    for (key, &count) in iprs {
-        if let Some(entry) = interpro_entry(key, count, interpro_store, extra, true)
-            && let InterproEntry::Domains { domain, .. } | InterproEntry::ExtraDomains { domain, .. } = &entry
-        {
-            interpro_domains.entry(domain.to_string()).or_insert_with(Vec::new).push(entry);
+/// An entry the store knows nothing about is dropped, and so is one built in a shape that carries
+/// no domain — neither can be filed under a namespace.
+fn handle_domains(iprs: Vec<(&str, u32)>, interpro_store: &InterproStore, extra: bool) -> InterproEntries {
+    InterproEntries::Domains(grouped_by_domain(iprs.into_iter().filter_map(|(key, count)| {
+        let entry = interpro_entry(key, count, interpro_store, extra, true)?;
+        match &entry {
+            InterproEntry::Domains { domain, .. } | InterproEntry::ExtraDomains { domain, .. } => {
+                let domain = domain.clone();
+                Some((domain, entry))
+            }
+            _ => None
         }
-    }
-
-    let result: Vec<HashMap<String, Vec<InterproEntry>>> = interpro_domains
-        .into_iter()
-        .map(|(key, value)| {
-            let mut mapping = HashMap::new();
-            mapping.insert(key, value);
-            mapping
-        })
-        .collect();
-
-    InterproEntries::Domains(result)
+    })))
 }
 
 fn interpro_entry(

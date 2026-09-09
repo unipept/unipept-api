@@ -49,12 +49,18 @@ async fn handler(
 ) -> Result<Vec<EcInformation>, ApiError> {
     let input = sanitize_peptides(input);
 
+    // Each distinct peptide once, in first-appearance order, with the number of times it occurs.
+    // The search reads `unique_peptides`, so that order is the order of the results.
     let mut peptide_counts: HashMap<String, usize> = HashMap::new();
+    let mut unique_peptides: Vec<String> = Vec::new();
     for peptide in input.into_iter() {
+        if !peptide_counts.contains_key(&peptide) {
+            unique_peptides.push(peptide.clone());
+        }
+
         *peptide_counts.entry(peptide).or_insert(0) += 1;
     }
 
-    let unique_peptides: Vec<String> = peptide_counts.keys().cloned().collect();
     let result = tokio::task::block_in_place(|| index.analyse(&unique_peptides, equate_il, false, Some(cutoff)));
 
     let ec_store = datastore.ec_store();
@@ -71,14 +77,17 @@ async fn handler(
             let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let cutoff_used = item.cutoff_used;
 
-            for _ in 0..*count {
-                let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
+            // Built once and copied per repeat. Ordering the terms and naming them out of the
+            // datastore depends on the peptide alone, so a peptide asked for twenty times would
+            // otherwise pay for both twenty times.
+            let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
 
+            for _ in 0..*count {
                 final_results.push(EcInformation {
                     peptide: item.sequence.to_string(),
                     cutoff_used,
                     total_protein_count,
-                    ec: ecs
+                    ec: ecs.clone()
                 });
             }
         }

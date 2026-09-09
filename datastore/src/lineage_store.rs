@@ -251,10 +251,13 @@ impl LineageStore {
     }
 
     /// Returns all unique taxon IDs at a specific rank in the NCBI taxonomy.
+    /// Ascending by taxon id.
     pub fn get_all_taxon_ids_at_rank(&self, rank: &LineageRank) -> Option<Vec<u32>> {
-        rank.lineage_index()
-            .and_then(|idx| self.index_references.get(idx))
-            .map(|map| map.keys().cloned().collect())
+        rank.lineage_index().and_then(|idx| self.index_references.get(idx)).map(|map| {
+            let mut ids: Vec<u32> = map.keys().cloned().collect();
+            ids.sort_unstable();
+            ids
+        })
     }
 }
 

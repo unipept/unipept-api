@@ -70,21 +70,22 @@ async fn a_post_carries_counts_per_taxon() {
 /// The two methods take different parameters, so this route cannot join the routing table. A count
 /// of three is the same request as the taxon repeated three times.
 ///
-/// One taxon, because the tree is built by iterating a `HashMap` and child order is not stable.
+/// Two taxa, so the comparison covers a tree with more than one branch in it.
 #[tokio::test(flavor = "multi_thread")]
 async fn counts_answer_like_the_repeats_they_stand_for() {
-    let repeated = "input[]=8501&input[]=8501&input[]=8501";
+    let repeated = "input[]=8501&input[]=8501&input[]=8501&input[]=8502";
+    let counts = json!({ "counts": { "8501": 3, "8502": 1 } });
 
     let (get_status, from_get) = get_json(&format!("/api/v2/taxa2tree?{repeated}")).await;
-    let (post_status, from_post) = post_json("/api/v2/taxa2tree", json!({ "counts": { "8501": 3 } })).await;
+    let (post_status, from_post) = post_json("/api/v2/taxa2tree", counts.clone()).await;
 
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(post_status, StatusCode::OK);
-    assert_eq!(from_get["data"]["count"], 3);
+    assert_eq!(from_get["data"]["count"], 4);
     assert_eq!(from_get, from_post);
 
     let (get_status, from_get) = get_raw(&format!("/api/v2/taxa2tree.html?{repeated}")).await;
-    let (post_status, from_post) = post_raw("/api/v2/taxa2tree.html", json!({ "counts": { "8501": 3 } })).await;
+    let (post_status, from_post) = post_raw("/api/v2/taxa2tree.html", counts).await;
 
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(post_status, StatusCode::OK);
@@ -171,33 +172,62 @@ async fn the_html_route_embeds_the_tree_as_parseable_json() {
     assert_eq!(embedded["name"], "Organism");
 }
 
-/// Sorts every `children` array by `id`, so two trees can be compared by content.
-///
-/// Siblings come out in whatever order the handler's map iterated, which differs between calls.
-/// That is not what this test is about, so it is normalised away rather than asserted.
-fn sorted_children(value: &mut serde_json::Value) {
-    if let Some(children) = value.get_mut("children").and_then(serde_json::Value::as_array_mut) {
-        for child in children.iter_mut() {
-            sorted_children(child);
-        }
-        children.sort_by_key(|child| child["id"].as_i64().expect("every node carries a numeric id"));
-    }
-}
-
 /// The embedded tree is the same one the JSON route serves.
 ///
 /// Two routes, one handler: the HTML half differs only in wrapping the tree in a template. Pinning
 /// them equal means a change to either the serialisation or the interpolation shows up here rather
 /// than as a page that renders and quietly draws something else.
+///
+/// Compared as they arrive, siblings included, so the two routes ordering a tree differently is
+/// something this catches.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_embedded_tree_matches_the_json_route() {
-    let (_, mut from_json) = get_json("/api/v2/taxa2tree?input[]=8501&input[]=8502").await;
+    let (_, from_json) = get_json("/api/v2/taxa2tree?input[]=8501&input[]=8502").await;
     let (_, page) = get_raw("/api/v2/taxa2tree.html?input[]=8501&input[]=8502").await;
 
-    let mut embedded: serde_json::Value = serde_json::from_str(rendered_data(&page)).expect("embedded data is JSON");
-
-    sorted_children(&mut embedded);
-    sorted_children(&mut from_json);
+    let embedded: serde_json::Value = serde_json::from_str(rendered_data(&page)).expect("embedded data is JSON");
 
     assert_eq!(embedded, from_json);
+}
+
+/// The children of a node go out largest branch first, ties broken on the taxon id.
+///
+/// Both species hang off genus 8500, so their order is the rule made visible: swapping the counts
+/// swaps them, and equal counts fall back to the id.
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_largest_branch_comes_first() {
+    async fn species_under_the_genus(counts: serde_json::Value) -> Vec<i64> {
+        let (status, body) = post_json("/api/v2/taxa2tree", json!({ "counts": counts })).await;
+        assert_eq!(status, StatusCode::OK);
+
+        let mut node = &body;
+        while node["id"] != 8500 {
+            node = node["children"].as_array().and_then(|children| children.first()).expect("the walk reaches 8500");
+        }
+
+        node["children"]
+            .as_array()
+            .expect("the genus has children")
+            .iter()
+            .map(|child| child["id"].as_i64().expect("a numeric id"))
+            .collect()
+    }
+
+    assert_eq!(species_under_the_genus(json!({ "8501": 5, "8502": 3 })).await, vec![8501, 8502]);
+    assert_eq!(species_under_the_genus(json!({ "8501": 3, "8502": 5 })).await, vec![8502, 8501]);
+    assert_eq!(species_under_the_genus(json!({ "8501": 3, "8502": 3 })).await, vec![8501, 8502], "tied, so by id");
+}
+
+/// Two `HashMap`s in one thread hash with different seeds, so the two calls here build their trees
+/// separately rather than reading one map twice.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_same_request_answers_identically() {
+    let query = "/api/v2/taxa2tree?input[]=8501&input[]=8502&input[]=9503";
+
+    let (status, first) = get_json(query).await;
+    let (_, again) = get_json(query).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(first, again);
 }

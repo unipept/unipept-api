@@ -58,3 +58,36 @@ async fn a_protein_with_no_annotations_still_answers() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body[0]["ec"].as_array().map(Vec::len), Some(0));
 }
+
+/// The terms come out most frequent first, ties broken on the identifier.
+///
+/// `AAGGK` states both halves of the rule. Its InterPro entries rank 2 before 1, which alphabetical
+/// order alone would reverse; its two GO terms both count 2, so only the tiebreak separates them.
+#[tokio::test(flavor = "multi_thread")]
+async fn terms_come_back_most_frequent_first() {
+    let (status, body) = get_json(&format!("/api/v2/pept2funct?input[]={COMMON}&equate_il=true")).await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    assert_eq!(body[0]["ec"][0]["ec_number"], "1.1.1.1", "count 2");
+    assert_eq!(body[0]["ec"][1]["ec_number"], "2.7.11.1", "count 1");
+
+    assert_eq!(body[0]["ipr"][0]["code"], "IPR016364", "count 2, and the later code");
+    assert_eq!(body[0]["ipr"][1]["code"], "IPR008816", "count 1");
+
+    assert_eq!(body[0]["go"][0]["go_term"], "GO:0005515", "tied at 2, so the lower term first");
+    assert_eq!(body[0]["go"][1]["go_term"], "GO:0009279");
+}
+
+/// Two `HashMap`s in one thread hash with different seeds, so the two calls here build their
+/// answers separately rather than reading one map twice.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_same_request_answers_identically() {
+    let query = format!("/api/v2/pept2funct?input[]={COMMON}&equate_il=true&extra=true&domains=true");
+
+    let (status, first) = get_json(&query).await;
+    let (_, again) = get_json(&query).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(first, again);
+}

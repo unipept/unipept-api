@@ -6,7 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
-    controllers::{generate_handlers, private_api::default_sort_descending, request::Flag},
+    controllers::{
+        generate_handlers,
+        private_api::{default_sort_descending, page_of},
+        request::Flag
+    },
     errors::ApiError
 };
 
@@ -91,44 +95,40 @@ async fn filter_handler(
 
     let filter = filter.to_lowercase();
 
-    let mut filtered_taxa: Vec<_> = taxon_store
+    let filtered_taxa = taxon_store
         .mapper
         .iter()
-        .filter(|(taxon_id, (name, rank, is_valid))| matches(&filter, **taxon_id, name, rank, *is_valid))
-        .map(|(id, _)| *id)
-        .collect();
+        .filter(|(taxon_id, (name, rank, is_valid))| matches(&filter, **taxon_id, name, rank, *is_valid));
 
-    // Sort based on the `sort_by` field
-    match sort_by.as_str() {
+    // A name and a rank are both held by many taxa, and the taxon id breaks every tie, so the order
+    // is total. That matters here more than in a plain listing: this list is paged through, and two
+    // pages cut out of two different orders can repeat one taxon and drop another.
+    //
+    // `sort_descending` reverses the whole ordering, tiebreak included, so a descending page is the
+    // reverse of the ascending one.
+    //
+    // The sort key is carried beside the id rather than read through `mapper` while sorting, which
+    // would repeat that lookup for every comparison rather than doing it once per taxon.
+    //
+    // Each arm keeps its own row type. Sorting by id is the default, and giving it the tuple the
+    // other two need would carry an empty key over every taxon in the table.
+    let page = match sort_by.as_str() {
         "name" => {
-            if sort_descending {
-                filtered_taxa.sort_by(|&a_id, &b_id| taxon_store.mapper[&b_id].0.cmp(&taxon_store.mapper[&a_id].0));
-            } else {
-                filtered_taxa.sort_by(|&a_id, &b_id| taxon_store.mapper[&a_id].0.cmp(&taxon_store.mapper[&b_id].0));
-            }
+            let mut rows: Vec<(&str, u32)> = filtered_taxa.map(|(id, (name, _, _))| (name.as_str(), *id)).collect();
+            page_of(&mut rows, start, end, sort_descending).iter().map(|(_, id)| *id).collect()
         }
         "rank" => {
-            if sort_descending {
-                filtered_taxa.sort_by(|&a_id, &b_id| taxon_store.mapper[&b_id].1.cmp(&taxon_store.mapper[&a_id].1));
-            } else {
-                filtered_taxa.sort_by(|&a_id, &b_id| taxon_store.mapper[&a_id].1.cmp(&taxon_store.mapper[&b_id].1));
-            }
+            let mut rows: Vec<(&str, u32)> = filtered_taxa.map(|(id, (_, rank, _))| (rank.as_str(), *id)).collect();
+            page_of(&mut rows, start, end, sort_descending).iter().map(|(_, id)| *id).collect()
         }
+        // An id is unique, so it is a total order on its own.
         _ => {
-            // Default to sorting by id
-            if sort_descending {
-                filtered_taxa.sort_by(|a, b| b.cmp(a));
-            } else {
-                #[allow(clippy::unnecessary_sort_by)]
-                filtered_taxa.sort_by(|a, b| a.cmp(b));
-            }
+            let mut rows: Vec<u32> = filtered_taxa.map(|(id, _)| *id).collect();
+            page_of(&mut rows, start, end, sort_descending).to_vec()
         }
-    }
+    };
 
-    // Take the range [start, end), which is empty when `end` is not past `start`.
-    let taxa: Vec<u32> = filtered_taxa.into_iter().skip(start).take(end - start).collect();
-
-    Ok(taxa)
+    Ok(page)
 }
 
 generate_handlers!(

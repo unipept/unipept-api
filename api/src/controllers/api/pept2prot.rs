@@ -1,7 +1,6 @@
-use std::collections::HashSet;
-
 use axum::{Json, extract::State};
 use database::get_accessions_map;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -70,9 +69,16 @@ async fn handler(
 
     let result = tokio::task::block_in_place(|| index.analyse(&input, equate_il, tryptic, Some(cutoff)));
 
-    let accession_numbers: HashSet<String> = result
+    // Only ever read as a lookup, so the order does not reach the answer; deduplicated so the
+    // database is not asked for one accession twice.
+    //
+    // Deduplicated before the accessions are owned rather than after: a peptide reaches the same
+    // protein through many hits, and only the distinct ones are worth an allocation.
+    let accession_numbers: Vec<String> = result
         .iter()
-        .flat_map(|item| item.proteins.iter().map(|protein| protein.uniprot_accession.to_string()))
+        .flat_map(|item| item.proteins.iter().map(|protein| protein.uniprot_accession))
+        .unique()
+        .map(str::to_string)
         .collect();
 
     if accession_numbers.is_empty() {

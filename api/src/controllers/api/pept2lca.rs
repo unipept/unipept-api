@@ -93,7 +93,7 @@ async fn handler(
                 taxon: Taxon {
                     taxon_id: lca as u32,
                     taxon_name: name.to_string(),
-                    taxon_rank: (*rank).into()
+                    taxon_rank: rank.to_string()
                 },
                 lineage
             })

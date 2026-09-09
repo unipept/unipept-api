@@ -127,7 +127,7 @@ async fn handler(
                     taxon: Taxon {
                         taxon_id: taxon,
                         taxon_name: name.to_string(),
-                        taxon_rank: (*rank).into()
+                        taxon_rank: rank.to_string()
                     },
                     lineage
                 }))

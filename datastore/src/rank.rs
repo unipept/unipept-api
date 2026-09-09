@@ -179,12 +179,6 @@ impl fmt::Display for TaxonRank {
     }
 }
 
-impl From<TaxonRank> for String {
-    fn from(rank: TaxonRank) -> Self {
-        rank.as_str().to_string()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

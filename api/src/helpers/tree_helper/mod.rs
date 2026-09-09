@@ -32,7 +32,7 @@ pub fn build_tree(
                 // panic. The rest of the API renders such a taxon with an empty name, and the node
                 // is still added so the branch below it hangs in the right place.
                 let (name, rank) = match taxon_store.get(lineage_id as u32) {
-                    Some((name, rank, _)) => (name.clone(), (*rank).into()),
+                    Some((name, rank, _)) => (name.clone(), rank.to_string()),
                     None => (String::new(), TaxonRank::NO_RANK.to_string())
                 };
                 current_node.add_child(Node::new(lineage_id as usize, name, rank));

@@ -3,6 +3,7 @@ name = "database"
 version = "2.3.2"
 edition.workspace = true
 rust-version.workspace = true
+publish = false
 
 [dependencies]
 opensearch = "^2.0.0"

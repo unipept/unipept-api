@@ -3,6 +3,7 @@ name = "unipept-api"
 version = "2.4.2"
 edition.workspace = true
 rust-version.workspace = true
+publish = false
 
 [dependencies]
 askama = "0.16.1"

@@ -104,7 +104,7 @@ impl TaxonRank {
 
     /// The first column of a lineage, whatever the taxonomy calls it. Every taxon below the root
     /// is reached through it.
-    pub const TOP: Self = Self(0);
+    pub const TOP_RANK: Self = Self(0);
 
     /// `calculate_lca` will not let two taxa agree at genus or species by both recording nothing
     /// there, so these two are named. A rename stops the build here.
@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn the_top_rank_is_the_first_column() {
-        assert_eq!(TaxonRank::TOP.lineage_index(), Some(0));
-        assert_eq!(TaxonRank::TOP.as_str(), RANK_NAMES[0]);
+        assert_eq!(TaxonRank::TOP_RANK.lineage_index(), Some(0));
+        assert_eq!(TaxonRank::TOP_RANK.as_str(), RANK_NAMES[0]);
     }
 }

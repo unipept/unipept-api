@@ -45,7 +45,10 @@ pub struct ReferenceProteomeCountResult {
 /// `lowercased` is the filter folded once by the caller rather than per proteome; `filter` as given
 /// is what the taxon id is matched against, which is numeric and has no case.
 fn matches(lowercased: &str, filter: &str, key: &str, taxon_id: u32, taxon_store: &datastore::TaxonStore) -> bool {
-    key.to_lowercase().contains(lowercased)
+    // An empty filter keeps every proteome, and answering that before folding a case saves an
+    // allocation per row on what the browser asks for by default.
+    filter.is_empty()
+        || key.to_lowercase().contains(lowercased)
         || taxon_id.to_string().contains(filter)
         || get_taxon_name_by_id(taxon_store, taxon_id).to_lowercase().contains(lowercased)
 }

@@ -206,7 +206,8 @@ async fn every_window_matches_the_whole_listing() {
                 for size in [1usize, 2] {
                     let end = start + size;
                     let path = format!("/private_api/proteomes/filter?start={start}&end={end}&{sorted}");
-                    let (_, window) = get_json(&path).await;
+                    let (window_status, window) = get_json(&path).await;
+                    assert_eq!(window_status, StatusCode::OK, "{sorted}: the window [{start}, {end})");
 
                     let expected: Vec<_> = whole.iter().skip(start).take(size).cloned().collect();
                     assert_eq!(

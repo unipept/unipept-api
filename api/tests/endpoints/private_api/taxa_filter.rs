@@ -289,8 +289,9 @@ async fn every_window_matches_the_whole_listing() {
             for start in 0..whole.len() {
                 for size in [1usize, 3] {
                     let end = start + size;
-                    let (_, window) =
+                    let (window_status, window) =
                         get_json(&format!("/private_api/taxa/filter?start={start}&end={end}&{sorted}")).await;
+                    assert_eq!(window_status, StatusCode::OK, "{sorted}: the window [{start}, {end})");
 
                     let expected: Vec<_> = whole.iter().skip(start).take(size).cloned().collect();
                     assert_eq!(
@@ -318,14 +319,16 @@ async fn pages_walked_end_to_end_rebuild_the_listing() {
     for field in ["id", "rank", "name"] {
         for descending in ["false", "true"] {
             let sorted = format!("sort_by={field}&sort_descending={descending}");
-            let (_, whole) = get_json(&format!("/private_api/taxa/filter?start=0&end=1000&{sorted}")).await;
+            let (status, whole) = get_json(&format!("/private_api/taxa/filter?start=0&end=1000&{sorted}")).await;
+            assert_eq!(status, StatusCode::OK, "{sorted}");
             let whole = whole.as_array().expect("a page").clone();
 
             let mut walked = Vec::new();
             let mut start = 0;
             while start < whole.len() {
-                let (_, page) =
+                let (page_status, page) =
                     get_json(&format!("/private_api/taxa/filter?start={start}&end={}&{sorted}", start + 3)).await;
+                assert_eq!(page_status, StatusCode::OK, "{sorted}: the page at {start}");
                 walked.extend(page.as_array().expect("a page").clone());
                 start += 3;
             }

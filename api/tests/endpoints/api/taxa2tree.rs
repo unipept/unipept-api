@@ -70,8 +70,7 @@ async fn a_post_carries_counts_per_taxon() {
 /// The two methods take different parameters, so this route cannot join the routing table. A count
 /// of three is the same request as the taxon repeated three times.
 ///
-/// Two taxa, which #204 made possible: while child order followed a `HashMap`, comparing whole
-/// trees needed a tree that could hold only one branch.
+/// Two taxa, so the comparison covers a tree with more than one branch in it.
 #[tokio::test(flavor = "multi_thread")]
 async fn counts_answer_like_the_repeats_they_stand_for() {
     let repeated = "input[]=8501&input[]=8501&input[]=8501&input[]=8502";
@@ -179,8 +178,8 @@ async fn the_html_route_embeds_the_tree_as_parseable_json() {
 /// them equal means a change to either the serialisation or the interpolation shows up here rather
 /// than as a page that renders and quietly draws something else.
 ///
-/// Compared as they arrive. Before #204 the siblings had to be sorted first, which meant this could
-/// not have caught the two routes ordering a tree differently.
+/// Compared as they arrive, siblings included, so the two routes ordering a tree differently is
+/// something this catches.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_embedded_tree_matches_the_json_route() {
     let (_, from_json) = get_json("/api/v2/taxa2tree?input[]=8501&input[]=8502").await;
@@ -195,6 +194,7 @@ async fn the_embedded_tree_matches_the_json_route() {
 ///
 /// Both species hang off genus 8500, so their order is the rule made visible: swapping the counts
 /// swaps them, and equal counts fall back to the id.
+
 #[tokio::test(flavor = "multi_thread")]
 async fn the_largest_branch_comes_first() {
     async fn species_under_the_genus(counts: serde_json::Value) -> Vec<i64> {
@@ -219,8 +219,8 @@ async fn the_largest_branch_comes_first() {
     assert_eq!(species_under_the_genus(json!({ "8501": 3, "8502": 3 })).await, vec![8501, 8502], "tied, so by id");
 }
 
-/// Two `HashMap`s in one thread hash with different seeds, so this compares two separately built
-/// trees rather than one map read twice.
+/// Two `HashMap`s in one thread hash with different seeds, so the two calls here build their trees
+/// separately rather than reading one map twice.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_same_request_answers_identically() {
     let query = "/api/v2/taxa2tree?input[]=8501&input[]=8502&input[]=9503";

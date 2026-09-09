@@ -7,8 +7,8 @@ use axum::http::StatusCode;
 
 use crate::common::get_json;
 
-/// Descendant ids, as they arrive. Taken in order: since #204 the endpoint collects them through a
-/// `BTreeSet`, so a response may be compared to another element by element.
+/// Descendant ids, as they arrive. The endpoint collects them through a `BTreeSet`, so two
+/// responses may be compared element by element.
 fn ids(value: &serde_json::Value) -> Vec<u64> {
     value.as_array().expect("descendants").iter().map(|id| id.as_u64().expect("an id")).collect()
 }
@@ -79,8 +79,7 @@ async fn the_default_descendant_rank_is_species() {
     assert_eq!(ids(&defaulted[0]["descendants"]), ids(&explicit[0]["descendants"]));
 }
 
-/// Two `BTreeSet`s built from the same ids iterate alike, where two `HashSet`s did not. Before #204
-/// this test could only compare the ids as sets.
+/// Two `BTreeSet`s built from the same ids iterate alike, so the whole response is comparable.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_same_request_answers_with_the_descendants_in_the_same_order() {
     let (_, first) = get_json("/api/v2/taxonomy?input[]=8500&descendants=true").await;

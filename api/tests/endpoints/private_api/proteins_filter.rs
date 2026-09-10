@@ -173,3 +173,56 @@ async fn the_last_page_inside_the_window_is_served() {
     assert_eq!(status, StatusCode::OK, "got: {body}");
     mock.assert_async().await;
 }
+
+/// `name` is mapped `text` in `uniprot_entries`, with no `.keyword` subfield, so the cluster
+/// refuses to sort on it. The frontend's own type for this parameter offers it, which is why this
+/// is refused by name rather than falling back to the default the way the in-memory listings do:
+/// answering an accession-ordered page to a caller who asked for `name` is the silent wrong answer
+/// this endpoint gave for as long as it dropped the parameter altogether.
+///
+/// The mock is asserted uncalled — the field never reaches the cluster.
+#[tokio::test(flavor = "multi_thread")]
+async fn sorting_on_an_unsortable_field_is_rejected() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST).path("/uniprot_entries/_search");
+            then.status(200).json_body(json!({ "hits": { "hits": [] } }));
+        })
+        .await;
+
+    let (dir, state) = test_state(&server.base_url());
+    let request = Request::get("/private_api/proteins/filter?filter=&start=0&end=10&sort_by=name")
+        .body(Body::empty())
+        .unwrap();
+    let (status, body) = request_raw(state, request).await;
+    drop(dir);
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body.contains("name"), "the message should name the field, got: {body}");
+    mock.assert_hits_async(0).await;
+}
+
+/// The browser sends `sort_by=uniprot_accession_number` on every request and always has — the
+/// parameter was simply dropped. An absent value has to mean the same thing, or a client that omits
+/// it gets a different order from one that spells out the default.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_absent_sort_field_is_the_accession() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/uniprot_entries/_search")
+                .json_body_partial(r#"{ "sort": [ { "uniprot_accession_number": { "order": "asc" } } ] }"#);
+            then.status(200).json_body(json!({ "hits": { "hits": [] } }));
+        })
+        .await;
+
+    let (dir, state) = test_state(&server.base_url());
+    let request = Request::get("/private_api/proteins/filter?filter=&start=0&end=10").body(Body::empty()).unwrap();
+    let (status, body) = request_raw(state, request).await;
+    drop(dir);
+
+    assert_eq!(status, StatusCode::OK, "got: {body}");
+    mock.assert_async().await;
+}

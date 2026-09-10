@@ -9,7 +9,8 @@
 //! body; `from` and `size` are query parameters, and they are asserted where they actually appear.
 
 use database::{
-    Database, get_accessions, get_accessions_by_filter, get_accessions_count_by_filter, get_accessions_map
+    Database, ProteinSortField, get_accessions, get_accessions_by_filter, get_accessions_count_by_filter,
+    get_accessions_map
 };
 use httpmock::{Method::POST, MockServer};
 use serde_json::json;
@@ -264,7 +265,9 @@ async fn pagination_converts_start_and_end_into_from_and_size() {
 
     let database = database(&server);
     let accessions =
-        get_accessions_by_filter(database.get_conn(), String::new(), 10, 15).await.expect("the page parses");
+        get_accessions_by_filter(database.get_conn(), String::new(), 10, 15, ProteinSortField::Accession, false)
+            .await
+            .expect("the page parses");
 
     mock.assert_async().await;
     assert_eq!(accessions, vec!["P00001", "P00003"]);
@@ -323,9 +326,10 @@ async fn a_numeric_filter_lists_by_a_term_clause() {
         .await;
 
     let database = database(&server);
-    let found = get_accessions_by_filter(database.get_conn(), "8501".to_string(), 0, 2)
-        .await
-        .expect("the page parses");
+    let found =
+        get_accessions_by_filter(database.get_conn(), "8501".to_string(), 0, 2, ProteinSortField::Accession, false)
+            .await
+            .expect("the page parses");
 
     mock.assert_async().await;
     assert_eq!(found, vec!["P00001"]);
@@ -351,7 +355,10 @@ async fn a_text_filter_lists_without_a_taxon_clause() {
         .await;
 
     let database = database(&server);
-    let found = get_accessions_by_filter(database.get_conn(), "croc".to_string(), 0, 10).await.expect("parses");
+    let found =
+        get_accessions_by_filter(database.get_conn(), "croc".to_string(), 0, 10, ProteinSortField::Accession, false)
+            .await
+            .expect("parses");
 
     mock.assert_async().await;
     assert!(found.is_empty());
@@ -376,7 +383,9 @@ async fn an_end_below_start_is_an_empty_page_not_an_underflow() {
 
     let database = database(&server);
     let accessions =
-        get_accessions_by_filter(database.get_conn(), String::new(), 10, 0).await.expect("the page parses");
+        get_accessions_by_filter(database.get_conn(), String::new(), 10, 0, ProteinSortField::Accession, false)
+            .await
+            .expect("the page parses");
 
     mock.assert_async().await;
     assert!(accessions.is_empty());
@@ -401,10 +410,114 @@ async fn a_bound_above_i64_saturates_rather_than_going_negative() {
         .await;
 
     let database = database(&server);
-    let accessions = get_accessions_by_filter(database.get_conn(), String::new(), 0, usize::MAX)
+    let accessions =
+        get_accessions_by_filter(database.get_conn(), String::new(), 0, usize::MAX, ProteinSortField::Accession, false)
+            .await
+            .expect("the page parses");
+
+    mock.assert_async().await;
+    assert!(accessions.is_empty());
+}
+
+/// The listing carries a sort, and it is a total order.
+///
+/// Without one, OpenSearch answers in `_score` order, and under `match_all` every score ties — so
+/// the order is whatever the shards return. It is stable in practice on a static index, which is
+/// why this went unnoticed, but nothing holds it: two pages cut either side of a shard relocation
+/// can repeat one entry and drop another.
+///
+/// The accession is unique, so it orders a page on its own and no tiebreak is added below it.
+#[tokio::test]
+async fn a_listing_is_sorted_by_accession() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/uniprot_entries/_search")
+                .json_body_partial(r#"{ "sort": [ { "uniprot_accession_number": { "order": "asc" } } ] }"#);
+            then.status(200).json_body(json!({ "hits": { "hits": [] } }));
+        })
+        .await;
+
+    let database = database(&server);
+    get_accessions_by_filter(database.get_conn(), String::new(), 0, 10, ProteinSortField::Accession, false)
         .await
         .expect("the page parses");
 
     mock.assert_async().await;
-    assert!(accessions.is_empty());
+}
+
+/// A taxon id is held by millions of entries, so it does not order a page on its own. The accession
+/// breaks every tie below it, which is what makes the order total.
+#[tokio::test]
+async fn a_sort_that_repeats_is_broken_by_the_accession() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST).path("/uniprot_entries/_search").json_body_partial(
+                r#"{ "sort": [
+                       { "taxon_id": { "order": "asc" } },
+                       { "uniprot_accession_number": { "order": "asc" } }
+                     ] }"#
+            );
+            then.status(200).json_body(json!({ "hits": { "hits": [] } }));
+        })
+        .await;
+
+    let database = database(&server);
+    get_accessions_by_filter(database.get_conn(), String::new(), 0, 10, ProteinSortField::TaxonId, false)
+        .await
+        .expect("the page parses");
+
+    mock.assert_async().await;
+}
+
+/// Descending reverses the tiebreak along with the primary field, so a descending page is the exact
+/// reverse of the ascending one. Reversing only the primary would leave ties in ascending order,
+/// and the two directions would not be reverses of each other.
+///
+/// `db_type` travels as `type` in the mapping.
+#[tokio::test]
+async fn descending_reverses_the_tiebreak_too() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST).path("/uniprot_entries/_search").json_body_partial(
+                r#"{ "sort": [
+                       { "type": { "order": "desc" } },
+                       { "uniprot_accession_number": { "order": "desc" } }
+                     ] }"#
+            );
+            then.status(200).json_body(json!({ "hits": { "hits": [] } }));
+        })
+        .await;
+
+    let database = database(&server);
+    get_accessions_by_filter(database.get_conn(), String::new(), 0, 10, ProteinSortField::DbType, true)
+        .await
+        .expect("the page parses");
+
+    mock.assert_async().await;
+}
+
+/// A filtered listing is sorted too, not only the `match_all` one — they are built by separate
+/// arms, so one can carry the sort while the other does not.
+#[tokio::test]
+async fn a_filtered_listing_is_sorted_as_well() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/uniprot_entries/_search")
+                .json_body_partial(r#"{ "sort": [ { "uniprot_accession_number": { "order": "asc" } } ] }"#);
+            then.status(200).json_body(json!({ "hits": { "hits": [] } }));
+        })
+        .await;
+
+    let database = database(&server);
+    get_accessions_by_filter(database.get_conn(), "croc".to_string(), 0, 10, ProteinSortField::Accession, false)
+        .await
+        .expect("the page parses");
+
+    mock.assert_async().await;
 }

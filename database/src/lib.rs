@@ -207,6 +207,55 @@ pub async fn get_accessions_count_by_filter(client: &OpenSearch, filter: String)
     Ok(response_body["hits"]["total"]["value"].as_u64().unwrap_or(0) as u32)
 }
 
+/// A field the `uniprot_entries` mapping can be sorted on.
+///
+/// Only `keyword` and numeric fields carry doc values, and sorting needs them. `name` is mapped
+/// `text`, with no `.keyword` subfield, so a sort on it is refused by the cluster rather than being
+/// slow — which is why this is a type and not a string: the API cannot hand over a field the
+/// mapping will not sort.
+///
+/// `sequence` and `fa` are `text` with `index: false`, so they are neither searchable nor sortable.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProteinSortField {
+    /// Unique, so it orders a page on its own and breaks every tie below.
+    Accession,
+    TaxonId,
+    DbType
+}
+
+impl ProteinSortField {
+    /// The name the field carries in the mapping.
+    ///
+    /// `DbType` is `type` in the index and `db_type` on the wire, because `type` is reserved in the
+    /// clients that read this.
+    fn as_mapping_field(self) -> &'static str {
+        match self {
+            ProteinSortField::Accession => "uniprot_accession_number",
+            ProteinSortField::TaxonId => "taxon_id",
+            ProteinSortField::DbType => "type"
+        }
+    }
+}
+
+/// The sort clause for a listing, as a total order.
+///
+/// A taxon id and a db type are each held by millions of entries, so neither orders a page on its
+/// own: two pages cut out of two different orders can repeat one entry and drop another. The
+/// accession breaks every tie, and is unique, so the order is total.
+///
+/// The tiebreak is reversed along with the primary field, so a descending page is the exact reverse
+/// of the ascending one — the same reading `page_of` takes for the in-memory listings.
+fn sort_clause(sort_by: ProteinSortField, descending: bool) -> serde_json::Value {
+    let order = if descending { "desc" } else { "asc" };
+    let mut clauses = vec![json!({ sort_by.as_mapping_field(): { "order": order } })];
+
+    if sort_by != ProteinSortField::Accession {
+        clauses.push(json!({ ProteinSortField::Accession.as_mapping_field(): { "order": order } }));
+    }
+
+    json!(clauses)
+}
+
 /// How deep a `from`/`size` search may reach.
 ///
 /// OpenSearch refuses a search whose `from + size` passes `index.max_result_window`, which the
@@ -246,7 +295,9 @@ pub async fn get_accessions_by_filter(
     client: &OpenSearch,
     filter: String,
     start: usize,
-    end: usize
+    end: usize,
+    sort_by: ProteinSortField,
+    sort_descending: bool
 ) -> Result<Vec<String>, DatabaseError> {
     let body;
 
@@ -255,7 +306,8 @@ pub async fn get_accessions_by_filter(
         body = json!({
             "query": {
                 "match_all": {}
-            }
+            },
+            "sort": sort_clause(sort_by, sort_descending)
         });
     } else {
         // Parse filter as integer for taxon_id matching if possible
@@ -297,7 +349,8 @@ pub async fn get_accessions_by_filter(
                     "should": should_conditions,
                     "minimum_should_match": 1
                 }
-            }
+            },
+            "sort": sort_clause(sort_by, sort_descending)
         });
     }
 

@@ -420,10 +420,9 @@ async fn an_end_past_the_last_entry_is_clamped_to_it() {
 
 /// Counting and listing select the same set.
 ///
-/// They were built by separate functions and had drifted — the numeric clause was a `match` for the
-/// count and a `term` for the listing. Nothing caught it, because nothing compared the two. Deep
-/// paging makes the agreement load-bearing: the offset from the end is computed from the count and
-/// applied to the listing, so two different sets give the wrong rows and no error.
+/// Deep paging makes the agreement load-bearing: the offset from the end is computed from the count
+/// and applied to the listing, so two different sets give the wrong rows and no error. Nothing else
+/// compares the two queries, which is why this does.
 ///
 /// Asserted by matching one mock against both queries and letting the hit count say so.
 #[tokio::test]
@@ -456,7 +455,7 @@ async fn the_count_and_the_listing_select_the_same_set() {
 /// the window; the rows come back reversed and are turned around again.
 ///
 /// 149,655,504 is the live protein count, and 5 per page is what the browser asks for, so this is
-/// the request that answered a 500.
+/// the request the browser's last-page button makes.
 #[tokio::test]
 async fn the_last_page_is_reached_from_the_other_end() {
     let server = MockServer::start_async().await;

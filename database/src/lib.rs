@@ -109,14 +109,12 @@ pub async fn get_accessions_map(
 
 /// The query that selects the entries a filter matches.
 ///
-/// Counting and listing must select the same set. They were built separately before and had
-/// drifted: a numeric filter was a `match` clause on the counting side and a `term` on the listing
-/// side. That mattered little while the two were only compared by eye, and matters a great deal
-/// now — a deep page is reached by counting first and paging in from the other end, and that
-/// arithmetic is sound only if both answers describe one set.
+/// Counting and listing read this one builder, so they select the same set. A deep page is reached
+/// by counting first and paging in from the other end, and that arithmetic is sound only if both
+/// answers describe one set.
 ///
-/// `term` is the surviving spelling. `taxon_id` is mapped `integer`, so a `match` on it resolves to
-/// the same term query; keeping the exact one says so.
+/// A numeric filter is a `term` clause. `taxon_id` is mapped `integer`, so a `match` on it resolves
+/// to the same term query; spelling out the exact one says so.
 fn entry_query(filter: &str) -> serde_json::Value {
     if filter.is_empty() {
         return json!({ "match_all": {} });

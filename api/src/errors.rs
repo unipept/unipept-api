@@ -24,7 +24,7 @@ pub enum ApiError {
     #[error("Json error")]
     JsonError(#[from] serde_json::Error),
     #[error("Database error")]
-    DatabaseError(#[from] database::DatabaseError),
+    DatabaseError(database::DatabaseError),
     #[error("Unknown rank error")]
     UnknownRankError(String),
     #[error("Join error")]
@@ -33,6 +33,20 @@ pub enum ApiError {
     NotImplementedError(String),
     #[error("Invalid parameter: {0}")]
     InvalidParameter(String)
+}
+
+/// A database failure is a server fault, except where it is the caller's.
+///
+/// `DatabaseError` answers as a bare 500 with its message withheld, so nothing internal reaches a
+/// client. `WindowUnreachable` is the one variant a caller causes rather than suffers: it names a
+/// page the cluster can reach from neither end, and its message says what is reachable instead.
+impl From<database::DatabaseError> for ApiError {
+    fn from(error: database::DatabaseError) -> Self {
+        match error {
+            error @ database::DatabaseError::WindowUnreachable { .. } => ApiError::InvalidParameter(error.to_string()),
+            error => ApiError::DatabaseError(error)
+        }
+    }
 }
 
 /// The body every error answers with.

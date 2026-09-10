@@ -135,12 +135,13 @@ static NO_LINEAGE: [Option<i32>; RANK_COUNT] = [None; RANK_COUNT];
 /// [`get_lineage_array`] is this collected. Take this instead wherever the ranks are only read:
 /// the array is already in the store, and it is `RANK_COUNT` wide however few ancestors are
 /// looked at.
+/// The rank array the store holds, or an empty one for a taxon it does not hold.
+fn ranks_of(taxon_id: u32, lineage_store: &LineageStore) -> &[Option<i32>] {
+    lineage_store.get(taxon_id).map_or(&NO_LINEAGE[..], |lineage| &lineage.ranks[..])
+}
+
 pub fn reported_ranks(taxon_id: u32, lineage_store: &LineageStore) -> impl Iterator<Item = Option<i32>> + '_ {
-    lineage_store
-        .get(taxon_id)
-        .map_or(&NO_LINEAGE[..], |lineage| &lineage.ranks[..])
-        .iter()
-        .map(|&id| reported(id))
+    ranks_of(taxon_id, lineage_store).iter().map(|&id| reported(id))
 }
 
 /// The ancestor at one rank column, without reading the others.
@@ -152,8 +153,12 @@ pub fn reported_rank_at(taxon_id: u32, rank_index: usize, lineage_store: &Lineag
 
 /// The ancestor ids alone, in column order, for the endpoints that answer a list rather than an
 /// object.
+///
+/// Collected from the slice rather than from [`reported_ranks`]: an `impl Iterator` return type
+/// hides `TrustedLen`, which is not an auto trait, and `Vec::from_iter` needs to see it to reserve
+/// exactly once instead of checking the capacity per element.
 pub fn get_lineage_array(taxon_id: u32, lineage_store: &LineageStore) -> Vec<Option<i32>> {
-    reported_ranks(taxon_id, lineage_store).collect()
+    ranks_of(taxon_id, lineage_store).iter().map(|&id| reported(id)).collect()
 }
 
 #[cfg(test)]

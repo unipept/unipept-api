@@ -48,6 +48,9 @@ pub struct Taxon {
     taxon_rank: String
 }
 
+/// What a lineage holds at a rank with no taxon of its own.
+const NO_TAXON: i32 = -1;
+
 /// Adds the taxa at `descendants_rank` that sit below `taxon_id`.
 fn get_children_at_rank(
     taxon_id: u32,
@@ -69,7 +72,15 @@ fn get_children_at_rank(
         return;
     };
 
-    descendant_ids.extend(lineages_at_rank.iter().filter_map(|lin| lin.get_rank(column)).map(i32::unsigned_abs));
+    // A lineage writes a negative id where the taxon at that rank is invalid, and -1 where it holds
+    // no taxon at all. Only the second is not a descendant.
+    descendant_ids.extend(
+        lineages_at_rank
+            .iter()
+            .filter_map(|lin| lin.get_rank(column))
+            .filter(|&id| id != NO_TAXON)
+            .map(i32::unsigned_abs)
+    );
 }
 
 /// Adds the descendants of one taxon, over every rank the request named.

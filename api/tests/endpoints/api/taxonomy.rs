@@ -237,3 +237,31 @@ async fn a_descendant_rank_is_read_case_sensitively() {
         assert_eq!(status, StatusCode::BAD_REQUEST, "{rank}");
     }
 }
+
+/// A rank the lineage holds no taxon at contributes nothing, rather than the root.
+///
+/// The lineage writes -1 there, which read as an unsigned id is taxon 1. A caller cannot tell that
+/// from a real answer.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_rank_with_no_taxon_contributes_no_descendant() {
+    let (status, body) = get_json("/api/v2/taxonomy?input[]=8504&descendants=true&descendants_ranks[]=subgenus").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(ids(&body[0]["descendants"]), Vec::<u64>::new(), "no subgenus below this class");
+}
+
+/// A taxon the taxonomy marks invalid is still a descendant.
+///
+/// Its lineage writes the id negative, which is what separates it from the -1 above: `Heloderma sp.`
+/// is a real species and comes back at species rank.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_invalid_taxon_is_still_a_descendant() {
+    let (status, body) = get_json("/api/v2/taxonomy?input[]=1&descendants=true&descendants_ranks[]=species").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        ids(&body[0]["descendants"]).contains(&(fixtures::taxa::HELODERMA as u64)),
+        "the invalid species is a descendant of the root: {}",
+        body[0]["descendants"]
+    );
+}

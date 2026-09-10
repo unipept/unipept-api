@@ -37,7 +37,9 @@ pub enum EcStoreError {
     #[error("File not found: {0}")]
     FileNotFound(String),
     #[error("Line {line}: expected {expected} columns, found {found}")]
-    UnexpectedColumnCount { line: usize, expected: usize, found: usize }
+    UnexpectedColumnCount { line: usize, expected: usize, found: usize },
+    #[error("Line {line}: the key column is empty")]
+    EmptyKey { line: usize }
 }
 
 #[derive(Error, Debug)]
@@ -47,7 +49,9 @@ pub enum GoStoreError {
     #[error("File not found: {0}")]
     FileNotFound(String),
     #[error("Line {line}: expected {expected} columns, found {found}")]
-    UnexpectedColumnCount { line: usize, expected: usize, found: usize }
+    UnexpectedColumnCount { line: usize, expected: usize, found: usize },
+    #[error("Line {line}: the key column is empty")]
+    EmptyKey { line: usize }
 }
 
 #[derive(Error, Debug)]
@@ -57,7 +61,9 @@ pub enum InterproStoreError {
     #[error("File not found: {0}")]
     FileNotFound(String),
     #[error("Line {line}: expected {expected} columns, found {found}")]
-    UnexpectedColumnCount { line: usize, expected: usize, found: usize }
+    UnexpectedColumnCount { line: usize, expected: usize, found: usize },
+    #[error("Line {line}: the key column is empty")]
+    EmptyKey { line: usize }
 }
 
 #[derive(Error, Debug)]
@@ -73,7 +79,9 @@ pub enum ReferenceProteomeStoreError {
     #[error("Line {line}: `{value}` is not a taxon id")]
     InvalidTaxonId { line: usize, value: String },
     #[error("Line {line}: `{value}` is not a protein count")]
-    InvalidProteinCount { line: usize, value: String }
+    InvalidProteinCount { line: usize, value: String },
+    #[error("Line {line}: the key column is empty")]
+    EmptyKey { line: usize }
 }
 
 #[derive(Error, Debug)]

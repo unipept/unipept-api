@@ -31,6 +31,12 @@ impl GoStore {
                 return Err(GoStoreError::UnexpectedColumnCount { line: index + 1, expected: 4, found: parts.len() });
             }
 
+            // A row of the right width can still name nothing. Its entry would be reachable by no
+            // lookup, and would be counted as though it were one.
+            if parts[1].is_empty() {
+                return Err(GoStoreError::EmptyKey { line: index + 1 });
+            }
+
             mapper.insert(parts[1].to_string(), (parts[2].to_string(), parts[3].to_string()));
         }
 

@@ -14,6 +14,9 @@ use database::{
 use httpmock::{Method::POST, MockServer};
 use serde_json::json;
 
+/// The live protein count, which is what makes a last-page request a deep one.
+const TOTAL: usize = 149_655_504;
+
 /// One OpenSearch `_source` document, in the shape `UniprotEntry` deserialises.
 ///
 /// `version` and `taxon_id` arrive as strings and are converted during deserialisation, which is
@@ -457,7 +460,6 @@ async fn the_count_and_the_listing_select_the_same_set() {
 #[tokio::test]
 async fn the_last_page_is_reached_from_the_other_end() {
     let server = MockServer::start_async().await;
-    const TOTAL: usize = 149_655_504;
 
     let count = server
         .mock_async(|when, then| {
@@ -499,7 +501,6 @@ async fn the_last_page_is_reached_from_the_other_end() {
 #[tokio::test]
 async fn a_page_in_the_middle_is_refused() {
     let server = MockServer::start_async().await;
-    const TOTAL: usize = 149_655_504;
 
     server
         .mock_async(|when, then| {
@@ -533,7 +534,7 @@ async fn a_shallow_page_does_not_count_first() {
     let count = server
         .mock_async(|when, then| {
             when.method(POST).path("/uniprot_entries/_search").query_param("size", "0");
-            then.status(200).json_body(json!({ "hits": { "total": { "value": 149_655_504u64 } } }));
+            then.status(200).json_body(json!({ "hits": { "total": { "value": TOTAL } } }));
         })
         .await;
     server

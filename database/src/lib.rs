@@ -161,9 +161,7 @@ fn entry_query(filter: &str) -> serde_json::Value {
 
 /// Counts the UniProt entries a filter matches.
 ///
-/// An entry counts when its name contains the filter, its accession starts with it, or — where the
-/// filter is a number — its taxon id equals it. `entry_query` is what says so, and the listing
-/// reads the same one.
+/// `entry_query` says which entries those are, and the listing reads the same one.
 ///
 /// `track_total_hits` is what makes this exact rather than capped at 10,000, which the deep-paging
 /// arithmetic in `get_accessions_by_filter` depends on.
@@ -189,17 +187,6 @@ pub async fn get_accessions_count_by_filter(client: &OpenSearch, filter: String)
     Ok(response_body["hits"]["total"]["value"].as_u64().unwrap_or(0) as u32)
 }
 
-/// The sort clause for a listing, as a total order.
-///
-/// The listing is ordered on `uniprot_accession_number` alone: it is unique, so the order is total
-/// and a page cut out of it is well defined. Nothing else is offered, because nothing asks for it.
-///
-/// `descending` is how a deep page is reached, not a caller's choice of order.
-fn sort_clause(descending: bool) -> serde_json::Value {
-    let order = if descending { "desc" } else { "asc" };
-    json!([{ "uniprot_accession_number": { "order": order } }])
-}
-
 /// How deep a `from`/`size` search may reach.
 ///
 /// OpenSearch refuses a search whose `from + size` passes `index.max_result_window`, which the
@@ -220,6 +207,9 @@ fn as_window_bound(value: usize) -> i64 {
 
 /// One window of the listing, as the cluster takes it.
 ///
+/// The order is on `uniprot_accession_number` alone, which is unique, so it is total and a page cut
+/// out of it is well defined. `descending` reverses it to reach a deep page; no caller chooses it.
+///
 /// `from + size` must stay inside `MAX_RESULT_WINDOW`; the caller is what guarantees that.
 async fn search_window(
     client: &OpenSearch,
@@ -228,9 +218,10 @@ async fn search_window(
     size: usize,
     descending: bool
 ) -> Result<Vec<String>, DatabaseError> {
+    let order = if descending { "desc" } else { "asc" };
     let body = json!({
         "query": entry_query(filter),
-        "sort": sort_clause(descending)
+        "sort": [{ "uniprot_accession_number": { "order": order } }]
     });
 
     let response = client
@@ -308,7 +299,7 @@ pub async fn get_accessions_by_filter(
     // Reversed, the window starts `total - end` in and is the same size, so `from + size` becomes
     // `total - start`. That is what has to fit.
     if total - start > MAX_RESULT_WINDOW {
-        return Err(DatabaseError::WindowUnreachable { start, end, total, window: MAX_RESULT_WINDOW });
+        return Err(DatabaseError::WindowUnreachable { start, end, total });
     }
 
     let mut page = search_window(client, &filter, total - end, end - start, true).await?;

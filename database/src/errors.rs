@@ -2,6 +2,8 @@ use opensearch::{Error as ClientError, http::transport::BuildError};
 use thiserror::Error;
 use url::ParseError;
 
+use crate::MAX_RESULT_WINDOW;
+
 #[derive(Error, Debug)]
 pub enum DatabaseError {
     #[error("Failed to build OpenSearch pool: {0}")]
@@ -12,9 +14,10 @@ pub enum DatabaseError {
     RetrieveError(#[from] ClientError),
     #[error(
         "cannot page from {start} to {end} of {total} entries: only the first {window} and the last {window} can be \
-         reached"
+         reached",
+        window = MAX_RESULT_WINDOW
     )]
-    WindowUnreachable { start: usize, end: usize, total: usize, window: usize },
+    WindowUnreachable { start: usize, end: usize, total: usize },
     #[error("{0}")]
     GeneralError(String)
 }

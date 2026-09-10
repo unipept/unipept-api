@@ -1,5 +1,5 @@
 use axum::{Json, extract::State};
-use database::{DatabaseError, get_accessions_by_filter, get_accessions_count_by_filter};
+use database::{get_accessions_by_filter, get_accessions_count_by_filter};
 use serde::{Deserialize, Serialize};
 
 use crate::{AppState, controllers::generate_handlers, errors::ApiError};
@@ -46,13 +46,7 @@ async fn filter_handler(
     }
 
     let connection = database.get_conn();
-    match get_accessions_by_filter(connection, filter, start, end).await {
-        Ok(page) => Ok(page),
-        // A page the cluster can reach from neither end is a request that cannot be served, not a
-        // fault of ours. The message says what is reachable, so a caller can ask for that instead.
-        Err(error @ DatabaseError::WindowUnreachable { .. }) => Err(ApiError::InvalidParameter(error.to_string())),
-        Err(error) => Err(error.into())
-    }
+    Ok(get_accessions_by_filter(connection, filter, start, end).await?)
 }
 
 generate_handlers!(

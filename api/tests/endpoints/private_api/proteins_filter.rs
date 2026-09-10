@@ -13,6 +13,9 @@ use crate::{
     database::get_against
 };
 
+/// The live protein count, which is what makes a last-page request a deep one.
+const TOTAL: usize = 149_655_504;
+
 #[tokio::test(flavor = "multi_thread")]
 async fn the_protein_count_is_the_cluster_total() {
     let server = MockServer::start_async().await;
@@ -115,7 +118,6 @@ async fn an_end_below_start_is_rejected() {
 /// the first. 149,655,504 is the live protein count and 5 per page is what the browser asks for.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_last_page_of_the_browser_is_served() {
-    const TOTAL: usize = 149_655_504;
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
@@ -155,7 +157,6 @@ async fn the_last_page_of_the_browser_is_served() {
 /// so this is not somewhere a client lands in one step — but it must answer honestly when it does.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_page_in_the_unreachable_middle_is_rejected() {
-    const TOTAL: usize = 149_655_504;
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {

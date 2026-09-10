@@ -5,7 +5,7 @@ use datastore::LineageStore;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{AppState, controllers::generate_handlers, errors::ApiError, helpers::lineage_helper::get_lineage_array};
+use crate::{AppState, controllers::generate_handlers, errors::ApiError, helpers::lineage_helper::reported_rank_at};
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -44,8 +44,7 @@ async fn handler(
                 .iter()
                 .filter_map(|taxon_id| {
                     let mapped_taxon = cache.entry(*taxon_id).or_insert_with(|| {
-                        let lineage = get_lineage_array(*taxon_id, lineage_store);
-                        lineage.get(rank_idx).and_then(|taxon| *taxon).map(|taxon_id| taxon_id as u32)
+                        reported_rank_at(*taxon_id, rank_idx, lineage_store).map(|taxon_id| taxon_id as u32)
                     });
 
                     *mapped_taxon

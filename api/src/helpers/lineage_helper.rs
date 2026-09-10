@@ -180,12 +180,39 @@ pub fn get_empty_lineage_with_names() -> Option<LineageResponse> {
     Some(LineageResponse::WithNames(LineageWithNames { ranks: Box::new(ranks) }))
 }
 
+/// Borrowed for the miss, so [`reported_ranks`] answers a slice in both arms rather than
+/// allocating an empty lineage for a taxon the store does not hold.
+static NO_LINEAGE: [Option<i32>; RANK_COUNT] = [None; RANK_COUNT];
+
+/// The ancestor ids, in column order, read out of the store rather than copied.
+///
+/// [`get_lineage_array`] is this collected. Take this instead wherever the ranks are only read:
+/// the array is already in the store, and it is `RANK_COUNT` wide however few ancestors are
+/// looked at.
+/// The rank array the store holds, or an empty one for a taxon it does not hold.
+fn ranks_of(taxon_id: u32, lineage_store: &LineageStore) -> &[Option<i32>] {
+    lineage_store.get(taxon_id).map_or(&NO_LINEAGE[..], |lineage| &lineage.ranks[..])
+}
+
+pub fn reported_ranks(taxon_id: u32, lineage_store: &LineageStore) -> impl Iterator<Item = Option<i32>> + '_ {
+    ranks_of(taxon_id, lineage_store).iter().map(|&id| reported(id))
+}
+
+/// The ancestor at one rank column, without reading the others.
+///
+/// A rank index past the end answers `None`, as does a taxon the store does not hold.
+pub fn reported_rank_at(taxon_id: u32, rank_index: usize, lineage_store: &LineageStore) -> Option<i32> {
+    reported(lineage_store.get(taxon_id)?.get_rank(rank_index))
+}
+
 /// The ancestor ids alone, in column order, for the endpoints that answer a list rather than an
 /// object.
+///
+/// Collected from the slice rather than from [`reported_ranks`]: an `impl Iterator` return type
+/// hides `TrustedLen`, which is not an auto trait, and `Vec::from_iter` needs to see it to reserve
+/// exactly once instead of checking the capacity per element.
 pub fn get_lineage_array(taxon_id: u32, lineage_store: &LineageStore) -> Vec<Option<i32>> {
-    lineage_store
-        .get(taxon_id)
-        .map_or_else(|| vec![None; RANK_NAMES.len()], |lineage| lineage.ranks.iter().map(|&id| reported(id)).collect())
+    ranks_of(taxon_id, lineage_store).iter().map(|&id| reported(id)).collect()
 }
 
 #[cfg(test)]

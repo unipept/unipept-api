@@ -18,6 +18,37 @@ async fn it_carries_all_three_annotation_kinds() {
     assert_eq!(body[0]["ipr"][0]["code"], "IPR016364");
 }
 
+/// `total_protein_count` is the number of proteins the peptide matched, on all five endpoints
+/// that carry it — not the number of them carrying an annotation.
+///
+/// `VALIDATION_SHARED` is what separates the two: it matches two proteins and the fixtures
+/// annotate one. `UNIQUE` does not separate them, since its one protein is annotated, which is why
+/// both are here.
+///
+/// The non-zero assertion keeps this honest: the annotated count is 0 when no matched protein is
+/// annotated at all, and without it two endpoints both answering 0 would agree.
+#[tokio::test(flavor = "multi_thread")]
+async fn total_protein_count_means_matched_proteins_on_every_endpoint() {
+    for peptide in [UNIQUE, VALIDATION_SHARED] {
+        let (status, info) = get_json(&format!("/api/v2/peptinfo?input[]={peptide}")).await;
+        assert_eq!(status, StatusCode::OK);
+
+        let matched = info[0]["total_protein_count"].as_u64().expect("peptinfo reports a count");
+        assert!(matched > 0, "`{peptide}` must match a protein for this to check anything");
+
+        for endpoint in ["pept2ec", "pept2go", "pept2interpro", "pept2funct"] {
+            let (status, body) = get_json(&format!("/api/v2/{endpoint}?input[]={peptide}")).await;
+
+            assert_eq!(status, StatusCode::OK, "{endpoint}");
+            assert_eq!(
+                body[0]["total_protein_count"].as_u64(),
+                Some(matched),
+                "{endpoint} disagrees with peptinfo on `{peptide}`"
+            );
+        }
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn it_agrees_with_the_three_endpoints_it_combines() {
     let (status, funct) = get_json(&format!("/api/v2/pept2funct?input[]={UNIQUE}&extra=true")).await;

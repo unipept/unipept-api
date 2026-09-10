@@ -137,10 +137,14 @@ pub fn lineage_for(
     }
 }
 
-/// The lineage of a taxon with no ancestors, in the shape the request asked for.
+/// A lineage of no ancestors at all, in the shape the request asked for.
 ///
-/// `lineage_for` over a taxon the store holds no row for; root is the caller, since it is below
-/// nothing. The two read the same pair of flags, so they answer the same three cases.
+/// Root is the caller: it is below nothing, so the taxonomy holds no lineage row for it, and the
+/// response still has to carry a lineage object when `extra` is on.
+///
+/// This is **not** `lineage_for` over a taxon the store has no row for. That answers `None` for
+/// the lineage entirely; this answers a lineage whose every rank is empty. The two agree only on
+/// the `extra` off case.
 pub fn empty_lineage_for(extra: bool, names: bool) -> Option<LineageResponse> {
     match (extra, names) {
         (true, true) => get_empty_lineage_with_names(),

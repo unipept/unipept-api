@@ -288,10 +288,18 @@ mod tests {
 
     /// `ACCESSIONS` is written out by hand beside the file it describes, so nothing but this stops
     /// the two drifting when a protein is added.
+    #[test]
+    fn accessions_match_the_protein_corpus() {
+        let from_file: Vec<&str> = proteins().iter().map(|(accession, _, _)| *accession).collect();
+        assert_eq!(ACCESSIONS.to_vec(), from_file);
+    }
+
     /// Add a rank and this names the file to edit, where the parser only reports a bad line.
+    ///
+    /// Numbered before the blank lines are dropped, so the number is the one an editor shows.
     #[test]
     fn every_lineage_row_carries_a_column_per_rank() {
-        for (number, line) in LINEAGES_TSV.lines().filter(|line| !line.trim().is_empty()).enumerate() {
+        for (number, line) in LINEAGES_TSV.lines().enumerate().filter(|(_, line)| !line.trim().is_empty()) {
             assert_eq!(
                 line.split('\t').count(),
                 datastore::RANK_COUNT + 1,
@@ -299,12 +307,6 @@ mod tests {
                 number + 1
             );
         }
-    }
-
-    #[test]
-    fn accessions_match_the_protein_corpus() {
-        let from_file: Vec<&str> = proteins().iter().map(|(accession, _, _)| *accession).collect();
-        assert_eq!(ACCESSIONS.to_vec(), from_file);
     }
 
     #[test]

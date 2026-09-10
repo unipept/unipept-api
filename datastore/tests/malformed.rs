@@ -68,7 +68,7 @@ fn a_row_with_too_few_columns_is_an_error() {
     match rejection("8501\t2759\t\\N\n") {
         LineageStoreError::UnexpectedColumnCount { line, expected, found } => {
             assert_eq!(line, 1);
-            assert_eq!(expected, 29);
+            assert_eq!(expected, datastore::RANK_COUNT + 1);
             assert_eq!(found, 3);
         }
         other => panic!("expected an UnexpectedColumnCount error, got {other:?}")
@@ -81,7 +81,7 @@ fn a_row_with_too_few_columns_is_an_error() {
 #[test]
 fn a_row_with_too_many_columns_is_an_error() {
     match rejection(&format!("{}\t9999\n", valid_row(8501))) {
-        LineageStoreError::UnexpectedColumnCount { found, .. } => assert_eq!(found, 30),
+        LineageStoreError::UnexpectedColumnCount { found, .. } => assert_eq!(found, datastore::RANK_COUNT + 2),
         other => panic!("expected an UnexpectedColumnCount error, got {other:?}")
     }
 }

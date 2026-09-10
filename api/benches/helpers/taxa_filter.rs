@@ -1,12 +1,8 @@
 //! The taxon filter, which `mpa/pept2data` runs once per protein hit.
 //!
 //! `filter` scans a taxon's ancestors for one the request named. Most of what it costs is the
-//! `HashSet` probe it does per rank: up to `RANK_COUNT` SipHash-1-3 hashes of a `u32` per protein.
-//! The `Vec` that used to hold a copy of the store's rank array is the smaller part — one
-//! allocation per protein, about a tenth of the call, for a reader that keeps nothing.
-//!
-//! So this measures the hashing as much as the allocation. Anyone cutting the per-rank probe has
-//! the larger target of the two.
+//! `HashSet` probe per rank, not the lineage copy it makes per protein: removing that copy moves
+//! this bench about a tenth.
 //!
 //! The draw is the case that costs the most: a filter that narrows to a clade the hits are not in,
 //! so every rank is looked at and none matches. A filter that matches on the first rank returns

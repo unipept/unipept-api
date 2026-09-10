@@ -112,12 +112,16 @@ async fn handler(
                 .taxa
                 .iter()
                 .filter_map(|&taxon| {
-                    let lineage = lineage_for(taxon, extra, names, lineage_store, taxon_store);
+                    // Before `lineage_for`, which is where the work is: with `extra` and `names`
+                    // both on it builds a named ancestor for every rank, and a taxon the store
+                    // cannot name drops the whole row anyway.
+                    let taxon = Taxon::new(taxon, taxon_store)?;
+                    let lineage = lineage_for(taxon.id(), extra, names, lineage_store, taxon_store);
 
                     Some(TaxaInformation::Dense(DenseTaxaInformation {
                         peptide: sequence.to_string(),
                         cutoff_used,
-                        taxon: Taxon::new(taxon, taxon_store)?,
+                        taxon,
                         lineage
                     }))
                 })

@@ -113,6 +113,11 @@ impl Taxon {
             taxon_rank: taxon_rank.to_string()
         }
     }
+
+    /// The id, for a caller that needs it again after handing the taxon over.
+    pub fn id(&self) -> u32 {
+        self.taxon_id
+    }
 }
 
 /// The lineage a request asked for, or none if it asked for no lineage at all.

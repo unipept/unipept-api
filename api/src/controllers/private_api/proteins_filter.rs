@@ -1,5 +1,5 @@
 use axum::{Json, extract::State};
-use database::{MAX_RESULT_WINDOW, ProteinSortField, get_accessions_by_filter, get_accessions_count_by_filter};
+use database::{DatabaseError, ProteinSortField, get_accessions_by_filter, get_accessions_count_by_filter};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -77,18 +77,16 @@ async fn filter_handler(
         return Err(ApiError::InvalidParameter(format!("end ({end}) must be at least start ({start})")));
     }
 
-    // The cluster refuses to page this deep, and answers a 400 the API cannot tell from a failure
-    // of its own. Refusing here names the limit instead of reporting an internal error.
-    if end > MAX_RESULT_WINDOW {
-        return Err(ApiError::InvalidParameter(format!(
-            "end ({end}) is past the {MAX_RESULT_WINDOW} entries this endpoint can page over"
-        )));
-    }
-
     let sort_by = sort_field(&sort_by)?;
 
     let connection = database.get_conn();
-    Ok(get_accessions_by_filter(connection, filter, start, end, sort_by, sort_descending).await?)
+    match get_accessions_by_filter(connection, filter, start, end, sort_by, sort_descending).await {
+        Ok(page) => Ok(page),
+        // A page the cluster can reach from neither end is a request that cannot be served, not a
+        // fault of ours. The message says what is reachable, so a caller can ask for that instead.
+        Err(error @ DatabaseError::WindowUnreachable { .. }) => Err(ApiError::InvalidParameter(error.to_string())),
+        Err(error) => Err(error.into())
+    }
 }
 
 generate_handlers!(

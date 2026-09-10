@@ -31,11 +31,9 @@ async fn the_protein_count_is_the_cluster_total() {
 
 /// The count and the listing select the same set, and both carry the filter to the cluster.
 ///
-/// They were built by two separate query builders and had drifted: a numeric filter was a `match`
-/// clause on the counting side and a `term` on the listing side. They read one builder now, which
-/// deep paging depends on — the offset from the end is computed from the count and applied to the
-/// listing. Both mocks spell the clause out, so a controller that dropped the filter would match
-/// neither.
+/// Deep paging depends on it: the offset from the end is computed from the count and applied to
+/// the listing, and that arithmetic is sound only if both describe one set. Both mocks spell the
+/// clause out, so a controller that dropped the filter would match neither.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_filtered_count_and_listing_both_reach_the_cluster() {
     let server = MockServer::start_async().await;
@@ -84,10 +82,9 @@ async fn the_filtered_count_and_listing_both_reach_the_cluster() {
 
 /// `end` below `start` is a malformed request, not a server fault.
 ///
-/// Both values reach the query unvalidated, and the page size is their difference. Before this was
-/// checked, the ordering panicked the handler task in a debug build and sent a negative `size` to
-/// the cluster in a release one — which came back as a 500, so a bad request was logged and
-/// alerted on as a server error.
+/// Both values reach the query unvalidated, and the page size is their difference. Unchecked, the
+/// ordering panics the handler task in a debug build and sends the cluster a negative `size` in a
+/// release one.
 ///
 /// The mock is asserted to have gone uncalled: the request is refused before the cluster is asked
 /// anything, which is what makes this a 400 rather than a failure relayed from OpenSearch.
@@ -111,7 +108,7 @@ async fn an_end_below_start_is_rejected() {
     mock.assert_hits_async(0).await;
 }
 
-/// The last page of the browser is served, where it used to answer a 500.
+/// The last page of the browser is served.
 ///
 /// `from + size` cannot pass `index.max_result_window`, so offset 149 million cannot be asked for.
 /// It is reached by reversing the order instead, which brings the last page inside the window as

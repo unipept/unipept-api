@@ -72,6 +72,20 @@ pub async fn request_json(state: unipept_api::AppState, request: Request<Body>) 
     (status, json)
 }
 
+/// The status, the content type and the body of one request, for asserting on a failure.
+pub async fn request_parts(state: unipept_api::AppState, request: Request<Body>) -> (StatusCode, String, String) {
+    let response = create_app(state).oneshot(request).await.expect("the app responds");
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .map(|value| value.to_str().unwrap_or_default().to_string())
+        .unwrap_or_default();
+    let bytes = response.into_body().collect().await.expect("a body").to_bytes();
+
+    (status, content_type, String::from_utf8_lossy(&bytes).into_owned())
+}
+
 /// As [`request_json`], but leaves the body untouched: HTML routes, and plain-text rejections.
 pub async fn request_raw(state: unipept_api::AppState, request: Request<Body>) -> (StatusCode, String) {
     let response = create_app(state).oneshot(request).await.expect("the app responds");

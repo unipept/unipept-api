@@ -122,7 +122,7 @@ async fn the_window_bounds_are_required() {
     drop(dir);
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, "invalid query string");
+    assert_eq!(body, r#"{"error":"invalid query string"}"#);
 }
 
 /// `end` below `start` is a malformed request: the window has no size, so there is nothing to

@@ -73,7 +73,7 @@ async fn a_failing_cluster_is_an_internal_error() {
     let (status, body) = request_raw(state, request).await;
 
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-    assert_eq!(body, "Internal server error", "the cluster's own message is not passed through to the client");
+    assert_eq!(body, r#"{"error":"Internal server error"}"#, "the cluster's own message does not reach the client");
 }
 
 /// The endpoint short-circuits before any request when asked for nothing.

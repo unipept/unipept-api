@@ -346,3 +346,28 @@ fn the_backend_summary_names_each_structure() {
         assert!(summary.contains(structure), "`{structure}` missing from `{summary}`");
     }
 }
+
+/// This crate's own features reach `sa-server`, and pick the backends they name.
+///
+/// `index` forwards them by hand — `mmap = ["sa-server/mmap"]`, and one line per `preloaded-*`.
+/// A break there still compiles and still passes every other test in this file; it just quietly
+/// selects the default backend. CI runs this suite once per feature combination, so without this
+/// assertion a broken forwarding would test the preloaded build nine times over and report nine
+/// passes.
+///
+/// `sa-server` already checks that its reported strings match the types it selected. This is the
+/// step before that one: whether the feature arrived at all.
+#[test]
+fn the_backend_summary_reports_the_features_this_build_was_given() {
+    let stored = |mapped: bool| if mapped { "mmap" } else { "preloaded" };
+
+    let expected = format!(
+        "sa={} text={} proteins={} mapping={}",
+        stored(cfg!(feature = "mmap")),
+        stored(cfg!(all(feature = "mmap", not(feature = "preloaded-text")))),
+        stored(cfg!(all(feature = "mmap", not(feature = "preloaded-proteins")))),
+        stored(cfg!(all(feature = "mmap", not(feature = "preloaded-mapping"))))
+    );
+
+    assert_eq!(Index::backend_summary(), expected);
+}

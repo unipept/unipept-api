@@ -5,7 +5,7 @@
 
 use std::sync::LazyLock;
 
-use datastore::{LineageStore, RANK_COUNT, RANK_NAMES, TaxonStore};
+use datastore::{LineageStore, RANK_COUNT, RANK_NAMES, TaxonRank, TaxonStore};
 use serde::{Serialize, Serializer, ser::SerializeMap};
 
 /// The field names a lineage answers with, built once.
@@ -82,6 +82,44 @@ pub enum LineageResponse {
     WithNames(LineageWithNames)
 }
 
+/// The taxon a response names, beside its lineage.
+///
+/// One declaration, because the three field names and their order are a response contract: every
+/// endpoint that carries a taxon has always written them exactly this way.
+#[derive(Serialize, Clone)]
+pub struct Taxon {
+    taxon_id: u32,
+    taxon_name: String,
+    taxon_rank: String
+}
+
+impl Taxon {
+    /// The taxon the store names, or `None` where it names none.
+    ///
+    /// This is the only place that decides what an unnamed taxon means, which is why the callers
+    /// answer `None` for the whole row rather than each inventing a placeholder.
+    pub fn new(taxon_id: u32, taxon_store: &TaxonStore) -> Option<Self> {
+        let (name, rank, _) = taxon_store.get(taxon_id)?;
+
+        Some(Self::named(taxon_id, name, *rank))
+    }
+
+    /// For a caller that has already read the store, or one naming a taxon the store does not
+    /// hold — root, which `/api/v2/taxonomy` answers for without a row to read.
+    pub fn named(taxon_id: u32, taxon_name: &str, taxon_rank: TaxonRank) -> Self {
+        Taxon {
+            taxon_id,
+            taxon_name: taxon_name.to_string(),
+            taxon_rank: taxon_rank.to_string()
+        }
+    }
+
+    /// The id, for a caller that needs it again after handing the taxon over.
+    pub fn id(&self) -> u32 {
+        self.taxon_id
+    }
+}
+
 /// The lineage a request asked for, or none if it asked for no lineage at all.
 ///
 /// `extra` is what turns a lineage on; `names` chooses between the two shapes.
@@ -95,6 +133,22 @@ pub fn lineage_for(
     match (extra, names) {
         (true, true) => get_lineage_with_names(taxon_id, lineage_store, taxon_store),
         (true, false) => get_lineage(taxon_id, lineage_store),
+        (false, _) => None
+    }
+}
+
+/// A lineage of no ancestors at all, in the shape the request asked for.
+///
+/// Root is the caller: it is below nothing, so the taxonomy holds no lineage row for it, and the
+/// response still has to carry a lineage object when `extra` is on.
+///
+/// This is **not** `lineage_for` over a taxon the store has no row for. That answers `None` for
+/// the lineage entirely; this answers a lineage whose every rank is empty. The two agree only on
+/// the `extra` off case.
+pub fn empty_lineage_for(extra: bool, names: bool) -> Option<LineageResponse> {
+    match (extra, names) {
+        (true, true) => get_empty_lineage_with_names(),
+        (true, false) => get_empty_lineage(),
         (false, _) => None
     }
 }

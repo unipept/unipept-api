@@ -12,7 +12,7 @@ use crate::{
         request::Flag
     },
     errors::{ApiError, ApiError::UnknownRankError},
-    helpers::lineage_helper::{LineageResponse, get_empty_lineage, get_empty_lineage_with_names, lineage_for}
+    helpers::lineage_helper::{LineageResponse, Taxon, empty_lineage_for, lineage_for}
 };
 
 #[derive(Deserialize)]
@@ -39,13 +39,6 @@ pub struct TaxaInformation {
     lineage: Option<LineageResponse>,
     #[serde(skip_serializing_if = "Option::is_none")]
     descendants: Option<Vec<u32>>
-}
-
-#[derive(Serialize)]
-pub struct Taxon {
-    taxon_id: u32,
-    taxon_name: String,
-    taxon_rank: String
 }
 
 /// What a lineage holds at a rank with no taxon of its own.
@@ -154,19 +147,9 @@ async fn handler(
                     children = Some(descendant_ids.into_iter().collect());
                 }
 
-                let lineage: Option<LineageResponse> = match (extra, names) {
-                    (true, true) => get_empty_lineage_with_names(),
-                    (true, false) => get_empty_lineage(),
-                    (false, _) => None
-                };
-
                 return Some(TaxaInformation {
-                    taxon: Taxon {
-                        taxon_id,
-                        taxon_name: String::from("root"),
-                        taxon_rank: TaxonRank::NO_RANK.to_string()
-                    },
-                    lineage,
+                    taxon: Taxon::named(taxon_id, "root", TaxonRank::NO_RANK),
+                    lineage: empty_lineage_for(extra, names),
                     descendants: children
                 });
             }
@@ -181,11 +164,7 @@ async fn handler(
             });
 
             Some(TaxaInformation {
-                taxon: Taxon {
-                    taxon_id,
-                    taxon_name: name.to_string(),
-                    taxon_rank: rank.to_string()
-                },
+                taxon: Taxon::named(taxon_id, name, *rank),
                 lineage,
                 descendants: children
             })

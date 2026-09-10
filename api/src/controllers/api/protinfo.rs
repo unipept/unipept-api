@@ -15,7 +15,7 @@ use crate::{
         ec_helper::{EcNumber, ec_numbers_from_list},
         go_helper::{GoTerms, go_terms_from_list},
         interpro_helper::{InterproEntries, interpro_entries_from_list},
-        lineage_helper::{LineageResponse, lineage_for},
+        lineage_helper::{LineageResponse, Taxon, lineage_for},
         sanitize_proteins
     }
 };
@@ -43,13 +43,6 @@ pub struct ProtInformation {
     ipr: InterproEntries,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     lineage: Option<LineageResponse>
-}
-
-#[derive(Serialize)]
-pub struct Taxon {
-    taxon_id: u32,
-    taxon_name: String,
-    taxon_rank: String
 }
 
 async fn handler(
@@ -82,17 +75,13 @@ async fn handler(
             let gos = go_terms_from_list(&fa, go_store, extra, domains);
             let iprs = interpro_entries_from_list(&fa, interpro_store, extra, domains);
 
-            let (name, rank, _) = taxon_store.get(entry.taxon_id)?;
+            let taxon = Taxon::new(entry.taxon_id, taxon_store)?;
             let lineage = lineage_for(entry.taxon_id, extra, names, lineage_store, taxon_store);
 
             Some(ProtInformation {
                 protein: entry.uniprot_accession_number,
                 name: entry.name,
-                taxon: Taxon {
-                    taxon_id: entry.taxon_id,
-                    taxon_name: name.to_string(),
-                    taxon_rank: rank.to_string()
-                },
+                taxon,
                 ec: ecs,
                 go: gos,
                 ipr: iprs,

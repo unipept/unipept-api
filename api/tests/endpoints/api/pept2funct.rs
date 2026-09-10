@@ -18,6 +18,42 @@ async fn it_carries_all_three_annotation_kinds() {
     assert_eq!(body[0]["ipr"][0]["code"], "IPR016364");
 }
 
+/// `total_protein_count` means the same thing on all five endpoints that carry it.
+///
+/// The four functional endpoints used to report `fa.counts["all"]` — the number of distinct
+/// proteins carrying at least one annotation. That undercounts whenever a matched protein has no
+/// EC, GO or InterPro term, and drops to 0 when none of them has any. `peptinfo` was corrected to
+/// `proteins.len()` on its own and the other four were left behind, so one field of the response
+/// contract meant two different things.
+///
+/// `VALIDATION_SHARED` is the peptide that separates them: it matches two proteins, only one of
+/// which the fixtures annotate, so the old expression answered 1 where `peptinfo` answered 2.
+/// `UNIQUE` does not separate them — its one protein is annotated — which is why both are here.
+///
+/// The non-zero assertion keeps this honest: `fa.counts["all"]` reaches 0 when no matched protein
+/// is annotated at all, and without it two endpoints both answering 0 would agree.
+#[tokio::test(flavor = "multi_thread")]
+async fn total_protein_count_means_matched_proteins_on_every_endpoint() {
+    for peptide in [UNIQUE, VALIDATION_SHARED] {
+        let (status, info) = get_json(&format!("/api/v2/peptinfo?input[]={peptide}")).await;
+        assert_eq!(status, StatusCode::OK);
+
+        let matched = info[0]["total_protein_count"].as_u64().expect("peptinfo reports a count");
+        assert!(matched > 0, "`{peptide}` must match a protein for this to check anything");
+
+        for endpoint in ["pept2ec", "pept2go", "pept2interpro", "pept2funct"] {
+            let (status, body) = get_json(&format!("/api/v2/{endpoint}?input[]={peptide}")).await;
+
+            assert_eq!(status, StatusCode::OK, "{endpoint}");
+            assert_eq!(
+                body[0]["total_protein_count"].as_u64(),
+                Some(matched),
+                "{endpoint} disagrees with peptinfo on `{peptide}`"
+            );
+        }
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn it_agrees_with_the_three_endpoints_it_combines() {
     let (status, funct) = get_json(&format!("/api/v2/pept2funct?input[]={UNIQUE}&extra=true")).await;

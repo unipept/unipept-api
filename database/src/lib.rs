@@ -207,6 +207,14 @@ pub async fn get_accessions_count_by_filter(client: &OpenSearch, filter: String)
     Ok(response_body["hits"]["total"]["value"].as_u64().unwrap_or(0) as u32)
 }
 
+/// How deep a `from`/`size` search may reach.
+///
+/// OpenSearch refuses a search whose `from + size` passes `index.max_result_window`, which the
+/// cluster leaves at its default. The refusal is a 400 from the cluster, which this crate reports
+/// as a `GeneralError` and the API answers as a 500 — so a caller has to be stopped before the
+/// query is sent, not after.
+pub const MAX_RESULT_WINDOW: usize = 10_000;
+
 /// A paging bound as OpenSearch takes it.
 ///
 /// `from` and `size` travel as `i64`, and both are computed from `usize` values a caller controls.

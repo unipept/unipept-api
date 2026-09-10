@@ -107,3 +107,69 @@ async fn an_end_below_start_is_rejected() {
     assert!(body.contains("end"), "the message should name the parameter, got: {body}");
     mock.assert_hits_async(0).await;
 }
+
+/// Paging past `index.max_result_window` is a malformed request, not a server fault.
+///
+/// OpenSearch refuses a search whose `from + size` passes the window, which the cluster leaves at
+/// its default of 10,000. That refusal is a 400 from the cluster, which this crate reports as a
+/// `GeneralError` and the API answered as a 500 — so asking the protein browser for the last page
+/// of 149 million entries logged and alerted on a server error for a request the cluster will
+/// never serve.
+///
+/// The bound is on `end` alone, not on the page size: `from` is `start` and `size` is their
+/// difference, so `from + size` is `end`. Measured against the live API, `end = 10000` answers and
+/// `end = 10005` does not.
+///
+/// The mock is asserted to have gone uncalled, as above: the request is refused before the cluster
+/// is asked.
+#[tokio::test(flavor = "multi_thread")]
+async fn paging_past_the_result_window_is_rejected() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST).path("/uniprot_entries/_search");
+            then.status(200).json_body(json!({ "hits": { "hits": [] } }));
+        })
+        .await;
+
+    let (dir, state) = test_state(&server.base_url());
+    let request = Request::get("/private_api/proteins/filter?filter=&start=9995&end=10005")
+        .body(Body::empty())
+        .unwrap();
+    let (status, body) = request_raw(state, request).await;
+    drop(dir);
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body.contains("10000"), "the message should name the limit, got: {body}");
+    mock.assert_hits_async(0).await;
+}
+
+/// The last page the window does allow still reaches the cluster.
+///
+/// Guards the bound against being written as `>=`, or as a limit on `start`, either of which would
+/// refuse a page the cluster serves today.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_last_page_inside_the_window_is_served() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/uniprot_entries/_search")
+                .query_param("from", "9990")
+                .query_param("size", "10");
+            then.status(200).json_body(json!({ "hits": { "hits": [
+                { "_source": { "uniprot_accession_number": "P00001" } }
+            ] } }));
+        })
+        .await;
+
+    let (dir, state) = test_state(&server.base_url());
+    let request = Request::get("/private_api/proteins/filter?filter=&start=9990&end=10000")
+        .body(Body::empty())
+        .unwrap();
+    let (status, body) = request_raw(state, request).await;
+    drop(dir);
+
+    assert_eq!(status, StatusCode::OK, "got: {body}");
+    mock.assert_async().await;
+}

@@ -1,5 +1,5 @@
 use axum::{Json, extract::State};
-use database::{get_accessions_by_filter, get_accessions_count_by_filter};
+use database::{MAX_RESULT_WINDOW, get_accessions_by_filter, get_accessions_count_by_filter};
 use serde::{Deserialize, Serialize};
 
 use crate::{AppState, controllers::generate_handlers, errors::ApiError};
@@ -43,6 +43,14 @@ async fn filter_handler(
 ) -> Result<Vec<String>, ApiError> {
     if end < start {
         return Err(ApiError::InvalidParameter(format!("end ({end}) must be at least start ({start})")));
+    }
+
+    // The cluster refuses to page this deep, and answers a 400 the API cannot tell from a failure
+    // of its own. Refusing here names the limit instead of reporting an internal error.
+    if end > MAX_RESULT_WINDOW {
+        return Err(ApiError::InvalidParameter(format!(
+            "end ({end}) is past the {MAX_RESULT_WINDOW} entries this endpoint can page over"
+        )));
     }
 
     let connection = database.get_conn();

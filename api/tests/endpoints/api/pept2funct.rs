@@ -18,20 +18,15 @@ async fn it_carries_all_three_annotation_kinds() {
     assert_eq!(body[0]["ipr"][0]["code"], "IPR016364");
 }
 
-/// `total_protein_count` means the same thing on all five endpoints that carry it.
+/// `total_protein_count` is the number of proteins the peptide matched, on all five endpoints
+/// that carry it — not the number of them carrying an annotation.
 ///
-/// The four functional endpoints used to report `fa.counts["all"]` — the number of distinct
-/// proteins carrying at least one annotation. That undercounts whenever a matched protein has no
-/// EC, GO or InterPro term, and drops to 0 when none of them has any. `peptinfo` was corrected to
-/// `proteins.len()` on its own and the other four were left behind, so one field of the response
-/// contract meant two different things.
+/// `VALIDATION_SHARED` is what separates the two: it matches two proteins and the fixtures
+/// annotate one. `UNIQUE` does not separate them, since its one protein is annotated, which is why
+/// both are here.
 ///
-/// `VALIDATION_SHARED` is the peptide that separates them: it matches two proteins, only one of
-/// which the fixtures annotate, so the old expression answered 1 where `peptinfo` answered 2.
-/// `UNIQUE` does not separate them — its one protein is annotated — which is why both are here.
-///
-/// The non-zero assertion keeps this honest: `fa.counts["all"]` reaches 0 when no matched protein
-/// is annotated at all, and without it two endpoints both answering 0 would agree.
+/// The non-zero assertion keeps this honest: the annotated count is 0 when no matched protein is
+/// annotated at all, and without it two endpoints both answering 0 would agree.
 #[tokio::test(flavor = "multi_thread")]
 async fn total_protein_count_means_matched_proteins_on_every_endpoint() {
     for peptide in [UNIQUE, VALIDATION_SHARED] {

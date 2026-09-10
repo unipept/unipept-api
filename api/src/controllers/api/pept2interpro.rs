@@ -63,7 +63,7 @@ async fn handler(
         .map(|item| {
             let fa = calculate_fa(&item.proteins);
 
-            let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
+            let total_protein_count = item.proteins.len();
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
 
             (item.sequence, vec![InterproInformation {

@@ -63,7 +63,7 @@ async fn handler(
             (item.sequence, vec![EcInformation {
                 peptide: item.sequence.to_string(),
                 cutoff_used: item.cutoff_used,
-                total_protein_count: *fa.counts.get("all").unwrap_or(&0),
+                total_protein_count: item.proteins.len(),
                 ec: ec_numbers_from_map(&fa.data, ec_store, extra)
             }])
         })

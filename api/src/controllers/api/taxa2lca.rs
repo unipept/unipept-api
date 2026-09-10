@@ -1,6 +1,7 @@
 use std::convert::Infallible;
 
 use axum::{Json, extract::State};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -55,7 +56,9 @@ async fn handler(
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
-    let casted_input: Vec<u32> = input.iter().map(|v| v.into()).collect();
+    // Distinct, like the other callers: a client controls this list, and collecting the
+    // lineages is nearly the whole cost of the call.
+    let casted_input: Vec<u32> = input.iter().map(|v| v.into()).unique().collect();
 
     let lca: i32 = calculate_lca(casted_input, taxon_store, lineage_store, validate_taxa);
 

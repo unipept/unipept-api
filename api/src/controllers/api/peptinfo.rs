@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use axum::{Json, extract::State};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -98,8 +99,10 @@ async fn handler(
             let gos = go_terms_from_map(&fa.data, go_store, extra, domains);
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
 
+            // One taxon per distinct taxon, not one per matching protein. Collecting the lineages
+            // is nearly the whole cost of the call, and repeats cannot change what it answers.
             let lca = calculate_lca(
-                item.proteins.iter().map(|protein| protein.taxon),
+                item.proteins.iter().map(|protein| protein.taxon).unique(),
                 taxon_store,
                 lineage_store,
                 validate_taxa

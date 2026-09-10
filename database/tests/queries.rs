@@ -293,13 +293,11 @@ async fn canned_documents_cover_the_corpus_accessions() {
     }
 }
 
-/// The listing side of a filter, which was reachable by no test.
+/// A numeric filter reaches the listing as a `term` clause on the taxon id.
 ///
-/// `get_accessions_by_filter` builds its own query rather than sharing one with
-/// `get_accessions_count_by_filter`, and the two have drifted: the count clause for a numeric
-/// filter is a `match`, this one is a `term`. Both are asserted, so the difference is at least
-/// visible — `/private_api/proteins` calls both, and a filter that counts one set and lists
-/// another is the failure this pins.
+/// `the_count_and_the_listing_select_the_same_set` holds that both sides send one query; this
+/// pins the shape of that query on the listing side, so a change to it fails here rather than
+/// only where the two are compared.
 #[tokio::test]
 async fn a_numeric_filter_lists_by_a_term_clause() {
     let server = MockServer::start_async().await;

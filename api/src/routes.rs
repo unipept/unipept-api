@@ -59,7 +59,8 @@ pub fn timeout_status(err: BoxError) -> StatusCode {
 pub fn create_router_with_timeout(state: AppState, timeout: Duration) -> Router {
     Router::new()
         .route("/", get(|| async { "Unipept API server" }))
-        .nest("/api", create_api_routes())
+        .nest("/api/v1", create_api_routes())
+        .nest("/api/v2", create_api_routes())
         .nest("/datasets", create_datasets_routes())
         .nest("/mpa", create_mpa_routes())
         .nest("/private_api", create_private_api_routes())
@@ -95,15 +96,6 @@ pub fn create_app_with_timeout(state: AppState, timeout: Duration) -> NormalizeP
     NormalizePathLayer::normalize_uris().layer(create_router_with_timeout(state, timeout))
 }
 
-/// `/api/v1` is a deprecated alias for `/api/v2`, on purpose: many tools still call v1, and both
-/// prefixes mount the same routes.
-///
-/// The two therefore change together, and `the_two_api_versions_answer_identically` in
-/// `tests/endpoints/routing.rs` fails if one is given routes the other does not have.
-fn create_api_routes() -> Router<AppState> {
-    Router::new().nest("/v1", create_api_v2_routes()).nest("/v2", create_api_v2_routes())
-}
-
 macro_rules! define_routes {
     (
         $( $path:tt, $handlers:expr_2021),*
@@ -120,7 +112,12 @@ macro_rules! define_routes {
     }};
 }
 
-fn create_api_v2_routes() -> Router<AppState> {
+/// The routes both `/api/v1` and `/api/v2` answer.
+///
+/// v1 is a deprecated alias, mounted because many tools still call it. The two therefore change
+/// together, and `the_two_api_versions_answer_identically` in `tests/endpoints/routing.rs` fails if
+/// one is given routes the other does not have.
+fn create_api_routes() -> Router<AppState> {
     define_routes!(
         "/pept2ec",
         get(pept2ec::get_json_handler).post(pept2ec::post_json_handler),

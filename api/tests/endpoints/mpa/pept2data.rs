@@ -6,6 +6,16 @@ use serde_json::json;
 
 use crate::common::post_json;
 
+/// The peptide each row names, in the order they arrive.
+fn sequences(body: &serde_json::Value) -> Vec<&str> {
+    body["peptides"]
+        .as_array()
+        .expect("a list of peptides")
+        .iter()
+        .map(|item| item["sequence"].as_str().expect("a sequence"))
+        .collect()
+}
+
 /// The endpoint the desktop and web applications actually post to.
 #[tokio::test(flavor = "multi_thread")]
 async fn pept2data_answers_with_an_lca_and_a_lineage() {
@@ -15,7 +25,7 @@ async fn pept2data_answers_with_an_lca_and_a_lineage() {
     let item = &body["peptides"][0];
     assert_eq!(item["sequence"], UNIQUE);
     assert_eq!(item["lca"], 8501);
-    assert_eq!(item["lineage"].as_array().map(Vec::len), Some(28));
+    assert_eq!(item["lineage"].as_array().map(Vec::len), Some(datastore::RANK_COUNT));
 }
 
 /// `report_taxa` adds the taxa the peptide reached, which are otherwise reduced away to the LCA.
@@ -176,4 +186,35 @@ async fn the_annotations_come_from_the_surviving_proteins_only() {
     assert_eq!(status, StatusCode::OK);
     let fa = &filtered["peptides"][0]["fa"];
     assert_eq!(fa["counts"]["all"], 1, "one protein survived the filter");
+}
+
+/// One row per distinct peptide, in the order they were sent.
+///
+/// The one peptide endpoint that answers per peptide rather than per position: it receives whole
+/// samples, and a sample names the same peptide many times.
+#[tokio::test(flavor = "multi_thread")]
+async fn peptides_are_answered_once_each_in_the_order_they_were_sent() {
+    let (status, body) = post_json("/mpa/pept2data", json!({ "peptides": [GENUS_SHARED, UNIQUE, GENUS_SHARED] })).await;
+
+    assert_eq!(status, StatusCode::OK);
+
+    assert_eq!(sequences(&body), vec![GENUS_SHARED, UNIQUE], "one row each, in first-appearance order");
+
+    // Both ways round, so a fixed order cannot pass this.
+    let (_, reversed) = post_json("/mpa/pept2data", json!({ "peptides": [UNIQUE, GENUS_SHARED] })).await;
+    assert_eq!(sequences(&reversed), vec![UNIQUE, GENUS_SHARED]);
+}
+
+/// Two spellings that differ only in case, or in trailing space, are one peptide.
+#[tokio::test(flavor = "multi_thread")]
+async fn spellings_that_sanitise_alike_are_one_peptide() {
+    let lowercased = GENUS_SHARED.to_lowercase();
+    let (status, body) = post_json("/mpa/pept2data", json!({ "peptides": [GENUS_SHARED, lowercased] })).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(sequences(&body), vec![GENUS_SHARED], "one row, not two identical ones");
+
+    let trailing = format!("{GENUS_SHARED} ");
+    let (_, trimmed) = post_json("/mpa/pept2data", json!({ "peptides": [GENUS_SHARED, trailing] })).await;
+    assert_eq!(sequences(&trimmed), vec![GENUS_SHARED]);
 }

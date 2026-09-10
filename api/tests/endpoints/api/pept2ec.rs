@@ -79,16 +79,10 @@ async fn results_follow_the_order_of_the_input() {
     assert_eq!(peptides(&reversed), vec![UNIQUE, GENUS_SHARED]);
 }
 
-/// A peptide that matches nothing must not shift the repeat counts of the ones that do.
-///
-/// `analyse` drops a peptide with no matches, so the result list is shorter than the list of unique
-/// peptides that was searched, and each result has to carry the count of the peptide it names.
-///
-/// Note where the repeats sit: a peptide given three times is answered three times together, at the
-/// position of its first mention, rather than at each position it occupies. The other five peptide
-/// endpoints pass their input through as it stands and so answer in exact input position.
+/// A repeated peptide is answered at each position it occupies; one that matches nothing takes
+/// none, and does not shift the peptides after it.
 #[tokio::test(flavor = "multi_thread")]
-async fn a_peptide_that_matches_nothing_does_not_shift_the_other_counts() {
+async fn a_peptide_is_answered_at_each_position_it_occupies() {
     let input = format!(
         "input[]={ABSENT}\
          &input[]={UNIQUE}&input[]={GENUS_SHARED}\
@@ -101,7 +95,7 @@ async fn a_peptide_that_matches_nothing_does_not_shift_the_other_counts() {
 
     assert_eq!(
         peptides(&body),
-        vec![UNIQUE, UNIQUE, GENUS_SHARED, GENUS_SHARED, GENUS_SHARED, VALIDATION_SHARED],
-        "ABSENT matches nothing and is dropped; the rest keep their first-mention order"
+        vec![UNIQUE, GENUS_SHARED, UNIQUE, GENUS_SHARED, GENUS_SHARED, VALIDATION_SHARED],
+        "each peptide sits where it was named; ABSENT matches nothing and is dropped"
     );
 }

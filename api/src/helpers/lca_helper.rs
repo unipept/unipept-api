@@ -1,43 +1,37 @@
-use datastore::{Lineage, LineageStore, TaxonStore};
+use datastore::{Lineage, LineageStore, RANK_COUNT, TaxonRank, TaxonStore};
 
-use super::lineage_helper::{LineageVersion, get_amount_of_ranks, get_genus_index, get_species_index};
-
-/// Takes the taxa as an iterator rather than a `Vec`: the callers that hold one still pass it, and
-/// the ones that build the list only to hand it over no longer allocate it.
+/// Takes an iterator, so a caller that builds the list only to hand it over does not allocate it.
 pub fn calculate_lca(
     taxa: impl IntoIterator<Item = u32>,
-    version: LineageVersion,
     taxon_store: &TaxonStore,
     lineage_store: &LineageStore,
     only_valid_taxa: bool
 ) -> i32 {
     // A taxon the lineage store does not know still counts, and reads as a lineage of zeroes. Zero
-    // agrees with no taxon ID, so such a taxon holds the result at the root, which is what the
-    // per-taxon array this loop used to build did.
+    // agrees with no taxon id, so such a taxon holds the result at the root.
     let unknown = Lineage::default();
 
-    // Borrowed, not copied: the loop below reads each lineage once per rank, and the store already
-    // holds them. Building an owned array per taxon allocated once per input taxon, of which a
-    // single `pept2data` request can carry hundreds of thousands.
+    // Borrowed, not copied: one `pept2data` request can carry hundreds of thousands of taxa, and
+    // collecting them is nearly the whole cost of this call.
     let lineages: Vec<&Lineage> = taxa
         .into_iter()
         .filter(|&taxon_id| !only_valid_taxa || taxon_store.is_valid(taxon_id))
         .map(|taxon_id| lineage_store.get(taxon_id).map(|lineage| lineage.as_ref()).unwrap_or(&unknown))
         .collect();
 
-    let amount_of_ranks = get_amount_of_ranks(version);
-    let genus_index = get_genus_index(version);
-    let species_index = get_species_index(version);
+    let genus = TaxonRank::GENUS.lineage_index().expect("genus is a lineage column");
+    let species = TaxonRank::SPECIES.lineage_index().expect("species is a lineage column");
 
-    for rank in (0..amount_of_ranks).rev() {
+    // Narrowest rank first, so the first one every lineage agrees at is the answer. The comparison
+    // below stops at the first disagreement, which is what makes a rank that fails cost two reads
+    // rather than one per lineage — walking the lineages instead of the ranks would lose that.
+    for rank in (0..RANK_COUNT).rev() {
         let mut iterator = lineages
             .iter()
-            // The same reading `get_lineage_array_numeric` gives a rank: -1 and an absent rank both
-            // read as 0, and a negative ID is reported as its absolute value.
-            .map(|lineage| lineage.get_rank(rank as usize).filter(|&id| id != -1).map(i32::abs).unwrap_or(0))
-            .filter(|&x| if rank == genus_index || rank == species_index { x > 0 } else { x >= 0 });
+            // The reading `lineage_helper::reported` gives a rank, with an absent one as zero.
+            .map(|lineage| lineage.get_rank(rank).filter(|&id| id != -1).map(i32::abs).unwrap_or(0))
+            .filter(|&x| if rank == genus || rank == species { x > 0 } else { x >= 0 });
 
-        // Check if all elements in the iterator are the same
         if let Some(first) = iterator.next()
             && first > 0
             && iterator.all(|item| item == first)
@@ -55,10 +49,7 @@ mod tests {
     use fixtures::taxa;
     use tempfile::TempDir;
 
-    use super::super::lineage_helper::LineageVersion;
-    use crate::helpers::lca_helper::calculate_lca;
-
-    const VERSION: LineageVersion = LineageVersion::V2;
+    use super::calculate_lca;
 
     /// The shared corpus, written out and loaded.
     ///
@@ -94,8 +85,8 @@ mod tests {
         ];
 
         assert_eq!(
-            calculate_lca(with_repeats, VERSION, &taxon_store, &lineage_store, true),
-            calculate_lca(distinct, VERSION, &taxon_store, &lineage_store, true)
+            calculate_lca(with_repeats, &taxon_store, &lineage_store, true),
+            calculate_lca(distinct, &taxon_store, &lineage_store, true)
         );
     }
 
@@ -106,7 +97,7 @@ mod tests {
 
         let taxa = vec![taxa::CROCODYLUS_NILOTICUS, taxa::SPHENODONTIA, taxa::ALOUATTA_SENICULUS];
 
-        assert_eq!(calculate_lca(taxa, VERSION, &taxon_store, &lineage_store, true), taxa::SARCOPTERYGII as i32);
+        assert_eq!(calculate_lca(taxa, &taxon_store, &lineage_store, true), taxa::SARCOPTERYGII as i32);
     }
 
     /// Taxa from different domains share no rank, so the reduction runs out and answers root.
@@ -116,7 +107,7 @@ mod tests {
 
         let taxa = vec![taxa::CROCODYLUS_NILOTICUS, taxa::AZORHIZOBIUM_CAULINODANS, taxa::BUCHNERA_APHIDICOLA];
 
-        assert_eq!(calculate_lca(taxa, VERSION, &taxon_store, &lineage_store, true), taxa::ROOT as i32);
+        assert_eq!(calculate_lca(taxa, &taxon_store, &lineage_store, true), taxa::ROOT as i32);
     }
 
     /// `validate_taxa=false` lets a caller-supplied taxon ID reach the lineage store, and
@@ -135,17 +126,11 @@ mod tests {
         let mut with_unknown = known.clone();
         with_unknown.push(UNKNOWN);
 
-        assert_eq!(calculate_lca(known, VERSION, &taxon_store, &lineage_store, false), taxa::SARCOPTERYGII as i32);
-        assert_eq!(
-            calculate_lca(with_unknown.clone(), VERSION, &taxon_store, &lineage_store, false),
-            taxa::ROOT as i32
-        );
+        assert_eq!(calculate_lca(known, &taxon_store, &lineage_store, false), taxa::SARCOPTERYGII as i32);
+        assert_eq!(calculate_lca(with_unknown.clone(), &taxon_store, &lineage_store, false), taxa::ROOT as i32);
 
         // `validate_taxa=true` never reaches that reading: the taxon store rejects the ID first.
-        assert_eq!(
-            calculate_lca(with_unknown, VERSION, &taxon_store, &lineage_store, true),
-            taxa::SARCOPTERYGII as i32
-        );
+        assert_eq!(calculate_lca(with_unknown, &taxon_store, &lineage_store, true), taxa::SARCOPTERYGII as i32);
     }
 
     /// `only_valid_taxa` drops a taxon the taxonomy marks invalid. `Heloderma sp.` is the corpus's
@@ -156,12 +141,9 @@ mod tests {
 
         let taxa = vec![taxa::CROCODYLUS_NILOTICUS, taxa::HELODERMA];
 
-        assert_eq!(
-            calculate_lca(taxa.clone(), VERSION, &taxon_store, &lineage_store, true),
-            taxa::CROCODYLUS_NILOTICUS as i32
-        );
+        assert_eq!(calculate_lca(taxa.clone(), &taxon_store, &lineage_store, true), taxa::CROCODYLUS_NILOTICUS as i32);
         assert_ne!(
-            calculate_lca(taxa, VERSION, &taxon_store, &lineage_store, false),
+            calculate_lca(taxa, &taxon_store, &lineage_store, false),
             taxa::CROCODYLUS_NILOTICUS as i32,
             "with the filter off the invalid taxon must still count"
         );

@@ -91,3 +91,8 @@ async fn an_absent_peptide_produces_no_row() {
     assert_eq!(body.as_array().map(Vec::len), Some(1), "only the peptide that matched appears");
     assert_eq!(body[0]["peptide"], UNIQUE);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_repeated_peptide_answers_at_each_position() {
+    super::a_repeat_answers_like_a_single("pept2lca", "extra=true&names=true").await;
+}

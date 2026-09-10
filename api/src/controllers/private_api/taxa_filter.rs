@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 
 use axum::{Json, extract::State};
-use datastore::LineageRank;
+use datastore::TaxonRank;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -50,8 +50,8 @@ pub struct TaxonCountResult {
 /// The rank is matched as `as_str` spells it, with a space, because that is the name the response
 /// carries and so the name a caller reads. The `descendants_ranks` parameter of `/api/v2/taxonomy`
 /// takes the underscore spelling instead, since it names a lineage column.
-fn matches(filter: &str, taxon_id: u32, name: &str, rank: &LineageRank, is_valid: bool) -> bool {
-    if !is_valid || *rank == LineageRank::NoRank {
+fn matches(filter: &str, taxon_id: u32, name: &str, rank: &TaxonRank, is_valid: bool) -> bool {
+    if !is_valid || *rank == TaxonRank::NO_RANK {
         return false;
     }
 

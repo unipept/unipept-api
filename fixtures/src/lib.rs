@@ -33,7 +33,7 @@ use std::{
     path::{Path, PathBuf}
 };
 
-use datastore::LineageRank;
+use datastore::TaxonRank;
 
 pub mod synthetic;
 
@@ -76,12 +76,12 @@ pub const SAMPLEDATA_JSON: &str = include_str!("../data/sampledata.json");
 pub const VERSION: &str = include_str!("../data/version.txt");
 
 /// Taxa: `id`, `name`, `rank`, `parent`, validity. The rank strings are the ones
-/// `LineageRank::from_str` accepts, and the fifth column is a raw `0x01`/`0x00` byte.
+/// `TaxonRank::from_str` accepts, and the fifth column is a raw `0x01`/`0x00` byte.
 pub const TAXONS_TSV: &str = include_str!("../data/taxons.tsv");
 
 /// Lineages: a taxon id followed by one column per rank, `\N` where the taxonomy records nothing.
 ///
-/// The column count is `LineageStore::AMOUNT_OF_RANKS`.
+/// The column count is `datastore::RANK_COUNT`.
 pub const LINEAGES_TSV: &str = include_str!("../data/lineages.tsv");
 
 /// Every accession in the corpus, in file order.
@@ -198,7 +198,7 @@ fn taxon_rows() -> Vec<(u32, &'static str, &'static str, bool)> {
 pub fn ranked_and_valid_taxa() -> u64 {
     taxon_rows()
         .iter()
-        .filter(|(_, _, rank, is_valid)| *is_valid && *rank != LineageRank::NoRank.as_str())
+        .filter(|(_, _, rank, is_valid)| *is_valid && *rank != TaxonRank::NO_RANK.as_str())
         .count() as u64
 }
 
@@ -294,6 +294,21 @@ mod tests {
         assert_eq!(ACCESSIONS.to_vec(), from_file);
     }
 
+    /// Add a rank and this names the file to edit, where the parser only reports a bad line.
+    ///
+    /// Numbered before the blank lines are dropped, so the number is the one an editor shows.
+    #[test]
+    fn every_lineage_row_carries_a_column_per_rank() {
+        for (number, line) in LINEAGES_TSV.lines().enumerate().filter(|(_, line)| !line.trim().is_empty()) {
+            assert_eq!(
+                line.split('\t').count(),
+                datastore::RANK_COUNT + 1,
+                "data/lineages.tsv line {}: a taxon id and one column per rank",
+                number + 1
+            );
+        }
+    }
+
     #[test]
     fn every_named_taxon_has_a_row_in_the_taxon_table() {
         let ids = row_ids(TAXONS_TSV);
@@ -345,8 +360,8 @@ mod tests {
     fn the_corpus_holds_a_taxon_at_each_multi_word_rank() {
         let ranks: BTreeSet<&str> = taxon_rows().iter().map(|(_, _, rank, _)| *rank).collect();
 
-        assert!(ranks.contains(LineageRank::SpeciesGroup.as_str()), "{ranks:?}");
-        assert!(ranks.contains(LineageRank::SpeciesSubgroup.as_str()), "{ranks:?}");
+        assert!(ranks.contains(TaxonRank::named("species group").as_str()), "{ranks:?}");
+        assert!(ranks.contains(TaxonRank::named("species subgroup").as_str()), "{ranks:?}");
     }
 
     #[test]

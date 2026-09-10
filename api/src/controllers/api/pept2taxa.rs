@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
@@ -10,11 +12,8 @@ use crate::{
     },
     errors::ApiError,
     helpers::{
-        lineage_helper::{
-            Lineage,
-            LineageVersion::{self, *},
-            get_lineage, get_lineage_with_names
-        },
+        distinct_peptides, laid_over_input,
+        lineage_helper::{LineageResponse, lineage_for},
         sanitize_peptides
     }
 };
@@ -37,32 +36,31 @@ pub struct Parameters {
     cutoff: usize
 }
 
-#[allow(clippy::large_enum_variant)]
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(untagged)]
 pub enum TaxaInformation {
     Dense(DenseTaxaInformation),
     Compact(CompactTaxaInformation)
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct DenseTaxaInformation {
     peptide: String,
     cutoff_used: bool,
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    lineage: Option<Lineage>
+    lineage: Option<LineageResponse>
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct CompactTaxaInformation {
     peptide: String,
     cutoff_used: bool,
     taxa: Vec<u32>
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Taxon {
     taxon_id: u32,
     taxon_name: String,
@@ -79,70 +77,76 @@ async fn handler(
         tryptic: Flag(tryptic),
         compact: Flag(compact),
         cutoff
-    }: Parameters,
-    version: LineageVersion
+    }: Parameters
 ) -> Result<Vec<TaxaInformation>, ApiError> {
     let input = sanitize_peptides(input);
+    let distinct = distinct_peptides(&input);
+
     // Neither shape reads anything but the taxon, and `taxa` is already distinct and ascending.
-    let result = tokio::task::block_in_place(|| index.analyse_taxa(&input, equate_il, tryptic, Some(cutoff)));
+    let result = tokio::task::block_in_place(|| index.analyse_taxa(&distinct, equate_il, tryptic, Some(cutoff)));
 
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
     if compact {
-        return Ok(result
-            .into_iter()
+        let rows: HashMap<&str, Vec<TaxaInformation>> = result
+            .iter()
             .filter_map(|item| {
                 let item_taxa: Vec<u32> =
-                    item.taxa.into_iter().filter(|&taxon_id| taxon_store.is_valid(taxon_id)).collect();
+                    item.taxa.iter().copied().filter(|&taxon_id| taxon_store.is_valid(taxon_id)).collect();
 
                 if item_taxa.is_empty() {
                     return None;
                 }
 
-                Some(TaxaInformation::Compact(CompactTaxaInformation {
+                Some((item.sequence, vec![TaxaInformation::Compact(CompactTaxaInformation {
                     peptide: item.sequence.to_string(),
                     cutoff_used: item.cutoff_used,
                     taxa: item_taxa
-                }))
+                })]))
             })
-            .collect());
+            .collect();
+
+        return Ok(laid_over_input(&input, rows));
     }
 
-    Ok(result
-        .into_iter()
-        .flat_map(|item| {
+    // A row per taxon: a repeated peptide carries all of them to each position it occupies.
+    let rows: HashMap<&str, Vec<TaxaInformation>> = result
+        .iter()
+        .map(|item| {
             let (sequence, cutoff_used) = (item.sequence, item.cutoff_used);
-            item.taxa.into_iter().filter_map(move |taxon| {
-                let (name, rank, _) = taxon_store.get(taxon)?;
-                let lineage = match (extra, names) {
-                    (true, true) => get_lineage_with_names(taxon, version, lineage_store, taxon_store),
-                    (true, false) => get_lineage(taxon, version, lineage_store),
-                    (false, _) => None
-                };
+            let taxa = item
+                .taxa
+                .iter()
+                .filter_map(|&taxon| {
+                    let (name, rank, _) = taxon_store.get(taxon)?;
+                    let lineage = lineage_for(taxon, extra, names, lineage_store, taxon_store);
 
-                Some(TaxaInformation::Dense(DenseTaxaInformation {
-                    peptide: sequence.to_string(),
-                    cutoff_used,
-                    taxon: Taxon {
-                        taxon_id: taxon,
-                        taxon_name: name.to_string(),
-                        taxon_rank: rank.clone().into()
-                    },
-                    lineage
-                }))
-            })
+                    Some(TaxaInformation::Dense(DenseTaxaInformation {
+                        peptide: sequence.to_string(),
+                        cutoff_used,
+                        taxon: Taxon {
+                            taxon_id: taxon,
+                            taxon_name: name.to_string(),
+                            taxon_rank: rank.to_string()
+                        },
+                        lineage
+                    }))
+                })
+                .collect();
+
+            (sequence, taxa)
         })
-        .collect())
+        .collect();
+
+    Ok(laid_over_input(&input, rows))
 }
 
 generate_handlers! (
-    [ V2 ]
     async fn json_handler(
         state => State<AppState>,
-        params => Parameters,
-        version: LineageVersion
+        params => Parameters
     ) -> Result<Json<Vec<TaxaInformation>>, ApiError> {
-        Ok(Json(handler(state, params, version).await?))
+        Ok(Json(handler(state, params).await?))
     }
 );

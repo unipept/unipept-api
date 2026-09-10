@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 
@@ -12,16 +14,14 @@ use crate::{
     },
     errors::ApiError,
     helpers::{
+        distinct_peptides,
         ec_helper::{EcNumber, ec_numbers_from_map},
         fa_helper::calculate_fa,
         go_helper::{GoTerms, go_terms_from_map},
         interpro_helper::{InterproEntries, interpro_entries_from_map},
+        laid_over_input,
         lca_helper::calculate_lca,
-        lineage_helper::{
-            Lineage,
-            LineageVersion::{self, *},
-            get_lineage, get_lineage_with_names
-        },
+        lineage_helper::{LineageResponse, lineage_for},
         sanitize_peptides
     }
 };
@@ -44,7 +44,7 @@ pub struct Parameters {
     cutoff: usize
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct PeptInformation {
     peptide: String,
     cutoff_used: bool,
@@ -55,10 +55,10 @@ pub struct PeptInformation {
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    lineage: Option<Lineage>
+    lineage: Option<LineageResponse>
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Taxon {
     taxon_id: u32,
     taxon_name: String,
@@ -75,11 +75,12 @@ async fn handler(
         names: Flag(names),
         validate_taxa: Flag(validate_taxa),
         cutoff
-    }: Parameters,
-    version: LineageVersion
+    }: Parameters
 ) -> Result<Vec<PeptInformation>, ApiError> {
     let input = sanitize_peptides(input);
-    let result = tokio::task::block_in_place(|| index.analyse(&input, equate_il, false, Some(cutoff)));
+    let distinct = distinct_peptides(&input);
+
+    let result = tokio::task::block_in_place(|| index.analyse(&distinct, equate_il, false, Some(cutoff)));
 
     let ec_store = datastore.ec_store();
     let go_store = datastore.go_store();
@@ -87,32 +88,26 @@ async fn handler(
     let taxon_store = datastore.taxon_store();
     let lineage_store = datastore.lineage_store();
 
-    Ok(result
-        .into_iter()
+    let rows: HashMap<&str, Vec<PeptInformation>> = result
+        .iter()
         .filter_map(|item| {
             let fa = calculate_fa(&item.proteins);
 
             let total_protein_count = item.proteins.len();
-            // let total_protein_count = *fa.counts.get("all").unwrap_or(&0);
             let ecs = ec_numbers_from_map(&fa.data, ec_store, extra);
             let gos = go_terms_from_map(&fa.data, go_store, extra, domains);
             let iprs = interpro_entries_from_map(&fa.data, interpro_store, extra, domains);
 
             let lca = calculate_lca(
                 item.proteins.iter().map(|protein| protein.taxon),
-                version,
                 taxon_store,
                 lineage_store,
                 validate_taxa
             );
             let (name, rank, _) = taxon_store.get(lca as u32)?;
-            let lineage = match (extra, names) {
-                (true, true) => get_lineage_with_names(lca as u32, version, lineage_store, taxon_store),
-                (true, false) => get_lineage(lca as u32, version, lineage_store),
-                (false, _) => None
-            };
+            let lineage = lineage_for(lca as u32, extra, names, lineage_store, taxon_store);
 
-            Some(PeptInformation {
+            Some((item.sequence, vec![PeptInformation {
                 peptide: item.sequence.to_string(),
                 cutoff_used: item.cutoff_used,
                 total_protein_count,
@@ -122,21 +117,21 @@ async fn handler(
                 taxon: Taxon {
                     taxon_id: lca as u32,
                     taxon_name: name.to_string(),
-                    taxon_rank: rank.clone().into()
+                    taxon_rank: rank.to_string()
                 },
                 lineage
-            })
+            }]))
         })
-        .collect())
+        .collect();
+
+    Ok(laid_over_input(&input, rows))
 }
 
 generate_handlers! (
-    [ V2 ]
     async fn json_handler(
         state => State<AppState>,
-        params => Parameters,
-        version: LineageVersion
+        params => Parameters
     ) -> Result<Json<Vec<PeptInformation>>, ApiError> {
-        Ok(Json(handler(state, params, version).await?))
+        Ok(Json(handler(state, params).await?))
     }
 );

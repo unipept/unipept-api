@@ -4,7 +4,7 @@
 //! concern and lives beside these, so that a change to the error policy cannot quietly alter what
 //! well-formed input parses to.
 
-use datastore::{DataStore, LineageRank};
+use datastore::{DataStore, TaxonRank};
 use tempfile::TempDir;
 
 /// Loads the whole corpus from a temporary directory.
@@ -43,7 +43,7 @@ fn taxon_store_reads_name_rank_and_validity() {
 
     let (name, rank, valid) = taxons.get(fixtures::taxa::CROCODYLUS_NILOTICUS).expect("8501 is in the corpus");
     assert_eq!(name, "Crocodylus niloticus");
-    assert_eq!(*rank, LineageRank::Species);
+    assert_eq!(*rank, TaxonRank::SPECIES);
     assert!(valid);
 
     assert_eq!(taxons.get_name(fixtures::taxa::CROCODYLUS).map(String::as_str), Some("Crocodylus"));
@@ -75,7 +75,7 @@ fn taxon_store_reads_the_root_taxon() {
     // row is the one that catches a `FromStr` arm going missing.
     let (name, rank, _) = store.taxon_store().get(fixtures::taxa::ROOT).expect("root is in the corpus");
     assert_eq!(name, "root");
-    assert_eq!(*rank, LineageRank::NoRank);
+    assert_eq!(*rank, TaxonRank::NO_RANK);
 }
 
 #[test]
@@ -94,12 +94,12 @@ fn lineage_store_records_an_unrecorded_rank_as_none() {
     // than as a zero that compares equal to another lineage's missing class.
     let lineage = store.lineage_store().get(fixtures::taxa::CROCODYLUS_NILOTICUS).expect("8501 has a lineage");
 
-    assert_eq!(lineage.class, None);
-    assert_eq!(lineage.domain, Some(2759));
-    assert_eq!(lineage.superclass, Some(fixtures::taxa::SARCOPTERYGII as i32));
-    assert_eq!(lineage.family, Some(fixtures::taxa::CROCODYLIDAE as i32));
-    assert_eq!(lineage.genus, Some(fixtures::taxa::CROCODYLUS as i32));
-    assert_eq!(lineage.species, Some(fixtures::taxa::CROCODYLUS_NILOTICUS as i32));
+    assert_eq!(lineage.get_taxon_id_at_rank("class"), None);
+    assert_eq!(lineage.get_taxon_id_at_rank("domain"), Some(2759));
+    assert_eq!(lineage.get_taxon_id_at_rank("superclass"), Some(fixtures::taxa::SARCOPTERYGII as i32));
+    assert_eq!(lineage.get_taxon_id_at_rank("family"), Some(fixtures::taxa::CROCODYLIDAE as i32));
+    assert_eq!(lineage.get_taxon_id_at_rank("genus"), Some(fixtures::taxa::CROCODYLUS as i32));
+    assert_eq!(lineage.get_taxon_id_at_rank("species"), Some(fixtures::taxa::CROCODYLUS_NILOTICUS as i32));
 }
 
 #[test]
@@ -110,9 +110,9 @@ fn lineage_store_resolves_a_lineage_that_diverges_at_class() {
     // not, which is exactly why their common ancestor sits above it.
     let lineage = store.lineage_store().get(fixtures::taxa::ALOUATTA_SENICULUS).expect("9503 has a lineage");
 
-    assert_eq!(lineage.class, Some(40674));
-    assert_eq!(lineage.superclass, Some(fixtures::taxa::SARCOPTERYGII as i32));
-    assert_eq!(lineage.species, Some(fixtures::taxa::ALOUATTA_SENICULUS as i32));
+    assert_eq!(lineage.get_taxon_id_at_rank("class"), Some(40674));
+    assert_eq!(lineage.get_taxon_id_at_rank("superclass"), Some(fixtures::taxa::SARCOPTERYGII as i32));
+    assert_eq!(lineage.get_taxon_id_at_rank("species"), Some(fixtures::taxa::ALOUATTA_SENICULUS as i32));
 }
 
 #[test]

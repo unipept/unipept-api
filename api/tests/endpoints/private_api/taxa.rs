@@ -13,7 +13,11 @@ async fn one_id_resolves_to_its_name_rank_and_lineage() {
     assert_eq!(body[0]["id"], 8501);
     assert_eq!(body[0]["name"], "Crocodylus niloticus");
     assert_eq!(body[0]["rank"], "species");
-    assert_eq!(body[0]["lineage"].as_array().map(Vec::len), Some(28), "one entry per rank, recorded or not");
+    assert_eq!(
+        body[0]["lineage"].as_array().map(Vec::len),
+        Some(datastore::RANK_COUNT),
+        "one entry per rank, recorded or not"
+    );
 }
 
 /// A lineage carries `null` at every rank the taxonomy does not record, and this taxon has no
@@ -23,8 +27,10 @@ async fn an_unrecorded_rank_is_null_rather_than_absent() {
     let (_, body) = get_json("/private_api/taxa?taxids[]=8501").await;
     let lineage = body[0]["lineage"].as_array().expect("a lineage");
 
-    assert!(lineage[8].is_null(), "class is not recorded for Crocodylus niloticus");
-    assert_eq!(lineage[19], 8500, "but genus is");
+    let column = |rank: datastore::TaxonRank| rank.lineage_index().expect("a lineage column");
+
+    assert!(lineage[column(datastore::TaxonRank::named("class"))].is_null(), "no class for Crocodylus niloticus");
+    assert_eq!(lineage[column(datastore::TaxonRank::GENUS)], 8500, "but genus is recorded");
 }
 
 #[tokio::test(flavor = "multi_thread")]

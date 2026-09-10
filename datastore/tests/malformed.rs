@@ -28,9 +28,9 @@ fn outcome<T, E>(result: Result<T, E>) -> Result<(), E> {
     result.map(|_| ())
 }
 
-/// A well-formed lineage row: a taxon id followed by 28 unrecorded rank columns.
+/// A well-formed lineage row: a taxon id followed by an unrecorded column per rank.
 fn valid_row(taxon_id: u32) -> String {
-    let ranks = ["\\N"; 28].join("\t");
+    let ranks = vec!["\\N"; datastore::RANK_COUNT].join("\t");
     format!("{taxon_id}\t{ranks}")
 }
 
@@ -68,7 +68,7 @@ fn a_row_with_too_few_columns_is_an_error() {
     match rejection("8501\t2759\t\\N\n") {
         LineageStoreError::UnexpectedColumnCount { line, expected, found } => {
             assert_eq!(line, 1);
-            assert_eq!(expected, 29);
+            assert_eq!(expected, datastore::RANK_COUNT + 1);
             assert_eq!(found, 3);
         }
         other => panic!("expected an UnexpectedColumnCount error, got {other:?}")
@@ -81,14 +81,14 @@ fn a_row_with_too_few_columns_is_an_error() {
 #[test]
 fn a_row_with_too_many_columns_is_an_error() {
     match rejection(&format!("{}\t9999\n", valid_row(8501))) {
-        LineageStoreError::UnexpectedColumnCount { found, .. } => assert_eq!(found, 30),
+        LineageStoreError::UnexpectedColumnCount { found, .. } => assert_eq!(found, datastore::RANK_COUNT + 2),
         other => panic!("expected an UnexpectedColumnCount error, got {other:?}")
     }
 }
 
 #[test]
 fn a_non_numeric_taxon_id_is_an_error() {
-    let ranks = ["\\N"; 28].join("\t");
+    let ranks = vec!["\\N"; datastore::RANK_COUNT].join("\t");
 
     match rejection(&format!("crocodile\t{ranks}\n")) {
         LineageStoreError::InvalidTaxonId { line, value } => {
@@ -102,7 +102,7 @@ fn a_non_numeric_taxon_id_is_an_error() {
 #[test]
 fn a_non_numeric_rank_id_is_an_error() {
     let mut fields = vec!["8501".to_string()];
-    fields.extend(std::iter::repeat_n("\\N".to_string(), 28));
+    fields.extend(std::iter::repeat_n("\\N".to_string(), datastore::RANK_COUNT));
     fields[9] = "not-a-taxon".to_string();
 
     match rejection(&fields.join("\t")) {
@@ -123,14 +123,14 @@ fn the_error_names_the_line_it_came_from() {
 
 /// A row of nothing but delimiters is malformed input, not a blank line.
 ///
-/// It is the case a `trim()` before the emptiness check silently swallows: 28 tabs trim to nothing
+/// It is the case a `trim()` before the emptiness check silently swallows: a row of tabs trims to nothing
 /// and the row disappears, which is the behaviour this policy exists to remove.
 #[test]
 fn a_row_of_only_delimiters_is_an_error() {
-    // 28 tabs is 29 fields, so this row is the right width and fails on its empty taxon id. A
+    // One tab per rank is a row of the right width, so this fails on its empty taxon id. A
     // shorter run of tabs fails on the width. Either way it is rejected rather than skipped, which
     // is the property that matters.
-    assert!(matches!(rejection(&"\t".repeat(28)), LineageStoreError::InvalidTaxonId { .. }));
+    assert!(matches!(rejection(&"\t".repeat(datastore::RANK_COUNT)), LineageStoreError::InvalidTaxonId { .. }));
     assert!(matches!(rejection("\t\t\t"), LineageStoreError::UnexpectedColumnCount { .. }));
 }
 

@@ -9,8 +9,7 @@
 //! body; `from` and `size` are query parameters, and they are asserted where they actually appear.
 
 use database::{
-    Database, ProteinSortField, get_accessions, get_accessions_by_filter, get_accessions_count_by_filter,
-    get_accessions_map
+    Database, get_accessions, get_accessions_by_filter, get_accessions_count_by_filter, get_accessions_map
 };
 use httpmock::{Method::POST, MockServer};
 use serde_json::json;
@@ -265,9 +264,7 @@ async fn pagination_converts_start_and_end_into_from_and_size() {
 
     let database = database(&server);
     let accessions =
-        get_accessions_by_filter(database.get_conn(), String::new(), 10, 15, ProteinSortField::Accession, false)
-            .await
-            .expect("the page parses");
+        get_accessions_by_filter(database.get_conn(), String::new(), 10, 15).await.expect("the page parses");
 
     mock.assert_async().await;
     assert_eq!(accessions, vec!["P00001", "P00003"]);
@@ -326,10 +323,9 @@ async fn a_numeric_filter_lists_by_a_term_clause() {
         .await;
 
     let database = database(&server);
-    let found =
-        get_accessions_by_filter(database.get_conn(), "8501".to_string(), 0, 2, ProteinSortField::Accession, false)
-            .await
-            .expect("the page parses");
+    let found = get_accessions_by_filter(database.get_conn(), "8501".to_string(), 0, 2)
+        .await
+        .expect("the page parses");
 
     mock.assert_async().await;
     assert_eq!(found, vec!["P00001"]);
@@ -355,10 +351,7 @@ async fn a_text_filter_lists_without_a_taxon_clause() {
         .await;
 
     let database = database(&server);
-    let found =
-        get_accessions_by_filter(database.get_conn(), "croc".to_string(), 0, 10, ProteinSortField::Accession, false)
-            .await
-            .expect("parses");
+    let found = get_accessions_by_filter(database.get_conn(), "croc".to_string(), 0, 10).await.expect("parses");
 
     mock.assert_async().await;
     assert!(found.is_empty());
@@ -383,9 +376,7 @@ async fn an_end_below_start_is_an_empty_page_not_an_underflow() {
 
     let database = database(&server);
     let accessions =
-        get_accessions_by_filter(database.get_conn(), String::new(), 10, 0, ProteinSortField::Accession, false)
-            .await
-            .expect("the page parses");
+        get_accessions_by_filter(database.get_conn(), String::new(), 10, 0).await.expect("the page parses");
 
     mock.assert_async().await;
     assert!(accessions.is_empty());
@@ -418,10 +409,9 @@ async fn an_end_past_the_last_entry_is_clamped_to_it() {
         .await;
 
     let database = database(&server);
-    let accessions =
-        get_accessions_by_filter(database.get_conn(), String::new(), 0, usize::MAX, ProteinSortField::Accession, false)
-            .await
-            .expect("the page parses");
+    let accessions = get_accessions_by_filter(database.get_conn(), String::new(), 0, usize::MAX)
+        .await
+        .expect("the page parses");
 
     count.assert_async().await;
     list.assert_async().await;
@@ -454,9 +444,7 @@ async fn the_count_and_the_listing_select_the_same_set() {
 
     let database = database(&server);
     get_accessions_count_by_filter(database.get_conn(), "8501".to_string()).await.expect("counts");
-    get_accessions_by_filter(database.get_conn(), "8501".to_string(), 0, 10, ProteinSortField::Accession, false)
-        .await
-        .expect("lists");
+    get_accessions_by_filter(database.get_conn(), "8501".to_string(), 0, 10).await.expect("lists");
 
     shared.assert_hits_async(2).await;
 }
@@ -499,53 +487,13 @@ async fn the_last_page_is_reached_from_the_other_end() {
         .await;
 
     let database = database(&server);
-    let page = get_accessions_by_filter(
-        database.get_conn(),
-        String::new(),
-        TOTAL - 5,
-        TOTAL,
-        ProteinSortField::Accession,
-        false
-    )
-    .await
-    .expect("the last page parses");
+    let page = get_accessions_by_filter(database.get_conn(), String::new(), TOTAL - 5, TOTAL)
+        .await
+        .expect("the last page parses");
 
     count.assert_async().await;
     list.assert_async().await;
     assert_eq!(page, vec!["Z00001", "Z00002", "Z00003", "Z00004", "Z00005"], "the caller reads it forwards");
-}
-
-/// A descending listing reaches its last page by asking ascending.
-///
-/// The reversal is of whatever order the caller asked for, not of a fixed one.
-#[tokio::test]
-async fn the_last_page_of_a_descending_listing_is_asked_for_ascending() {
-    let server = MockServer::start_async().await;
-    const TOTAL: usize = 50_000;
-
-    server
-        .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0");
-            then.status(200).json_body(json!({ "hits": { "total": { "value": TOTAL } } }));
-        })
-        .await;
-    let list = server
-        .mock_async(|when, then| {
-            when.method(POST)
-                .path("/uniprot_entries/_search")
-                .query_param("from", "0")
-                .query_param("size", "2")
-                .json_body_partial(r#"{ "sort": [ { "uniprot_accession_number": { "order": "asc" } } ] }"#);
-            then.status(200).json_body(json!({ "hits": { "hits": [] } }));
-        })
-        .await;
-
-    let database = database(&server);
-    get_accessions_by_filter(database.get_conn(), String::new(), TOTAL - 2, TOTAL, ProteinSortField::Accession, true)
-        .await
-        .expect("the page parses");
-
-    list.assert_async().await;
 }
 
 /// A page in the middle is reachable from neither end, and says so rather than being served wrong.
@@ -570,16 +518,9 @@ async fn a_page_in_the_middle_is_refused() {
         .await;
 
     let database = database(&server);
-    let error = get_accessions_by_filter(
-        database.get_conn(),
-        String::new(),
-        TOTAL / 2,
-        TOTAL / 2 + 5,
-        ProteinSortField::Accession,
-        false
-    )
-    .await
-    .expect_err("the middle cannot be reached");
+    let error = get_accessions_by_filter(database.get_conn(), String::new(), TOTAL / 2, TOTAL / 2 + 5)
+        .await
+        .expect_err("the middle cannot be reached");
 
     assert!(matches!(error, database::DatabaseError::WindowUnreachable { .. }), "got: {error}");
     list.assert_hits_async(0).await;
@@ -606,9 +547,7 @@ async fn a_shallow_page_does_not_count_first() {
         .await;
 
     let database = database(&server);
-    get_accessions_by_filter(database.get_conn(), String::new(), 0, 5, ProteinSortField::Accession, false)
-        .await
-        .expect("the page parses");
+    get_accessions_by_filter(database.get_conn(), String::new(), 0, 5).await.expect("the page parses");
 
     count.assert_hits_async(0).await;
 }

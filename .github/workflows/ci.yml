@@ -93,6 +93,8 @@ jobs:
     # The storage features pick which concrete type each `Active*` alias in `sa-server` names, and
     # `clippy --all-features` resolves only one of the nine. Sequential, not a matrix: the
     # combinations share one warm target directory.
+    #
+    # Job id and name are unchanged: the ruleset names the required checks.
     name: Storage backend aliases
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -109,7 +111,9 @@ jobs:
       - name: Cache cargo dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Check every backend combination
+      # `cargo test -p index` is what executes each combination: its tests build index files and
+      # read them back through `Index::try_from_files`, so the selected backend does real work.
+      - name: Check and test every backend combination
         shell: bash
         run: |
           set -euo pipefail
@@ -121,10 +125,17 @@ jobs:
             echo "== ${features:-(none)} =="
             if [ -z "$features" ]; then
               cargo check --all-targets --locked -p unipept-api
+              cargo test --locked -p index
             else
               cargo check --all-targets --locked -p unipept-api --features "$features"
+              cargo test --locked -p index --features "$features"
             fi
           done
+
+      # The endpoint suite reaches the index only through `Index::analyse` and does not vary with
+      # the backend, so it runs once, on the build production ships.
+      - name: Test the endpoints on the production backend
+        run: cargo test --locked -p unipept-api --features mmap
 
   clippy:
     name: Run Clippy

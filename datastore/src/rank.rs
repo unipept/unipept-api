@@ -9,7 +9,7 @@ use crate::errors::TaxonStoreError;
 /// **The one place the ranks are named.** Spelled as the taxon table spells them; a lineage column
 /// keys the two multi-word ranks with an underscore instead, which
 /// [`TaxonRank::from_column_name`] reads.
-pub const RANK_NAMES: [&str; 28] = [
+pub const RANK_NAMES: &[&str] = &[
     "domain",
     "realm",
     "kingdom",
@@ -47,8 +47,6 @@ pub const RANK_COUNT: usize = RANK_NAMES.len();
 const NO_RANK_NAME: &str = "no rank";
 
 /// Whether a rank name and a column name are the same, reading a space and an underscore alike.
-///
-/// Compares in place, because a coarse rank is looked up once per lineage.
 fn spelled_alike(rank: &str, column: &str) -> bool {
     rank.len() == column.len()
         && rank
@@ -97,8 +95,7 @@ impl TaxonRank {
     /// A taxon the taxonomy places at no rank of its own. Not a lineage column.
     pub const NO_RANK: Self = Self(u8::MAX);
 
-    /// The first column of a lineage, whatever the taxonomy calls it. Every taxon below the root
-    /// is reached through it.
+    /// The first column of a lineage, whatever the taxonomy calls it.
     pub const TOP_RANK: Self = Self(0);
 
     /// `calculate_lca` will not let two taxa agree at genus or species by both recording nothing
@@ -161,7 +158,7 @@ impl FromStr for TaxonRank {
 
 impl fmt::Display for TaxonRank {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.as_str())
+        f.write_str(self.as_str())
     }
 }
 

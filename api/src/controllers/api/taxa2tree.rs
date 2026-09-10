@@ -88,11 +88,9 @@ pub async fn post_json_handler(
     Ok(Json(handler(state, Parameters::Post(params))))
 }
 
-pub async fn get_html_handler(
-    state: State<AppState>,
-    GetContent(params): GetContent<GetParameters>
-) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
-    match handler(state, Parameters::Get(params)) {
+/// The tree as a page, or a refusal: the page draws a tree, and `link` answers a reference instead.
+fn render(information: TreeInformation) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
+    match information {
         TreeInformation::Tree { root } => Ok(HtmlTemplate(TreeTemplate { json_data: serde_json::to_string(&root)? })),
         TreeInformation::Link { .. } => {
             Err(ApiError::NotImplementedError("HTML output is not supported when using the link option".to_string()))
@@ -100,14 +98,16 @@ pub async fn get_html_handler(
     }
 }
 
+pub async fn get_html_handler(
+    state: State<AppState>,
+    GetContent(params): GetContent<GetParameters>
+) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
+    render(handler(state, Parameters::Get(params)))
+}
+
 pub async fn post_html_handler(
     state: State<AppState>,
     PostContent(params): PostContent<PostParameters>
 ) -> Result<HtmlTemplate<TreeTemplate>, ApiError> {
-    match handler(state, Parameters::Post(params)) {
-        TreeInformation::Tree { root } => Ok(HtmlTemplate(TreeTemplate { json_data: serde_json::to_string(&root)? })),
-        TreeInformation::Link { .. } => {
-            Err(ApiError::NotImplementedError("HTML output is not supported when using the link option".to_string()))
-        }
-    }
+    render(handler(state, Parameters::Post(params)))
 }

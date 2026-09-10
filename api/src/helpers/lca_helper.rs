@@ -11,8 +11,8 @@ pub fn calculate_lca(
     // agrees with no taxon id, so such a taxon holds the result at the root.
     let unknown = Lineage::default();
 
-    // Borrowed, not copied: the loop reads each lineage once per rank, and one `pept2data` request
-    // can carry hundreds of thousands of taxa.
+    // Borrowed, not copied: one `pept2data` request can carry hundreds of thousands of taxa, and
+    // collecting them is nearly the whole cost of this call.
     let lineages: Vec<&Lineage> = taxa
         .into_iter()
         .filter(|&taxon_id| !only_valid_taxa || taxon_store.is_valid(taxon_id))
@@ -22,6 +22,9 @@ pub fn calculate_lca(
     let genus = TaxonRank::GENUS.lineage_index().expect("genus is a lineage column");
     let species = TaxonRank::SPECIES.lineage_index().expect("species is a lineage column");
 
+    // Narrowest rank first, so the first one every lineage agrees at is the answer. The comparison
+    // below stops at the first disagreement, which is what makes a rank that fails cost two reads
+    // rather than one per lineage — walking the lineages instead of the ranks would lose that.
     for rank in (0..RANK_COUNT).rev() {
         let mut iterator = lineages
             .iter()

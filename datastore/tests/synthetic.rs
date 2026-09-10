@@ -47,7 +47,7 @@ fn every_ancestor_a_lineage_names_resolves() {
     for leaf in 0..DISTINCT {
         let lineage = lineages.get(LEAF_BASE + leaf).expect("every leaf has a lineage");
 
-        for rank in 0..28 {
+        for rank in 0..datastore::RANK_COUNT {
             let Some(ancestor) = lineage.get_rank(rank) else {
                 continue;
             };

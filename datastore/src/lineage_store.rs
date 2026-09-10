@@ -1,44 +1,20 @@
 use std::{
-    borrow::Cow,
     collections::HashMap,
     io::{BufRead, BufReader},
     sync::Arc
 };
 
-use serde::Serialize;
+use crate::{
+    errors::LineageStoreError,
+    rank::{RANK_COUNT, TaxonRank}
+};
 
-use crate::{errors::LineageStoreError, taxon_store::LineageRank};
-
-#[derive(Clone, Debug, Serialize, Default)]
+/// One taxon's ancestor at each rank, in the order [`crate::RANK_NAMES`] declares them.
+///
+/// A rank whose taxon the taxonomy marks invalid holds a negative id.
+#[derive(Clone, Debug, Default)]
 pub struct Lineage {
-    pub domain: Option<i32>,
-    pub realm: Option<i32>,
-    pub kingdom: Option<i32>,
-    pub subkingdom: Option<i32>,
-    pub superphylum: Option<i32>,
-    pub phylum: Option<i32>,
-    pub subphylum: Option<i32>,
-    pub superclass: Option<i32>,
-    pub class: Option<i32>,
-    pub subclass: Option<i32>,
-    pub superorder: Option<i32>,
-    pub order: Option<i32>,
-    pub suborder: Option<i32>,
-    pub infraorder: Option<i32>,
-    pub superfamily: Option<i32>,
-    pub family: Option<i32>,
-    pub subfamily: Option<i32>,
-    pub tribe: Option<i32>,
-    pub subtribe: Option<i32>,
-    pub genus: Option<i32>,
-    pub subgenus: Option<i32>,
-    pub species_group: Option<i32>,
-    pub species_subgroup: Option<i32>,
-    pub species: Option<i32>,
-    pub subspecies: Option<i32>,
-    pub strain: Option<i32>,
-    pub varietas: Option<i32>,
-    pub forma: Option<i32>
+    pub ranks: [Option<i32>; RANK_COUNT]
 }
 
 impl Lineage {
@@ -48,40 +24,9 @@ impl Lineage {
         self.get_rank(LineageStore::rank_to_idx(rank_name)?)
     }
 
-    /// Retrieves the ID of this lineage at a rank index, in the same order as
-    /// [`LineageStore::rank_to_idx`]. If the index is out of range, None is returned.
+    /// The id at a rank index.
     pub fn get_rank(&self, rank_index: usize) -> Option<i32> {
-        match rank_index {
-            0 => self.domain,
-            1 => self.realm,
-            2 => self.kingdom,
-            3 => self.subkingdom,
-            4 => self.superphylum,
-            5 => self.phylum,
-            6 => self.subphylum,
-            7 => self.superclass,
-            8 => self.class,
-            9 => self.subclass,
-            10 => self.superorder,
-            11 => self.order,
-            12 => self.suborder,
-            13 => self.infraorder,
-            14 => self.superfamily,
-            15 => self.family,
-            16 => self.subfamily,
-            17 => self.tribe,
-            18 => self.subtribe,
-            19 => self.genus,
-            20 => self.subgenus,
-            21 => self.species_group,
-            22 => self.species_subgroup,
-            23 => self.species,
-            24 => self.subspecies,
-            25 => self.strain,
-            26 => self.varietas,
-            27 => self.forma,
-            _ => None
-        }
+        self.ranks.get(rank_index).copied().flatten()
     }
 }
 
@@ -93,9 +38,6 @@ pub struct LineageStore {
 }
 
 impl LineageStore {
-    /// The number of rank columns a lineage row carries. `LineageRank::LINEAGE_ORDER` names them.
-    pub const AMOUNT_OF_RANKS: usize = 28;
-
     /// The lineage column a rank name addresses.
     ///
     /// Either spelling is read: the columns are keyed on `species_group`, and the taxonomy — and
@@ -106,41 +48,9 @@ impl LineageStore {
     /// filter, which matches a rank as text a user typed, does its own lowercasing and does not
     /// come through here.
     ///
-    /// A caller that holds a `LineageRank` has [`LineageRank::lineage_index`] instead.
+    /// A caller that holds a `TaxonRank` has [`TaxonRank::lineage_index`] instead.
     pub fn rank_to_idx(s: &str) -> Option<usize> {
-        let key = if s.contains(' ') { Cow::Owned(s.replace(' ', "_")) } else { Cow::Borrowed(s) };
-
-        match key.as_ref() {
-            "domain" => Some(0),
-            "realm" => Some(1),
-            "kingdom" => Some(2),
-            "subkingdom" => Some(3),
-            "superphylum" => Some(4),
-            "phylum" => Some(5),
-            "subphylum" => Some(6),
-            "superclass" => Some(7),
-            "class" => Some(8),
-            "subclass" => Some(9),
-            "superorder" => Some(10),
-            "order" => Some(11),
-            "suborder" => Some(12),
-            "infraorder" => Some(13),
-            "superfamily" => Some(14),
-            "family" => Some(15),
-            "subfamily" => Some(16),
-            "tribe" => Some(17),
-            "subtribe" => Some(18),
-            "genus" => Some(19),
-            "subgenus" => Some(20),
-            "species_group" => Some(21),
-            "species_subgroup" => Some(22),
-            "species" => Some(23),
-            "subspecies" => Some(24),
-            "strain" => Some(25),
-            "varietas" => Some(26),
-            "forma" => Some(27),
-            _ => None
-        }
+        TaxonRank::from_column_name(s)?.lineage_index()
     }
 
     pub fn try_from_file(file: &str) -> Result<Self, LineageStoreError> {
@@ -150,7 +60,7 @@ impl LineageStore {
 
         let mut index_references: Vec<HashMap<u32, Vec<Arc<Lineage>>>> = Vec::new();
 
-        for _ in 0..LineageStore::AMOUNT_OF_RANKS {
+        for _ in 0..RANK_COUNT {
             index_references.push(HashMap::new());
         }
 
@@ -169,10 +79,10 @@ impl LineageStore {
             // Counted before anything is parsed, so a row of the wrong width is reported as such
             // rather than as whichever of its fields happens to fail parsing first.
             let fields: Vec<&str> = line.split('\t').collect();
-            if fields.len() != LineageStore::AMOUNT_OF_RANKS + 1 {
+            if fields.len() != RANK_COUNT + 1 {
                 return Err(LineageStoreError::UnexpectedColumnCount {
                     line: line_number,
-                    expected: LineageStore::AMOUNT_OF_RANKS + 1,
+                    expected: RANK_COUNT + 1,
                     found: fields.len()
                 });
             }
@@ -181,56 +91,31 @@ impl LineageStore {
                 .parse()
                 .map_err(|_| LineageStoreError::InvalidTaxonId { line: line_number, value: fields[0].to_string() })?;
 
-            // Enumerated for the column number: a lineage row has 28 rank fields, and an error
-            // naming only the offending value leaves the reader counting tabs to find it.
-            let mut parts: Vec<Option<i32>> = Vec::with_capacity(LineageStore::AMOUNT_OF_RANKS);
-            for (rank, field) in fields[1..].iter().enumerate() {
+            let mut parts: Vec<Option<i32>> = Vec::with_capacity(RANK_COUNT);
+            for (column, field) in fields[1..].iter().enumerate() {
                 parts.push(match *field {
                     "\\N" => None,
+                    // The taxon id is column one, and a reader counts columns from one.
                     value => Some(value.parse::<i32>().map_err(|_| LineageStoreError::InvalidRankId {
                         line: line_number,
-                        column: rank + 2,
+                        column: column + 2,
                         value: value.to_string()
                     })?)
                 });
             }
 
-            let lin = Arc::new(Lineage {
-                domain: parts[0],
-                realm: parts[1],
-                kingdom: parts[2],
-                subkingdom: parts[3],
-                superphylum: parts[4],
-                phylum: parts[5],
-                subphylum: parts[6],
-                superclass: parts[7],
-                class: parts[8],
-                subclass: parts[9],
-                superorder: parts[10],
-                order: parts[11],
-                suborder: parts[12],
-                infraorder: parts[13],
-                superfamily: parts[14],
-                family: parts[15],
-                subfamily: parts[16],
-                tribe: parts[17],
-                subtribe: parts[18],
-                genus: parts[19],
-                subgenus: parts[20],
-                species_group: parts[21],
-                species_subgroup: parts[22],
-                species: parts[23],
-                subspecies: parts[24],
-                strain: parts[25],
-                varietas: parts[26],
-                forma: parts[27]
-            });
+            // Both are `RANK_COUNT` long: the row was refused above if it carried a different
+            // number of columns.
+            let mut ranks = [None; RANK_COUNT];
+            ranks.copy_from_slice(&parts);
+
+            let lin = Arc::new(Lineage { ranks });
 
             mapper.insert(taxon_id, Arc::clone(&lin));
 
-            // Zipped rather than indexed: both sides are `AMOUNT_OF_RANKS` long, and pairing them
+            // Zipped rather than indexed: both sides are `RANK_COUNT` long, and pairing them
             // this way says so without a bounds check that could fail.
-            for (rank_map, part) in index_references.iter_mut().zip(parts.iter()) {
+            for (rank_map, part) in index_references.iter_mut().zip(lin.ranks.iter()) {
                 if let Some(id) = part {
                     rank_map.entry(id.unsigned_abs()).or_default().push(Arc::clone(&lin));
                 }
@@ -244,7 +129,7 @@ impl LineageStore {
         self.mapper.get(&key)
     }
 
-    pub fn get_lineages_at_rank(&self, rank: &LineageRank, taxon_id: u32) -> Option<&Vec<Arc<Lineage>>> {
+    pub fn get_lineages_at_rank(&self, rank: TaxonRank, taxon_id: u32) -> Option<&Vec<Arc<Lineage>>> {
         rank.lineage_index()
             .and_then(|idx| self.index_references.get(idx))
             .and_then(|map| map.get(&taxon_id))
@@ -252,7 +137,7 @@ impl LineageStore {
 
     /// Returns all unique taxon IDs at a specific rank in the NCBI taxonomy.
     /// Ascending by taxon id.
-    pub fn get_all_taxon_ids_at_rank(&self, rank: &LineageRank) -> Option<Vec<u32>> {
+    pub fn get_all_taxon_ids_at_rank(&self, rank: TaxonRank) -> Option<Vec<u32>> {
         rank.lineage_index().and_then(|idx| self.index_references.get(idx)).map(|map| {
             let mut ids: Vec<u32> = map.keys().cloned().collect();
             ids.sort_unstable();
@@ -265,80 +150,20 @@ impl LineageStore {
 mod tests {
     use super::*;
 
-    const RANK_KEYS: [&str; 28] = [
-        "domain",
-        "realm",
-        "kingdom",
-        "subkingdom",
-        "superphylum",
-        "phylum",
-        "subphylum",
-        "superclass",
-        "class",
-        "subclass",
-        "superorder",
-        "order",
-        "suborder",
-        "infraorder",
-        "superfamily",
-        "family",
-        "subfamily",
-        "tribe",
-        "subtribe",
-        "genus",
-        "subgenus",
-        "species_group",
-        "species_subgroup",
-        "species",
-        "subspecies",
-        "strain",
-        "varietas",
-        "forma"
-    ];
+    /// The column names, which key a multi-word rank with an underscore.
+    fn rank_keys() -> Vec<String> {
+        TaxonRank::columns().map(|rank| rank.as_str().replace(' ', "_")).collect()
+    }
 
-    /// The rank names index the lineage columns in order, and each one reads back its own column.
-    ///
-    /// `rank_to_idx`, `get_taxon_id_at_rank` and `get_rank` are three hand-written tables over the
-    /// same 28 ranks, listed in the same order, and nothing else checks that they agree with each
-    /// other or with the column order the parser fills.
+    /// A rank name and a column index address the same column.
     #[test]
     fn every_rank_key_addresses_its_own_column() {
-        let mut lineage = Lineage::default();
-        let fields: [&mut Option<i32>; 28] = [
-            &mut lineage.domain,
-            &mut lineage.realm,
-            &mut lineage.kingdom,
-            &mut lineage.subkingdom,
-            &mut lineage.superphylum,
-            &mut lineage.phylum,
-            &mut lineage.subphylum,
-            &mut lineage.superclass,
-            &mut lineage.class,
-            &mut lineage.subclass,
-            &mut lineage.superorder,
-            &mut lineage.order,
-            &mut lineage.suborder,
-            &mut lineage.infraorder,
-            &mut lineage.superfamily,
-            &mut lineage.family,
-            &mut lineage.subfamily,
-            &mut lineage.tribe,
-            &mut lineage.subtribe,
-            &mut lineage.genus,
-            &mut lineage.subgenus,
-            &mut lineage.species_group,
-            &mut lineage.species_subgroup,
-            &mut lineage.species,
-            &mut lineage.subspecies,
-            &mut lineage.strain,
-            &mut lineage.varietas,
-            &mut lineage.forma
-        ];
-        for (position, field) in fields.into_iter().enumerate() {
-            *field = Some(position as i32 + 1000);
-        }
+        // A different value in every column, so a name reading the wrong one is visible.
+        let lineage = Lineage {
+            ranks: std::array::from_fn(|column| Some(column as i32 + 1000))
+        };
 
-        for (position, key) in RANK_KEYS.iter().enumerate() {
+        for (position, key) in rank_keys().iter().enumerate() {
             assert_eq!(LineageStore::rank_to_idx(key), Some(position), "rank_to_idx({key})");
             assert_eq!(lineage.get_taxon_id_at_rank(key), Some(position as i32 + 1000), "get_taxon_id_at_rank({key})");
             assert_eq!(lineage.get_rank(position), Some(position as i32 + 1000), "get_rank({position})");
@@ -374,12 +199,12 @@ mod tests {
     /// Normalising leaves the twenty-six single-word ranks exactly as they were.
     #[test]
     fn a_single_word_rank_is_unchanged_by_normalising() {
-        for (position, key) in RANK_KEYS.iter().enumerate() {
+        for (position, key) in rank_keys().iter().enumerate() {
             if !key.contains('_') {
                 assert_eq!(LineageStore::rank_to_idx(key), Some(position), "`{key}`");
             }
         }
         assert_eq!(Lineage::default().get_taxon_id_at_rank("nonsense"), None);
-        assert_eq!(Lineage::default().get_rank(LineageStore::AMOUNT_OF_RANKS), None);
+        assert_eq!(Lineage::default().get_rank(RANK_COUNT), None);
     }
 }

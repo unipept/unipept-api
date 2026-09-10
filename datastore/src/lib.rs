@@ -3,6 +3,7 @@ mod errors;
 mod go_store;
 mod interpro_store;
 mod lineage_store;
+mod rank;
 mod reference_proteome_store;
 mod sample_store;
 mod taxon_store;
@@ -15,9 +16,10 @@ pub use errors::{
 pub use go_store::GoStore;
 pub use interpro_store::InterproStore;
 pub use lineage_store::{Lineage, LineageStore};
+pub use rank::{RANK_COUNT, RANK_NAMES, TaxonRank};
 pub use reference_proteome_store::ReferenceProteomeStore;
 pub use sample_store::SampleStore;
-pub use taxon_store::{LineageRank, TaxonStore};
+pub use taxon_store::TaxonStore;
 
 pub struct DataStore {
     version: String,

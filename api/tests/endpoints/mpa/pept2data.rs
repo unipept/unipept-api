@@ -25,7 +25,7 @@ async fn pept2data_answers_with_an_lca_and_a_lineage() {
     let item = &body["peptides"][0];
     assert_eq!(item["sequence"], UNIQUE);
     assert_eq!(item["lca"], 8501);
-    assert_eq!(item["lineage"].as_array().map(Vec::len), Some(28));
+    assert_eq!(item["lineage"].as_array().map(Vec::len), Some(datastore::RANK_COUNT));
 }
 
 /// `report_taxa` adds the taxa the peptide reached, which are otherwise reduced away to the LCA.

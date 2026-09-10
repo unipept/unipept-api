@@ -13,11 +13,7 @@ use crate::{
     errors::ApiError,
     helpers::{
         distinct_peptides, laid_over_input,
-        lineage_helper::{
-            Lineage,
-            LineageVersion::{self, *},
-            get_lineage, get_lineage_with_names
-        },
+        lineage_helper::{LineageResponse, lineage_for},
         sanitize_peptides
     }
 };
@@ -40,7 +36,6 @@ pub struct Parameters {
     cutoff: usize
 }
 
-#[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Clone)]
 #[serde(untagged)]
 pub enum TaxaInformation {
@@ -55,7 +50,7 @@ pub struct DenseTaxaInformation {
     #[serde(flatten)]
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    lineage: Option<Lineage>
+    lineage: Option<LineageResponse>
 }
 
 #[derive(Serialize, Clone)]
@@ -82,8 +77,7 @@ async fn handler(
         tryptic: Flag(tryptic),
         compact: Flag(compact),
         cutoff
-    }: Parameters,
-    version: LineageVersion
+    }: Parameters
 ) -> Result<Vec<TaxaInformation>, ApiError> {
     let input = sanitize_peptides(input);
     let distinct = distinct_peptides(&input);
@@ -126,11 +120,7 @@ async fn handler(
                 .iter()
                 .filter_map(|&taxon| {
                     let (name, rank, _) = taxon_store.get(taxon)?;
-                    let lineage = match (extra, names) {
-                        (true, true) => get_lineage_with_names(taxon, version, lineage_store, taxon_store),
-                        (true, false) => get_lineage(taxon, version, lineage_store),
-                        (false, _) => None
-                    };
+                    let lineage = lineage_for(taxon, extra, names, lineage_store, taxon_store);
 
                     Some(TaxaInformation::Dense(DenseTaxaInformation {
                         peptide: sequence.to_string(),
@@ -138,7 +128,7 @@ async fn handler(
                         taxon: Taxon {
                             taxon_id: taxon,
                             taxon_name: name.to_string(),
-                            taxon_rank: rank.clone().into()
+                            taxon_rank: rank.to_string()
                         },
                         lineage
                     }))
@@ -153,12 +143,10 @@ async fn handler(
 }
 
 generate_handlers! (
-    [ V2 ]
     async fn json_handler(
         state => State<AppState>,
-        params => Parameters,
-        version: LineageVersion
+        params => Parameters
     ) -> Result<Json<Vec<TaxaInformation>>, ApiError> {
-        Ok(Json(handler(state, params, version).await?))
+        Ok(Json(handler(state, params).await?))
     }
 );

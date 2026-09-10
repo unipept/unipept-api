@@ -5,12 +5,7 @@ use datastore::LineageStore;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    AppState,
-    controllers::generate_handlers,
-    errors::ApiError,
-    helpers::lineage_helper::{LineageVersion, get_lineage_array}
-};
+use crate::{AppState, controllers::generate_handlers, errors::ApiError, helpers::lineage_helper::get_lineage_array};
 
 #[derive(Deserialize)]
 pub struct Parameters {
@@ -28,7 +23,6 @@ pub struct RankMappingResult {
 }
 
 /// Maps taxa to a specific taxonomic rank with caching for duplicate taxa.
-/// Uses a HashMap to cache lineage lookups, which is more efficient when there are many duplicates.
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
     Parameters { taxa, rank }: Parameters
@@ -41,7 +35,6 @@ async fn handler(
 
     let lineage_store = datastore.lineage_store();
 
-    // Build a cache of taxon_id -> taxon_id_at_rank mappings
     let mut cache: HashMap<u32, Option<u32>> = HashMap::new();
 
     let mapped_taxa: Vec<Vec<u32>> = taxa
@@ -51,7 +44,7 @@ async fn handler(
                 .iter()
                 .filter_map(|taxon_id| {
                     let mapped_taxon = cache.entry(*taxon_id).or_insert_with(|| {
-                        let lineage = get_lineage_array(*taxon_id, LineageVersion::V2, lineage_store);
+                        let lineage = get_lineage_array(*taxon_id, lineage_store);
                         lineage.get(rank_idx).and_then(|taxon| *taxon).map(|taxon_id| taxon_id as u32)
                     });
 
@@ -65,7 +58,6 @@ async fn handler(
     Ok(RankMappingResult { mapped_taxa })
 }
 
-// Default handler without cache
 generate_handlers!(
     async fn json_handler(
         state => State<AppState>,

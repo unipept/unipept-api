@@ -228,7 +228,7 @@ async fn a_numeric_filter_also_matches_the_taxon_id() {
                 r#"{ "track_total_hits": true, "query": { "bool": { "minimum_should_match": 1, "should": [
                    { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
                    { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
-                   { "match": { "taxon_id": { "query": 8501 } } }
+                   { "term": { "taxon_id": 8501 } }
                  ] } } }"#
             );
             then.status(200).json_body(json!({ "hits": { "total": { "value": 1 } } }));
@@ -391,21 +391,29 @@ async fn an_end_below_start_is_an_empty_page_not_an_underflow() {
     assert!(accessions.is_empty());
 }
 
-/// A bound above `i64::MAX` saturates rather than wrapping to a negative one.
+/// A window running past the last entry asks for what there is.
 ///
-/// `from` and `size` travel as `i64`. `end` is a `usize` a caller sets, so on a 64-bit target it
-/// reaches `usize::MAX` — and the handler's `end < start` check passes for it, since it is the
-/// ordering that is checked and not the magnitude. A plain cast would send the cluster `-1`.
+/// `end` is a `usize` a caller sets, so on a 64-bit target it reaches `usize::MAX` — the browser's
+/// "All" option computes exactly that. It passes the result window, so it is clamped to the size of
+/// the result set and reached from the other end, rather than being sent to the cluster as a `size`
+/// that would saturate `i64`.
 #[tokio::test]
-async fn a_bound_above_i64_saturates_rather_than_going_negative() {
+async fn an_end_past_the_last_entry_is_clamped_to_it() {
     let server = MockServer::start_async().await;
-    let mock = server
+    let count = server
         .mock_async(|when, then| {
-            when.method(POST)
-                .path("/uniprot_entries/_search")
-                .query_param("from", "0")
-                .query_param("size", i64::MAX.to_string());
-            then.status(200).json_body(json!({ "hits": { "hits": [] } }));
+            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0");
+            then.status(200).json_body(json!({ "hits": { "total": { "value": 3 } } }));
+        })
+        .await;
+    let list = server
+        .mock_async(|when, then| {
+            when.method(POST).path("/uniprot_entries/_search").query_param("from", "0").query_param("size", "3");
+            then.status(200).json_body(json!({ "hits": { "hits": [
+                { "_source": { "uniprot_accession_number": "P00003" } },
+                { "_source": { "uniprot_accession_number": "P00002" } },
+                { "_source": { "uniprot_accession_number": "P00001" } }
+            ] } }));
         })
         .await;
 
@@ -415,109 +423,192 @@ async fn a_bound_above_i64_saturates_rather_than_going_negative() {
             .await
             .expect("the page parses");
 
-    mock.assert_async().await;
-    assert!(accessions.is_empty());
+    count.assert_async().await;
+    list.assert_async().await;
+    assert_eq!(accessions, vec!["P00001", "P00002", "P00003"], "the reversed page is turned back around");
 }
 
-/// The listing carries a sort, and it is a total order.
+/// Counting and listing select the same set.
 ///
-/// Without one, OpenSearch answers in `_score` order, and under `match_all` every score ties — so
-/// the order is whatever the shards return. It is stable in practice on a static index, which is
-/// why this went unnoticed, but nothing holds it: two pages cut either side of a shard relocation
-/// can repeat one entry and drop another.
+/// They were built by separate functions and had drifted — the numeric clause was a `match` for the
+/// count and a `term` for the listing. Nothing caught it, because nothing compared the two. Deep
+/// paging makes the agreement load-bearing: the offset from the end is computed from the count and
+/// applied to the listing, so two different sets give the wrong rows and no error.
 ///
-/// The accession is unique, so it orders a page on its own and no tiebreak is added below it.
+/// Asserted by matching one mock against both queries and letting the hit count say so.
 #[tokio::test]
-async fn a_listing_is_sorted_by_accession() {
+async fn the_count_and_the_listing_select_the_same_set() {
     let server = MockServer::start_async().await;
-    let mock = server
+    let shared = server
+        .mock_async(|when, then| {
+            when.method(POST).path("/uniprot_entries/_search").json_body_partial(
+                r#"{ "query": { "bool": { "minimum_should_match": 1, "should": [
+                       { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
+                       { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
+                       { "term": { "taxon_id": 8501 } }
+                     ] } } }"#
+            );
+            then.status(200).json_body(json!({ "hits": { "total": { "value": 1 }, "hits": [] } }));
+        })
+        .await;
+
+    let database = database(&server);
+    get_accessions_count_by_filter(database.get_conn(), "8501".to_string()).await.expect("counts");
+    get_accessions_by_filter(database.get_conn(), "8501".to_string(), 0, 10, ProteinSortField::Accession, false)
+        .await
+        .expect("lists");
+
+    shared.assert_hits_async(2).await;
+}
+
+/// The last page is reached by reversing the order, not by paging to it.
+///
+/// `from + size` cannot pass the result window, so the last page of a large set cannot be asked for
+/// directly. Reversing a total order turns entry `total - 1` into entry `0`, which brings it inside
+/// the window; the rows come back reversed and are turned around again.
+///
+/// 149,655,504 is the live protein count, and 5 per page is what the browser asks for, so this is
+/// the request that answered a 500.
+#[tokio::test]
+async fn the_last_page_is_reached_from_the_other_end() {
+    let server = MockServer::start_async().await;
+    const TOTAL: usize = 149_655_504;
+
+    let count = server
+        .mock_async(|when, then| {
+            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0");
+            then.status(200).json_body(json!({ "hits": { "total": { "value": TOTAL } } }));
+        })
+        .await;
+    let list = server
         .mock_async(|when, then| {
             when.method(POST)
                 .path("/uniprot_entries/_search")
+                // The window starts at the very end, and the order runs the other way.
+                .query_param("from", "0")
+                .query_param("size", "5")
+                .json_body_partial(r#"{ "sort": [ { "uniprot_accession_number": { "order": "desc" } } ] }"#);
+            then.status(200).json_body(json!({ "hits": { "hits": [
+                { "_source": { "uniprot_accession_number": "Z00005" } },
+                { "_source": { "uniprot_accession_number": "Z00004" } },
+                { "_source": { "uniprot_accession_number": "Z00003" } },
+                { "_source": { "uniprot_accession_number": "Z00002" } },
+                { "_source": { "uniprot_accession_number": "Z00001" } }
+            ] } }));
+        })
+        .await;
+
+    let database = database(&server);
+    let page = get_accessions_by_filter(
+        database.get_conn(),
+        String::new(),
+        TOTAL - 5,
+        TOTAL,
+        ProteinSortField::Accession,
+        false
+    )
+    .await
+    .expect("the last page parses");
+
+    count.assert_async().await;
+    list.assert_async().await;
+    assert_eq!(page, vec!["Z00001", "Z00002", "Z00003", "Z00004", "Z00005"], "the caller reads it forwards");
+}
+
+/// A descending listing reaches its last page by asking ascending.
+///
+/// The reversal is of whatever order the caller asked for, not of a fixed one.
+#[tokio::test]
+async fn the_last_page_of_a_descending_listing_is_asked_for_ascending() {
+    let server = MockServer::start_async().await;
+    const TOTAL: usize = 50_000;
+
+    server
+        .mock_async(|when, then| {
+            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0");
+            then.status(200).json_body(json!({ "hits": { "total": { "value": TOTAL } } }));
+        })
+        .await;
+    let list = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/uniprot_entries/_search")
+                .query_param("from", "0")
+                .query_param("size", "2")
                 .json_body_partial(r#"{ "sort": [ { "uniprot_accession_number": { "order": "asc" } } ] }"#);
             then.status(200).json_body(json!({ "hits": { "hits": [] } }));
         })
         .await;
 
     let database = database(&server);
-    get_accessions_by_filter(database.get_conn(), String::new(), 0, 10, ProteinSortField::Accession, false)
+    get_accessions_by_filter(database.get_conn(), String::new(), TOTAL - 2, TOTAL, ProteinSortField::Accession, true)
         .await
         .expect("the page parses");
 
-    mock.assert_async().await;
+    list.assert_async().await;
 }
 
-/// A taxon id is held by millions of entries, so it does not order a page on its own. The accession
-/// breaks every tie below it, which is what makes the order total.
-#[tokio::test]
-async fn a_sort_that_repeats_is_broken_by_the_accession() {
-    let server = MockServer::start_async().await;
-    let mock = server
-        .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_search").json_body_partial(
-                r#"{ "sort": [
-                       { "taxon_id": { "order": "asc" } },
-                       { "uniprot_accession_number": { "order": "asc" } }
-                     ] }"#
-            );
-            then.status(200).json_body(json!({ "hits": { "hits": [] } }));
-        })
-        .await;
-
-    let database = database(&server);
-    get_accessions_by_filter(database.get_conn(), String::new(), 0, 10, ProteinSortField::TaxonId, false)
-        .await
-        .expect("the page parses");
-
-    mock.assert_async().await;
-}
-
-/// Descending reverses the tiebreak along with the primary field, so a descending page is the exact
-/// reverse of the ascending one. Reversing only the primary would leave ties in ascending order,
-/// and the two directions would not be reverses of each other.
+/// A page in the middle is reachable from neither end, and says so rather than being served wrong.
 ///
-/// `db_type` travels as `type` in the mapping.
+/// The mock covers the count only; the listing is asserted never to be asked.
 #[tokio::test]
-async fn descending_reverses_the_tiebreak_too() {
+async fn a_page_in_the_middle_is_refused() {
     let server = MockServer::start_async().await;
-    let mock = server
+    const TOTAL: usize = 149_655_504;
+
+    server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_search").json_body_partial(
-                r#"{ "sort": [
-                       { "type": { "order": "desc" } },
-                       { "uniprot_accession_number": { "order": "desc" } }
-                     ] }"#
-            );
+            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0");
+            then.status(200).json_body(json!({ "hits": { "total": { "value": TOTAL } } }));
+        })
+        .await;
+    let list = server
+        .mock_async(|when, then| {
+            when.method(POST).path("/uniprot_entries/_search").query_param("from", "74827747");
             then.status(200).json_body(json!({ "hits": { "hits": [] } }));
         })
         .await;
 
     let database = database(&server);
-    get_accessions_by_filter(database.get_conn(), String::new(), 0, 10, ProteinSortField::DbType, true)
-        .await
-        .expect("the page parses");
+    let error = get_accessions_by_filter(
+        database.get_conn(),
+        String::new(),
+        TOTAL / 2,
+        TOTAL / 2 + 5,
+        ProteinSortField::Accession,
+        false
+    )
+    .await
+    .expect_err("the middle cannot be reached");
 
-    mock.assert_async().await;
+    assert!(matches!(error, database::DatabaseError::WindowUnreachable { .. }), "got: {error}");
+    list.assert_hits_async(0).await;
 }
 
-/// A filtered listing is sorted too, not only the `match_all` one — they are built by separate
-/// arms, so one can carry the sort while the other does not.
+/// A shallow page never asks for the count.
+///
+/// The extra query is what pays for reaching a deep page, and every page the browser opens with is
+/// shallow. Asserted by hit count: the count mock must go untouched.
 #[tokio::test]
-async fn a_filtered_listing_is_sorted_as_well() {
+async fn a_shallow_page_does_not_count_first() {
     let server = MockServer::start_async().await;
-    let mock = server
+    let count = server
         .mock_async(|when, then| {
-            when.method(POST)
-                .path("/uniprot_entries/_search")
-                .json_body_partial(r#"{ "sort": [ { "uniprot_accession_number": { "order": "asc" } } ] }"#);
+            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0");
+            then.status(200).json_body(json!({ "hits": { "total": { "value": 149_655_504u64 } } }));
+        })
+        .await;
+    server
+        .mock_async(|when, then| {
+            when.method(POST).path("/uniprot_entries/_search").query_param("size", "5");
             then.status(200).json_body(json!({ "hits": { "hits": [] } }));
         })
         .await;
 
     let database = database(&server);
-    get_accessions_by_filter(database.get_conn(), "croc".to_string(), 0, 10, ProteinSortField::Accession, false)
+    get_accessions_by_filter(database.get_conn(), String::new(), 0, 5, ProteinSortField::Accession, false)
         .await
         .expect("the page parses");
 
-    mock.assert_async().await;
+    count.assert_hits_async(0).await;
 }

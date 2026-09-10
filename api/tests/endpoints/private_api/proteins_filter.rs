@@ -29,10 +29,13 @@ async fn the_protein_count_is_the_cluster_total() {
     assert_eq!(body["count"], 4321);
 }
 
-/// The count and the listing are built by two separate query builders, and they have drifted: a
-/// numeric filter becomes a `match` clause on one side and a `term` on the other. Both mocks name
-/// the clause they expect, so neither can change without this failing — and so a controller that
-/// dropped the filter altogether would match neither.
+/// The count and the listing select the same set, and both carry the filter to the cluster.
+///
+/// They were built by two separate query builders and had drifted: a numeric filter was a `match`
+/// clause on the counting side and a `term` on the listing side. They read one builder now, which
+/// deep paging depends on — the offset from the end is computed from the count and applied to the
+/// listing. Both mocks spell the clause out, so a controller that dropped the filter would match
+/// neither.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_filtered_count_and_listing_both_reach_the_cluster() {
     let server = MockServer::start_async().await;
@@ -42,7 +45,7 @@ async fn the_filtered_count_and_listing_both_reach_the_cluster() {
                 r#"{ "track_total_hits": true, "query": { "bool": { "minimum_should_match": 1, "should": [
                            { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
                            { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
-                           { "match": { "taxon_id": { "query": 8501 } } }
+                           { "term": { "taxon_id": 8501 } }
                          ] } } }"#
             );
             then.status(200).json_body(json!({ "hits": { "total": { "value": 2 } } }));
@@ -108,40 +111,70 @@ async fn an_end_below_start_is_rejected() {
     mock.assert_hits_async(0).await;
 }
 
-/// Paging past `index.max_result_window` is a malformed request, not a server fault.
+/// The last page of the browser is served, where it used to answer a 500.
 ///
-/// OpenSearch refuses a search whose `from + size` passes the window, which the cluster leaves at
-/// its default of 10,000. That refusal is a 400 from the cluster, which this crate reports as a
-/// `GeneralError` and the API answered as a 500 — so asking the protein browser for the last page
-/// of 149 million entries logged and alerted on a server error for a request the cluster will
-/// never serve.
-///
-/// The bound is on `end` alone, not on the page size: `from` is `start` and `size` is their
-/// difference, so `from + size` is `end`. Measured against the live API, `end = 10000` answers and
-/// `end = 10005` does not.
-///
-/// The mock is asserted to have gone uncalled, as above: the request is refused before the cluster
-/// is asked.
+/// `from + size` cannot pass `index.max_result_window`, so offset 149 million cannot be asked for.
+/// It is reached by reversing the order instead, which brings the last page inside the window as
+/// the first. 149,655,504 is the live protein count and 5 per page is what the browser asks for.
 #[tokio::test(flavor = "multi_thread")]
-async fn paging_past_the_result_window_is_rejected() {
+async fn the_last_page_of_the_browser_is_served() {
+    const TOTAL: usize = 149_655_504;
     let server = MockServer::start_async().await;
-    let mock = server
+    server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_search");
-            then.status(200).json_body(json!({ "hits": { "hits": [] } }));
+            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0");
+            then.status(200).json_body(json!({ "hits": { "total": { "value": TOTAL } } }));
+        })
+        .await;
+    let list = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/uniprot_entries/_search")
+                .query_param("from", "0")
+                .query_param("size", "5")
+                .json_body_partial(r#"{ "sort": [ { "uniprot_accession_number": { "order": "desc" } } ] }"#);
+            then.status(200).json_body(json!({ "hits": { "hits": [
+                { "_source": { "uniprot_accession_number": "Z00002" } },
+                { "_source": { "uniprot_accession_number": "Z00001" } }
+            ] } }));
         })
         .await;
 
     let (dir, state) = test_state(&server.base_url());
-    let request = Request::get("/private_api/proteins/filter?filter=&start=9995&end=10005")
-        .body(Body::empty())
-        .unwrap();
+    let path = format!("/private_api/proteins/filter?filter=&start={}&end={TOTAL}", TOTAL - 5);
+    let request = Request::get(&path).body(Body::empty()).unwrap();
+    let (status, body) = request_raw(state, request).await;
+    drop(dir);
+
+    assert_eq!(status, StatusCode::OK, "got: {body}");
+    assert_eq!(body, r#"["Z00001","Z00002"]"#, "the caller reads the page forwards");
+    list.assert_async().await;
+}
+
+/// A page the cluster can reach from neither end is a 400, not a 500.
+///
+/// The middle of 149 million entries is past the window from the front and past it from the back.
+/// The table this serves has first, previous, next and last buttons and no way to jump to a page,
+/// so this is not somewhere a client lands in one step — but it must answer honestly when it does.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_page_in_the_unreachable_middle_is_rejected() {
+    const TOTAL: usize = 149_655_504;
+    let server = MockServer::start_async().await;
+    server
+        .mock_async(|when, then| {
+            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0");
+            then.status(200).json_body(json!({ "hits": { "total": { "value": TOTAL } } }));
+        })
+        .await;
+
+    let (dir, state) = test_state(&server.base_url());
+    let path = format!("/private_api/proteins/filter?filter=&start={}&end={}", TOTAL / 2, TOTAL / 2 + 5);
+    let request = Request::get(&path).body(Body::empty()).unwrap();
     let (status, body) = request_raw(state, request).await;
     drop(dir);
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(body.contains("10000"), "the message should name the limit, got: {body}");
-    mock.assert_hits_async(0).await;
+    assert!(body.contains("10000"), "the message should say what is reachable, got: {body}");
 }
 
 /// The last page the window does allow still reaches the cluster.

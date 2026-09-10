@@ -5,7 +5,7 @@
 
 use std::sync::LazyLock;
 
-use datastore::{LineageStore, RANK_COUNT, RANK_NAMES, TaxonStore};
+use datastore::{LineageStore, RANK_COUNT, RANK_NAMES, TaxonRank, TaxonStore};
 use serde::{Serialize, Serializer, ser::SerializeMap};
 
 /// The field names a lineage answers with, built once.
@@ -80,6 +80,39 @@ impl Serialize for LineageWithNames {
 pub enum LineageResponse {
     Ids(LineageIds),
     WithNames(LineageWithNames)
+}
+
+/// The taxon a response names, beside its lineage.
+///
+/// One declaration, because the three field names and their order are a response contract: every
+/// endpoint that carries a taxon has always written them exactly this way.
+#[derive(Serialize, Clone)]
+pub struct Taxon {
+    taxon_id: u32,
+    taxon_name: String,
+    taxon_rank: String
+}
+
+impl Taxon {
+    /// The taxon the store names, or `None` where it names none.
+    ///
+    /// This is the only place that decides what an unnamed taxon means, which is why the callers
+    /// answer `None` for the whole row rather than each inventing a placeholder.
+    pub fn new(taxon_id: u32, taxon_store: &TaxonStore) -> Option<Self> {
+        let (name, rank, _) = taxon_store.get(taxon_id)?;
+
+        Some(Self::named(taxon_id, name, *rank))
+    }
+
+    /// For a caller that has already read the store, or one naming a taxon the store does not
+    /// hold — root, which `/api/v2/taxonomy` answers for without a row to read.
+    pub fn named(taxon_id: u32, taxon_name: &str, taxon_rank: TaxonRank) -> Self {
+        Taxon {
+            taxon_id,
+            taxon_name: taxon_name.to_string(),
+            taxon_rank: taxon_rank.to_string()
+        }
+    }
 }
 
 /// The lineage a request asked for, or none if it asked for no lineage at all.

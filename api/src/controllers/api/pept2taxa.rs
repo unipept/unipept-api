@@ -13,7 +13,7 @@ use crate::{
     errors::ApiError,
     helpers::{
         distinct_peptides, laid_over_input,
-        lineage_helper::{LineageResponse, lineage_for},
+        lineage_helper::{LineageResponse, Taxon, lineage_for},
         sanitize_peptides
     }
 };
@@ -58,13 +58,6 @@ pub struct CompactTaxaInformation {
     peptide: String,
     cutoff_used: bool,
     taxa: Vec<u32>
-}
-
-#[derive(Serialize, Clone)]
-pub struct Taxon {
-    taxon_id: u32,
-    taxon_name: String,
-    taxon_rank: String
 }
 
 async fn handler(
@@ -119,17 +112,12 @@ async fn handler(
                 .taxa
                 .iter()
                 .filter_map(|&taxon| {
-                    let (name, rank, _) = taxon_store.get(taxon)?;
                     let lineage = lineage_for(taxon, extra, names, lineage_store, taxon_store);
 
                     Some(TaxaInformation::Dense(DenseTaxaInformation {
                         peptide: sequence.to_string(),
                         cutoff_used,
-                        taxon: Taxon {
-                            taxon_id: taxon,
-                            taxon_name: name.to_string(),
-                            taxon_rank: rank.to_string()
-                        },
+                        taxon: Taxon::new(taxon, taxon_store)?,
                         lineage
                     }))
                 })

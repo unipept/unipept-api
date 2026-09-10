@@ -22,7 +22,7 @@ use crate::{
         interpro_helper::{InterproEntries, interpro_entries_from_map},
         laid_over_input,
         lca_helper::calculate_lca,
-        lineage_helper::{LineageResponse, lineage_for},
+        lineage_helper::{LineageResponse, Taxon, lineage_for},
         sanitize_peptides
     }
 };
@@ -57,13 +57,6 @@ pub struct PeptInformation {
     taxon: Taxon,
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     lineage: Option<LineageResponse>
-}
-
-#[derive(Serialize, Clone)]
-pub struct Taxon {
-    taxon_id: u32,
-    taxon_name: String,
-    taxon_rank: String
 }
 
 async fn handler(
@@ -105,7 +98,7 @@ async fn handler(
                 lineage_store,
                 validate_taxa
             );
-            let (name, rank, _) = taxon_store.get(lca as u32)?;
+            let taxon = Taxon::new(lca as u32, taxon_store)?;
             let lineage = lineage_for(lca as u32, extra, names, lineage_store, taxon_store);
 
             Some((item.sequence, vec![PeptInformation {
@@ -115,11 +108,7 @@ async fn handler(
                 ec: ecs,
                 go: gos,
                 ipr: iprs,
-                taxon: Taxon {
-                    taxon_id: lca as u32,
-                    taxon_name: name.to_string(),
-                    taxon_rank: rank.to_string()
-                },
+                taxon,
                 lineage
             }]))
         })

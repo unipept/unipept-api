@@ -13,7 +13,7 @@ use crate::{
     },
     helpers::{
         lca_helper::calculate_lca,
-        lineage_helper::{LineageResponse, lineage_for}
+        lineage_helper::{LineageResponse, Taxon, lineage_for}
     }
 };
 
@@ -37,13 +37,6 @@ pub struct LcaInformation {
     lineage: Option<LineageResponse>
 }
 
-#[derive(Serialize)]
-pub struct Taxon {
-    taxon_id: u32,
-    taxon_name: String,
-    taxon_rank: String
-}
-
 async fn handler(
     State(AppState { datastore, .. }): State<AppState>,
     Parameters {
@@ -60,17 +53,10 @@ async fn handler(
 
     let lca: i32 = calculate_lca(casted_input, taxon_store, lineage_store, validate_taxa);
 
-    if let Some((taxon_name, taxon_rank, _)) = taxon_store.get(lca as u32) {
+    if let Some(taxon) = Taxon::new(lca as u32, taxon_store) {
         let lineage = lineage_for(lca as u32, extra, names, lineage_store, taxon_store);
 
-        return Ok(LcaInformation {
-            taxon: Some(Taxon {
-                taxon_id: lca as u32,
-                taxon_name: taxon_name.to_string(),
-                taxon_rank: taxon_rank.to_string()
-            }),
-            lineage
-        });
+        return Ok(LcaInformation { taxon: Some(taxon), lineage });
     }
 
     Ok(LcaInformation { taxon: None, lineage: None })

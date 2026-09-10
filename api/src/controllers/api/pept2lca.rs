@@ -14,7 +14,7 @@ use crate::{
     helpers::{
         distinct_peptides, laid_over_input,
         lca_helper::calculate_lca,
-        lineage_helper::{LineageResponse, lineage_for},
+        lineage_helper::{LineageResponse, Taxon, lineage_for},
         sanitize_peptides
     }
 };
@@ -45,13 +45,6 @@ pub struct LcaInformation {
     lineage: Option<LineageResponse>
 }
 
-#[derive(Serialize, Clone)]
-pub struct Taxon {
-    taxon_id: u32,
-    taxon_name: String,
-    taxon_rank: String
-}
-
 async fn handler(
     State(AppState { index, datastore, .. }): State<AppState>,
     Parameters {
@@ -80,17 +73,13 @@ async fn handler(
             // unaffected by repeats.
             let lca = calculate_lca(item.taxa.iter().copied(), taxon_store, lineage_store, validate_taxa);
 
-            let (name, rank, _) = taxon_store.get(lca as u32)?;
+            let taxon = Taxon::new(lca as u32, taxon_store)?;
             let lineage = lineage_for(lca as u32, extra, names, lineage_store, taxon_store);
 
             Some((item.sequence, vec![LcaInformation {
                 peptide: item.sequence.to_string(),
                 cutoff_used: item.cutoff_used,
-                taxon: Taxon {
-                    taxon_id: lca as u32,
-                    taxon_name: name.to_string(),
-                    taxon_rank: rank.to_string()
-                },
+                taxon,
                 lineage
             }]))
         })

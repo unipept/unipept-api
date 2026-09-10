@@ -12,7 +12,7 @@ use crate::{
         request::Flag
     },
     errors::{ApiError, ApiError::UnknownRankError},
-    helpers::lineage_helper::{LineageResponse, Taxon, get_empty_lineage, get_empty_lineage_with_names, lineage_for}
+    helpers::lineage_helper::{LineageResponse, Taxon, empty_lineage_for, lineage_for}
 };
 
 #[derive(Deserialize)]
@@ -147,15 +147,9 @@ async fn handler(
                     children = Some(descendant_ids.into_iter().collect());
                 }
 
-                let lineage: Option<LineageResponse> = match (extra, names) {
-                    (true, true) => get_empty_lineage_with_names(),
-                    (true, false) => get_empty_lineage(),
-                    (false, _) => None
-                };
-
                 return Some(TaxaInformation {
                     taxon: Taxon::named(taxon_id, "root", TaxonRank::NO_RANK),
-                    lineage,
+                    lineage: empty_lineage_for(extra, names),
                     descendants: children
                 });
             }

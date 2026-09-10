@@ -2,7 +2,7 @@ use datastore::{LineageStore, TaxonRank, TaxonStore};
 use frequency::FrequencyTable;
 use node::Node;
 
-use super::lineage_helper::get_lineage_array;
+use super::lineage_helper::reported_ranks;
 
 pub mod frequency;
 pub mod node;
@@ -12,9 +12,7 @@ pub fn build_tree(frequencies: FrequencyTable<u32>, lineage_store: &LineageStore
     for taxon_id in frequencies.keys() {
         let mut current_node = &mut root;
 
-        let lineage = get_lineage_array(*taxon_id, lineage_store);
-
-        for lineage_id in lineage.into_iter().flatten() {
+        for lineage_id in reported_ranks(*taxon_id, lineage_store).flatten() {
             if lineage_id < 0 {
                 continue;
             }

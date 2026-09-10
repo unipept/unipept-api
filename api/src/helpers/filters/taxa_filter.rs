@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use datastore::LineageStore;
 use index::ProteinInfo;
 
-use crate::helpers::{filters::UniprotFilter, lineage_helper::get_lineage_array};
+use crate::helpers::{filters::UniprotFilter, lineage_helper::reported_ranks};
 
 pub struct TaxaFilter<'a> {
     pub taxa: HashSet<u32>,
@@ -12,8 +12,7 @@ pub struct TaxaFilter<'a> {
 
 impl UniprotFilter for TaxaFilter<'_> {
     fn filter(&self, protein: &ProteinInfo) -> bool {
-        get_lineage_array(protein.taxon, self.lineage_store)
-            .iter()
+        reported_ranks(protein.taxon, self.lineage_store)
             .flatten()
             .any(|ancestor| self.taxa.contains(&(ancestor.unsigned_abs())))
     }

@@ -935,7 +935,7 @@ dependencies = [
 
 [[package]]
 name = "database"
-version = "2.3.2"
+version = "2.5.3"
 dependencies = [
  "fixtures",
  "httpmock",
@@ -950,7 +950,7 @@ dependencies = [
 
 [[package]]
 name = "datastore"
-version = "2.3.2"
+version = "2.5.3"
 dependencies = [
  "fixtures",
  "serde",
@@ -1104,7 +1104,7 @@ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 
 [[package]]
 name = "fixtures"
-version = "0.1.0"
+version = "2.5.3"
 dependencies = [
  "binary-traits",
  "datastore",
@@ -1690,7 +1690,7 @@ dependencies = [
 
 [[package]]
 name = "index"
-version = "2.3.2"
+version = "2.5.3"
 dependencies = [
  "fa-compression",
  "fixtures",
@@ -3549,7 +3549,7 @@ checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
 name = "unipept-api"
-version = "2.4.2"
+version = "2.5.3"
 dependencies = [
  "askama",
  "axum",

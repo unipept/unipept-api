@@ -19,7 +19,8 @@ default-members = [
     "index"
 ]
 
-# The floor the unipept-index dependency already imposes; 1.87 is refused outright.
 [workspace.package]
+version = "2.5.3"
 edition = "2024"
+# The floor the unipept-index dependency already imposes; 1.87 is refused outright.
 rust-version = "1.88"

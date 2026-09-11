@@ -1,6 +1,6 @@
 [package]
 name = "index"
-version = "2.3.2"
+version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish = false

@@ -35,7 +35,8 @@ fn path_of(query: &str) -> &str {
 ///
 /// Not here: the cluster-backed routes (`get_and_post_answer_alike_against_a_cluster`), the two
 /// `taxa2tree` routes, whose methods take different parameters
-/// (`taxa2tree::counts_answer_like_the_repeats_they_stand_for`), and `/`, which is GET only.
+/// (`taxa2tree::counts_answer_like_the_repeats_they_stand_for`), and `/`, `/health` and
+/// `/health/database`, which are GET only.
 #[tokio::test(flavor = "multi_thread")]
 async fn get_and_post_answer_alike() {
     let peptides = format!("input[]={UNIQUE}&input[]={GENUS_SHARED}");

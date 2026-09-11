@@ -1,5 +1,6 @@
 pub mod api;
 pub mod datasets;
+pub mod health;
 pub mod mpa;
 pub mod private_api;
 pub mod request;

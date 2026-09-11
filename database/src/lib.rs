@@ -39,6 +39,21 @@ impl Database {
     }
 }
 
+/// Checks that OpenSearch answers, without asking it for anything.
+///
+/// # Returns
+/// * `Ok(())` if OpenSearch answered with a success status
+/// * `DatabaseError` if it answered with a failure status, or could not be reached at all
+pub async fn ping(client: &OpenSearch) -> Result<(), DatabaseError> {
+    let response = client.ping().send().await?;
+
+    if !response.status_code().is_success() {
+        return Err(GeneralError(response.text().await?));
+    }
+
+    Ok(())
+}
+
 /// Retrieves protein information from the database for a given list of UniProt accession IDs
 ///
 /// # Arguments

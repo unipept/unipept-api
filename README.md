@@ -51,6 +51,11 @@ below are identical, and a change to one applies to both. New clients should use
 * `/mpa/pept2data`
 * `/datasets/sampledata`
 
+### Service endpoints
+* `/health` answers 200 whenever the process is serving, for a load balancer to poll.
+* `/health/database` answers 200 when OpenSearch answers and 503 when it does not, so an
+  OpenSearch outage can be told apart from the API itself being down.
+
 ## Choosing a storage backend
 
 The index has two implementations of every structure — one holding owned memory, one borrowing a

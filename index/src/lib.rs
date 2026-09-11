@@ -30,15 +30,15 @@ impl Index {
         mapping_file: &str,
         kmer_table_file: &str
     ) -> Result<Self, IndexError> {
-        eprintln!("Loading proteins from file: {}", proteins_file);
+        tracing::info!(path = %proteins_file, "loading proteins");
         let proteins =
             load_proteins_file(proteins_file).map_err(|err| LoadIndexError::LoadProteinsErrors(err.to_string()))?;
 
-        eprintln!("Loading suffix array from file: {}", index_file);
+        tracing::info!(path = %index_file, "loading suffix array");
         let suffix_array =
             load_suffix_array_file(index_file).map_err(|err| LoadIndexError::LoadSuffixArrayError(err.to_string()))?;
 
-        eprintln!("Loading mapping from file: {}", mapping_file);
+        tracing::info!(path = %mapping_file, "loading mapping");
         let suffix_to_protein_index =
             load_mapping_file(mapping_file).map_err(|err| LoadIndexError::LoadMappingError(err.to_string()))?;
 
@@ -48,7 +48,7 @@ impl Index {
             .map_err(LoadIndexError::MismatchedIndexFiles)?;
 
         if Path::new(kmer_table_file).exists() {
-            eprintln!("Loading k-mer table from file: {}", kmer_table_file);
+            tracing::info!(path = %kmer_table_file, "loading k-mer table");
             let table = load_kmer_table_file(kmer_table_file)
                 .map_err(|err| LoadIndexError::LoadKmerTableError(err.to_string()))?;
 
@@ -57,7 +57,7 @@ impl Index {
             // writes no build identifier, so this is weaker than the `try_new` check above.
             searcher = searcher.try_with_kmer_table(table).map_err(LoadIndexError::MismatchedIndexFiles)?;
         } else {
-            eprintln!("No k-mer table at {}; searching the whole suffix array", kmer_table_file);
+            tracing::info!(path = %kmer_table_file, "no k-mer table; searching the whole suffix array");
         }
 
         Ok(Self { searcher })

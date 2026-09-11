@@ -89,10 +89,7 @@ async fn handler(
         return Ok(vec![]);
     }
 
-    let accessions_map = get_accessions_map(connection, &accession_numbers).await.map_err(|e| {
-        println!("Error occurred: {:?}", e);
-        e
-    })?;
+    let accessions_map = get_accessions_map(connection, &accession_numbers).await?;
 
     let taxon_store = datastore.taxon_store();
 

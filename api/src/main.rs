@@ -2,6 +2,7 @@ use clap::Parser;
 use unipept_api::start;
 
 #[derive(Parser, Debug)]
+#[command(version)]
 pub struct Arguments {
     #[arg(short, long)]
     index_location: String,
@@ -18,5 +19,18 @@ async fn main() {
     if let Err(e) = start(&args.index_location, &args.database_address, args.port).await {
         eprintln!("{}", e);
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::CommandFactory;
+
+    use super::Arguments;
+
+    /// Nothing else fails if `#[command(version)]` is dropped: `--version` simply stops existing.
+    #[test]
+    fn the_binary_reports_its_own_version() {
+        assert_eq!(Arguments::command().get_version(), Some(env!("CARGO_PKG_VERSION")));
     }
 }

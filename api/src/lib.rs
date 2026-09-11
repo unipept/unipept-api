@@ -50,8 +50,10 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
         &taxons
     )?;
 
-    // The backend is compiled in, so this is the only way to tell how the running server was
-    // built. The configurations differ enough in memory profile to be worth stating.
+    // Neither the version nor the backend is recorded anywhere else, so this is the only way
+    // to tell what is actually running. The configurations differ enough in memory profile to
+    // be worth stating.
+    eprintln!("Unipept API version: {}", env!("CARGO_PKG_VERSION"));
     eprintln!("Index storage backend: {}", Index::backend_summary());
 
     let index = Index::try_from_files(&sa, &proteins, &mappings, &kmer_table)?;

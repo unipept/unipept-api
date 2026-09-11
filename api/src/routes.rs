@@ -14,6 +14,7 @@ use crate::{
             taxa2tree, taxonomy
         },
         datasets::sampledata,
+        health,
         mpa::pept2data,
         private_api::{
             ecnumbers, goterms, interpros, metadata, proteins, proteins_filter, reference_proteomes,
@@ -59,6 +60,8 @@ pub fn timeout_status(err: BoxError) -> StatusCode {
 pub fn create_router_with_timeout(state: AppState, timeout: Duration) -> Router {
     Router::new()
         .route("/", get(|| async { "Unipept API server" }))
+        .route("/health", get(health::get_handler))
+        .route("/health/database", get(health::get_database_handler))
         .nest("/api/v1", create_api_routes())
         .nest("/api/v2", create_api_routes())
         .nest("/datasets", create_datasets_routes())

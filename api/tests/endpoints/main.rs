@@ -10,6 +10,7 @@ mod common;
 mod api;
 mod database;
 mod datasets;
+mod health;
 mod mpa;
 mod private_api;
 mod routing;

@@ -212,6 +212,74 @@ async fn a_body_refused_for_its_declared_size_still_carries_the_cors_headers() {
     );
 }
 
+/// An inbound `x-request-id` comes back unchanged.
+///
+/// HAProxy sits in front of this API and sets its own id; this is what ties a line in its log to
+/// a line in this one. Generating a new id here instead would silently break that.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_inbound_request_id_is_echoed_back() {
+    let request = Request::get("/").header("x-request-id", "haproxy-set-this-id").body(Body::empty()).unwrap();
+
+    let (_, headers) = send(request).await;
+
+    assert_eq!(headers.get("x-request-id").map(|v| v.to_str().unwrap()), Some("haproxy-set-this-id"));
+}
+
+/// A request with no `x-request-id` still gets one back.
+///
+/// Not every caller sits behind HAProxy, and a request with no id is exactly as hard to pick out
+/// of concurrent traffic as one is meant to solve.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_missing_request_id_is_generated() {
+    let request = Request::get("/").body(Body::empty()).unwrap();
+
+    let (_, headers) = send(request).await;
+
+    assert!(headers.get("x-request-id").is_some(), "a request id should be generated when none was sent");
+}
+
+/// A timed-out request still carries its request id back.
+///
+/// The 408 is produced by `HandleErrorLayer` and never enters the router, so it only carries the
+/// id if the layer that copies it onto the response sits above the timeout. A timeout is the
+/// failure most worth tracing back to HAProxy's log, which makes this the case that matters.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_timed_out_request_still_carries_its_request_id() {
+    let stalled = Body::from_stream(futures_util::stream::pending::<Result<bytes::Bytes, std::io::Error>>());
+
+    let (dir, state) = common::offline_state();
+    let app = create_app_with_timeout(state, Duration::from_millis(50));
+
+    let request = Request::post("/api/v2/pept2lca")
+        .header("x-request-id", "haproxy-set-this-id")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(stalled)
+        .unwrap();
+
+    let response = app.oneshot(request).await.expect("the app responds");
+    let (status, headers) = (response.status(), response.headers().clone());
+    drop(dir);
+
+    assert_eq!(status, StatusCode::REQUEST_TIMEOUT);
+    assert_eq!(headers.get("x-request-id").map(|v| v.to_str().unwrap()), Some("haproxy-set-this-id"));
+}
+
+/// A request refused for its declared size still carries its request id, for the same reason.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_body_refused_for_its_declared_size_still_carries_its_request_id() {
+    let request = Request::post("/api/v2/pept2lca")
+        .header("x-request-id", "haproxy-set-this-id")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .header(header::CONTENT_LENGTH, (BODY_LIMIT + 1).to_string())
+        .body(Body::from("junk=A"))
+        .unwrap();
+
+    let (status, headers) = send(request).await;
+
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(headers.get("x-request-id").map(|v| v.to_str().unwrap()), Some("haproxy-set-this-id"));
+}
+
 /// Every failure answers as JSON, whether it comes from a handler or from an extractor that
 /// rejected the request before one ran.
 ///

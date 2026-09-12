@@ -4,7 +4,11 @@ use axum::{
     BoxError, Router, error_handling::HandleErrorLayer, extract::DefaultBodyLimit, http::StatusCode, routing::get
 };
 use tower::{Layer, ServiceBuilder, timeout::TimeoutLayer};
-use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::{
+    limit::RequestBodyLimitLayer,
+    request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
+    trace::TraceLayer
+};
 
 use crate::{
     AppState,
@@ -24,7 +28,7 @@ use crate::{
     middleware::{
         cors::create_cors_layer,
         normalize_path::{NormalizePath, NormalizePathLayer},
-        tracing::create_tracing_layer
+        tracing::{LogResponse, RequestSpan}
     }
 };
 
@@ -69,7 +73,13 @@ pub fn create_router_with_timeout(state: AppState, timeout: Duration) -> Router 
         .nest("/private_api", create_private_api_routes())
         .layer(
             ServiceBuilder::new()
-                // Outermost, so it also reaches the responses the layers below produce. A 408 from
+                // Outermost of all, including CORS, and paired immediately with the layer that
+                // copies the id onto the response: a 408 and a 413 never enter the router, so
+                // anything further in would answer those two without the id that ties them to
+                // HAProxy's own log line.
+                .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+                .layer(PropagateRequestIdLayer::x_request_id())
+                // Above the timeout and the body limit, so it also reaches what they produce. A 408 from
                 // the timeout and a 413 from the body limit never enter the router, so a CORS layer
                 // sitting under them would leave those two answers without the headers — and every
                 // caller of this API is cross-origin, so the browser would discard them unread.
@@ -79,7 +89,9 @@ pub fn create_router_with_timeout(state: AppState, timeout: Duration) -> Router 
                 // Set max request size to 50MiB (default is 2MiB)
                 .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
                 .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024))
-                .layer(create_tracing_layer())
+                // Innermost, so the span covers the handler. The failure callback is off:
+                // `LogResponse` already logs a 5xx at ERROR, and `DefaultOnFailure` would repeat it.
+                .layer(TraceLayer::new_for_http().make_span_with(RequestSpan).on_response(LogResponse).on_failure(()))
         )
         .with_state(state)
 }

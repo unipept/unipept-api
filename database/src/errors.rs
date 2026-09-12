@@ -6,11 +6,11 @@ use crate::MAX_RESULT_WINDOW;
 
 #[derive(Error, Debug)]
 pub enum DatabaseError {
-    #[error("Failed to build OpenSearch pool: {0}")]
+    #[error("Failed to build OpenSearch pool")]
     BuildPoolError(#[from] BuildError),
-    #[error("Failed to parse OpenSearch URL: {0}")]
+    #[error("Failed to parse OpenSearch URL")]
     ParsePoolUrlError(#[from] ParseError),
-    #[error("Failed to retrieve documents from OpenSearch URL: {0}")]
+    #[error("Failed to retrieve documents from OpenSearch")]
     RetrieveError(#[from] ClientError),
     #[error(
         "cannot page from {start} to {end} of {total} entries: only the first {window} and the last {window} can be \

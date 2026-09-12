@@ -10,6 +10,7 @@ sa-server = { git = "https://github.com/unipept/unipept-index.git" }
 sa-index = { git = "https://github.com/unipept/unipept-index.git" }
 fa-compression = { git = "https://github.com/unipept/unipept-index.git" }
 thiserror = "2.0"
+tracing = "0.1.40"
 
 # Storage backend, forwarded to sa-server. No features = fully preloaded.
 [features]

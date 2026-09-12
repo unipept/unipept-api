@@ -22,6 +22,10 @@ pub struct AppState {
     pub index: Arc<Index>
 }
 pub async fn start(index_location: &str, database_address: &str, port: u32) -> Result<(), errors::AppError> {
+    // First, so that a failure loading the database, the datastore, or the index is loggable too
+    // — those are the failures that matter most.
+    middleware::tracing::init_tracing_subscriber();
+
     let version = format!("{}/.version", index_location);
 
     let sampledata = format!("{}/datastore/sampledata.json", index_location);
@@ -53,8 +57,7 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
     // Neither the version nor the backend is recorded anywhere else, so this is the only way
     // to tell what is actually running. The configurations differ enough in memory profile to
     // be worth stating.
-    eprintln!("Unipept API version: {}", env!("CARGO_PKG_VERSION"));
-    eprintln!("Index storage backend: {}", Index::backend_summary());
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), backend = %Index::backend_summary(), "starting unipept api");
 
     let index = Index::try_from_files(&sa, &proteins, &mappings, &kmer_table)?;
 
@@ -64,14 +67,11 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
         index: Arc::new(index)
     };
 
-    // Once per process: `.init()` panics if a subscriber is already set.
-    middleware::tracing::init_tracing_subscriber();
-
     let app = routes::create_app(app_state);
 
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
 
-    eprintln!("Server running on: http://{}", listener.local_addr()?);
+    tracing::info!(address = %listener.local_addr()?, "listening");
 
     axum::serve(listener, ServiceExt::<Request>::into_make_service(app)).await?;
 

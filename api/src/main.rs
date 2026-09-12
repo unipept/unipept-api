@@ -17,7 +17,7 @@ async fn main() {
     let args = Arguments::parse();
 
     if let Err(e) = start(&args.index_location, &args.database_address, args.port).await {
-        eprintln!("{}", e);
+        tracing::error!(error = &e as &dyn std::error::Error, "failed to start");
         std::process::exit(1);
     }
 }

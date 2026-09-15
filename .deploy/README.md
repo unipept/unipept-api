@@ -7,8 +7,44 @@ holding copies.
 
 | Path | What it is |
 | --- | --- |
+| `lib.sh` | shared shell, sourced by the scripts |
+| `rollout.sh` | updates every server one at a time. Run on the load balancer |
+| `servers.example.conf` | the inventory. Copy to `servers.conf` on the load balancer |
+| `rollout.conf.example` | load balancer settings. Copy to `rollout.conf` |
+| `loadbalancer/haproxy.sh` | the HAProxy runtime API: drain, ready, wait |
 | `server/unipept-api.service` | systemd **user** unit, installed at `~unipept/.config/systemd/user/` |
 | `server/unipept-api.env.example` | per-host configuration, installed at `/opt/unipept-api/etc/unipept-api.env` |
+| `server/install.sh` | prepares a host once. The only step that needs root |
+| `server/deploy.sh` | installs or puts back a binary on one server |
+
+## Deploying
+
+One server, on that server, as the `unipept` user:
+
+```bash
+/opt/unipept-api/lib/deploy.sh deploy --version v2.6.0
+/opt/unipept-api/lib/deploy.sh rollback
+```
+
+Every server, from the load balancer:
+
+```bash
+./rollout.sh --version v2.6.0 --dry-run
+./rollout.sh --version v2.6.0
+```
+
+Each server drains, finishes what it was answering, takes the binary, and returns only after it
+answers `/health` itself. HAProxy's own view is never the readiness signal: with `fall 100` at a
+two-second interval it needs about 200 seconds to notice a server that stopped working.
+
+A server that does not come back is rolled back and left out of rotation, and the servers after it
+are not touched.
+
+A server is drained from every backend its inventory line names, so routing the database endpoints
+to a backend of their own costs nothing here beyond that list.
+
+Draining and restoring changes a server's HAProxy state, and that backend has `email-alert`, so
+each transition sends mail.
 
 ## A user unit, so a deploy needs no privilege
 

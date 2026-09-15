@@ -188,7 +188,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Run shellcheck
-        run: shellcheck -x .deploy/lib.sh .deploy/server/*.sh .deploy/tests/*.sh .deploy/tests/server/*.sh
+        run: shellcheck -x .deploy/lib.sh .deploy/rollout.sh .deploy/loadbalancer/*.sh .deploy/server/*.sh .deploy/tests/*.sh .deploy/tests/*/*.sh
 
   docs:
     # `-D warnings` turns a broken intra-doc link — which nothing else here notices — into a

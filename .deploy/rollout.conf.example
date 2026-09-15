@@ -1,0 +1,21 @@
+# Load balancer settings for rollout.sh. Copy to rollout.conf beside it; rollout.conf is not in
+# this repository.
+
+# HAProxy runtime socket. The socket ships as srw------- root:haproxy, so either run the rollout
+# as root, or set `mode 660` on the stats socket line in haproxy.cfg and put the operator in the
+# haproxy group. Only the load balancer side needs this; the servers need no privilege at all.
+HAPROXY_SOCKET=/run/haproxy/haproxy.sock
+
+# SSH user on every API server. It is the service user: it owns the binary directory and restarts
+# its own user unit, so no sudo is involved. Leave empty to let ~/.ssh/config decide.
+SSH_USER=unipept
+
+# Where install.sh put deploy.sh on the server.
+REMOTE_DEPLOY=/opt/unipept-api/lib/deploy.sh
+
+# Seconds to wait for a draining server to finish. Above the API's own 150-second request timeout.
+DRAIN_TIMEOUT=240
+
+# Seconds to wait for a restarted server to answer /health. The preloaded and hybrid builds read
+# the index into memory first.
+READY_TIMEOUT=900

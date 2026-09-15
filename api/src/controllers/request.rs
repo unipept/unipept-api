@@ -1,6 +1,6 @@
 use axum::{
     Json, RequestExt,
-    extract::{FromRequest, FromRequestParts, Multipart, RawForm, Request},
+    extract::{FromRequest, FromRequestParts, Multipart, RawForm, Request, rejection::JsonRejection},
     http::{StatusCode, header::CONTENT_TYPE, request::Parts},
     response::{IntoResponse, Response}
 };
@@ -10,7 +10,7 @@ use serde::{
 };
 use serde_qs::{Config, DuplicateKeyBehavior};
 
-use crate::errors::error_response;
+use crate::errors::reject;
 
 /// The query-string parser every body path shares.
 ///
@@ -101,8 +101,43 @@ where
         // deserialisation error rather than a panic, which is what the unwrap here used to be.
         Ok(Self(
             QS.deserialize_str(query)
-                .map_err(|_| error_response(StatusCode::BAD_REQUEST, "invalid query string"))?
+                .map_err(|error| reject(StatusCode::BAD_REQUEST, "invalid query string", Some(&error)))?
         ))
+    }
+}
+
+/// Why a body could not be read.
+///
+/// `Form` and `MultiPart` carry no status of their own: `PostContent` answers 422 for every one of
+/// its three branches, so a status chosen at the point of failure would be neither the one the
+/// caller receives nor the one the log should name.
+pub struct BodyRejection {
+    reason: &'static str,
+    cause: Option<Box<dyn std::error::Error + Send + Sync>>
+}
+
+impl BodyRejection {
+    fn new(reason: &'static str, cause: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self { reason, cause: Some(Box::new(cause)) }
+    }
+
+    /// A refusal with no underlying error: nothing failed, the body was not what it claimed.
+    fn bare(reason: &'static str) -> Self {
+        Self { reason, cause: None }
+    }
+}
+
+/// Logs this refusal and answers it.
+///
+/// 422 for every one of them, because `PostContent` answers 422 for every one of them — the status
+/// written to the log has to be the status the caller received.
+impl IntoResponse for BodyRejection {
+    fn into_response(self) -> Response {
+        reject(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            self.reason,
+            self.cause.as_ref().map(|cause| cause.as_ref() as &(dyn std::error::Error + 'static))
+        )
     }
 }
 
@@ -113,19 +148,13 @@ where
     S: Send + Sync,
     T: serde::de::DeserializeOwned
 {
-    type Rejection = Response;
+    type Rejection = BodyRejection;
 
     async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
-        let RawForm(form) = req
-            .extract()
-            .await
-            .map_err(|_| error_response(StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body"))?;
+        let RawForm(form) = req.extract().await.map_err(|error| BodyRejection::new("Invalid request body", error))?;
 
         // Undecoded, for the same reason as `GetContent` above.
-        Ok(Self(
-            QS.deserialize_bytes(&form)
-                .map_err(|_| error_response(StatusCode::BAD_REQUEST, "invalid form body"))?
-        ))
+        Ok(Self(QS.deserialize_bytes(&form).map_err(|error| BodyRejection::new("invalid form body", error))?))
     }
 }
 
@@ -136,12 +165,12 @@ where
     S: Send + Sync,
     T: serde::de::DeserializeOwned
 {
-    type Rejection = Response;
+    type Rejection = BodyRejection;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
         let mut multipart = Multipart::from_request(req, state)
             .await
-            .map_err(|_| error_response(StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body"))?;
+            .map_err(|error| BodyRejection::new("Invalid request body", error))?;
 
         // Every step here reads client-supplied bytes and every one of them used to unwrap: a
         // truncated body, a field with no name, or a read that fails part-way through a field each
@@ -153,19 +182,14 @@ where
             let field = multipart
                 .next_field()
                 .await
-                .map_err(|_| (StatusCode::BAD_REQUEST, "malformed multipart body").into_response())?;
+                .map_err(|error| BodyRejection::new("malformed multipart body", error))?;
 
             let Some(field) = field else { break };
 
-            let name = field
-                .name()
-                .ok_or_else(|| (StatusCode::BAD_REQUEST, "multipart field without a name").into_response())?
-                .to_string();
+            let name = field.name().ok_or_else(|| BodyRejection::bare("multipart field without a name"))?.to_string();
 
-            let value = field
-                .text()
-                .await
-                .map_err(|_| (StatusCode::BAD_REQUEST, "could not read multipart field").into_response())?;
+            let value =
+                field.text().await.map_err(|error| BodyRejection::new("could not read multipart field", error))?;
 
             // Encoded rather than concatenated: `text()` has already decoded this part, so
             // appending it raw let a value carrying `&` become parameters of its own and a `+`
@@ -178,7 +202,10 @@ where
             form_urlencoded::Serializer::new(&mut querystring).append_pair(&name, &value);
         }
 
-        Ok(Self(QS.deserialize_str(&querystring).map_err(|_| StatusCode::BAD_REQUEST.into_response())?))
+        Ok(Self(
+            QS.deserialize_str(&querystring)
+                .map_err(|error| BodyRejection::new("invalid multipart body", error))?
+        ))
     }
 }
 
@@ -187,9 +214,11 @@ pub struct PostContent<T>(pub T);
 impl<S, T> FromRequest<S> for PostContent<T>
 where
     S: Send + Sync,
-    Json<T>: FromRequest<()>,
-    Form<T>: FromRequest<()>,
-    MultiPart<T>: FromRequest<()>,
+    // The rejection types are named rather than left open: `Json`'s carries the reason a body did
+    // not parse, and the other two carry a reason and a cause for this extractor to answer with.
+    Json<T>: FromRequest<(), Rejection = JsonRejection>,
+    Form<T>: FromRequest<(), Rejection = BodyRejection>,
+    MultiPart<T>: FromRequest<(), Rejection = BodyRejection>,
     T: 'static + DeserializeOwned
 {
     type Rejection = Response;
@@ -203,27 +232,21 @@ where
                 let Json(payload) = req
                     .extract()
                     .await
-                    .map_err(|_| error_response(StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body"))?;
+                    .map_err(|error| reject(StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body", Some(&error)))?;
                 return Ok(Self(payload));
             }
 
             if content_type.starts_with("application/x-www-form-urlencoded") {
-                let Form(payload) = req
-                    .extract()
-                    .await
-                    .map_err(|_| error_response(StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body"))?;
+                let Form(payload) = req.extract().await.map_err(BodyRejection::into_response)?;
                 return Ok(Self(payload));
             }
 
             if content_type.starts_with("multipart/form-data") {
-                let MultiPart(payload) = req
-                    .extract()
-                    .await
-                    .map_err(|_| error_response(StatusCode::UNPROCESSABLE_ENTITY, "Invalid request body"))?;
+                let MultiPart(payload) = req.extract().await.map_err(BodyRejection::into_response)?;
                 return Ok(Self(payload));
             }
         }
 
-        Err(StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response())
+        Err(reject(StatusCode::UNSUPPORTED_MEDIA_TYPE, "unsupported content type", None))
     }
 }

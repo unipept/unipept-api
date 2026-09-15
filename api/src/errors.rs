@@ -9,13 +9,13 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 #[allow(clippy::enum_variant_names)]
 pub enum AppError {
-    #[error("{0}")]
+    #[error("I/O error")]
     IoError(#[from] std::io::Error),
-    #[error("Data store error: {0}")]
+    #[error("Data store error")]
     DataStoreError(#[from] datastore::DataStoreError),
-    #[error("Index error: {0}")]
+    #[error("Index error")]
     IndexError(#[from] index::IndexError),
-    #[error("Database error: {0}")]
+    #[error("Database error")]
     DatabaseError(#[from] database::DatabaseError)
 }
 
@@ -24,8 +24,10 @@ pub enum ApiError {
     #[error("Json error")]
     JsonError(#[from] serde_json::Error),
     #[error("Database error")]
-    DatabaseError(database::DatabaseError),
-    #[error("Unknown rank error")]
+    DatabaseError(#[source] database::DatabaseError),
+    // The payload is the message the caller is answered with; it names the rank itself, so the
+    // variant adds no prefix of its own.
+    #[error("{0}")]
     UnknownRankError(String),
     #[error("Join error")]
     JoinError(#[from] tokio::task::JoinError),
@@ -66,19 +68,55 @@ pub fn error_response(status: StatusCode, message: impl Into<String>) -> Respons
     (status, Json(ErrorBody { error: message.into() })).into_response()
 }
 
+/// A refusal from an extractor, logged and answered.
+///
+/// An extractor rejects before any handler runs, so no [`ApiError`] exists and nothing else writes
+/// the reason down. Without this the journal holds a status and a latency for such a request and
+/// nothing about what was wrong with it.
+///
+/// `reason` is what the caller is told. `cause` is what it is not: recorded as `dyn Error`, the
+/// same as on the [`ApiError`] path, so the subscriber walks `source()` and the log holds the whole
+/// chain — `serde_qs` naming the field it could not read, rather than a fixed "invalid query
+/// string". A `None` cause records no field at all.
+pub fn reject(status: StatusCode, reason: &'static str, cause: Option<&(dyn std::error::Error + 'static)>) -> Response {
+    tracing::warn!(status = status.as_u16(), reason, error = cause, "request refused");
+    error_response(status, reason)
+}
+
+impl ApiError {
+    /// Whether this service failed, or the caller asked for something it will not do.
+    ///
+    /// Not derivable from the status, in either direction. `NotImplementedError` answers 501 for a
+    /// combination of parameters the caller chose, which is a refusal; `JsonError` answers 400 but
+    /// is raised only by this service serialising its own response, which is a fault. An error rate
+    /// counted from the status alone would page for the first and miss the second.
+    fn is_fault(&self) -> bool {
+        matches!(self, ApiError::DatabaseError(_) | ApiError::JoinError(_) | ApiError::JsonError(_))
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        // Log the full error details
-        eprintln!("API Error: {:?}", self);
-
-        let (status, message) = match self {
+        // Matched by reference, so `self` survives to be logged below. The three owned messages
+        // are cloned rather than moved out; an error response is not a path where one `String`
+        // matters.
+        let (status, message) = match &self {
             ApiError::JsonError(_) => (StatusCode::BAD_REQUEST, "Invalid JSON".to_string()),
             ApiError::DatabaseError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
-            ApiError::UnknownRankError(message) => (StatusCode::BAD_REQUEST, message),
-            ApiError::NotImplementedError(message) => (StatusCode::NOT_IMPLEMENTED, message),
-            ApiError::InvalidParameter(message) => (StatusCode::BAD_REQUEST, message),
+            ApiError::UnknownRankError(message) => (StatusCode::BAD_REQUEST, message.clone()),
+            ApiError::NotImplementedError(message) => (StatusCode::NOT_IMPLEMENTED, message.clone()),
+            ApiError::InvalidParameter(message) => (StatusCode::BAD_REQUEST, message.clone()),
             ApiError::JoinError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
         };
+
+        // Recorded as `dyn Error` rather than as text: the subscriber walks `source()` and prints
+        // the causes. The field is written unquoted, so any caller-supplied text a variant carries
+        // has to reach its message through `{:?}`, or a newline in it forges a line in the journal.
+        if self.is_fault() {
+            tracing::error!(status = status.as_u16(), error = &self as &dyn std::error::Error, "request failed");
+        } else {
+            tracing::warn!(status = status.as_u16(), error = &self as &dyn std::error::Error, "request refused");
+        }
 
         error_response(status, message)
     }

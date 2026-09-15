@@ -11,16 +11,20 @@
 //! Endpoint tests need `#[tokio::test(flavor = "multi_thread")]` — the handlers call
 //! `block_in_place`, which panics on the default current-thread runtime.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use axum::{
+    Router,
     body::Body,
     http::{Request, StatusCode}
 };
 use http_body_util::BodyExt;
 use tempfile::TempDir;
 use tower::ServiceExt;
-use unipept_api::{AppState, routes::create_app};
+use unipept_api::{AppState, middleware::normalize_path::NormalizePath, routes::create_app};
+
+/// 50 MiB, the ceiling `create_router` installs.
+pub const BODY_LIMIT: usize = 50 * 1024 * 1024;
 
 /// Builds the corpus into a temporary directory and returns state over it.
 ///
@@ -115,4 +119,58 @@ pub async fn post_json(path: &str, body: serde_json::Value) -> (StatusCode, serd
     let answered = request_json(state, request).await;
     drop(dir);
     answered
+}
+
+/// Collects rendered log lines, so a test can assert on what the journal would hold.
+#[derive(Clone, Default)]
+pub struct Captured(Arc<Mutex<Vec<u8>>>);
+
+impl Captured {
+    pub fn contents(&self) -> String {
+        String::from_utf8(self.0.lock().expect("the buffer is not poisoned").clone()).expect("log output is UTF-8")
+    }
+}
+
+impl std::io::Write for Captured {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().expect("the buffer is not poisoned").extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Captured {
+    type Writer = Self;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        self.clone()
+    }
+}
+
+/// Runs `request` through the app `build` returns, and gives back everything logged while it ran.
+///
+/// The subscriber is this thread's, not the process's: a global one can be installed only once,
+/// and each test has to read back its own lines. Callers must live in a test binary where every
+/// test installs one — see the module docs of `logging.rs` for why.
+///
+/// `build` rather than an `AppState`, because the layer stack under test is sometimes the one with
+/// a shortened timeout.
+pub async fn log_of(build: fn(AppState) -> NormalizePath<Router>, request: Request<Body>) -> String {
+    let captured = Captured::default();
+    let _guard = tracing::subscriber::set_default(
+        tracing_subscriber::fmt()
+            .with_writer(captured.clone())
+            .with_ansi(false)
+            .with_max_level(tracing::Level::TRACE)
+            .finish()
+    );
+
+    let (dir, state) = offline_state();
+    let _ = build(state).oneshot(request).await.expect("the app responds");
+    drop(dir);
+
+    captured.contents()
 }

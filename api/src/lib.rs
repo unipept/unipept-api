@@ -14,6 +14,7 @@ pub mod errors;
 pub mod helpers;
 pub mod middleware;
 pub mod routes;
+pub mod shutdown;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -79,7 +80,14 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
 
     tracing::info!(address = %listener.local_addr()?, "listening");
 
-    axum::serve(listener, ServiceExt::<Request>::into_make_service(app)).await?;
+    // Without `with_graceful_shutdown` the process ends on SIGTERM while requests are still being
+    // answered. With it, the listener closes on the signal and `serve` returns once the handlers
+    // that had already started have finished.
+    axum::serve(listener, ServiceExt::<Request>::into_make_service(app))
+        .with_graceful_shutdown(shutdown::requested())
+        .await?;
+
+    tracing::info!("stopped");
 
     Ok(())
 }

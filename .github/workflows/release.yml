@@ -1,0 +1,151 @@
+# A release is the consequence of a tag, not a separate manual step. A tag that disagrees with the
+# workspace version releases nothing: no build runs and no release is created.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    # The tag and the workspace version are one decision. Nothing else compares them.
+    name: Tag matches the workspace version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Compare the tag with the workspace version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          declared=$(python3 -c "import tomllib; print(tomllib.load(open('Cargo.toml','rb'))['workspace']['package']['version'])")
+          tagged=${GITHUB_REF_NAME#v}
+          if [ "$declared" != "$tagged" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match the workspace version ${declared}. Bump the version in the commit you tag."
+            exit 1
+          fi
+          echo "version=${declared}" >> "$GITHUB_OUTPUT"
+
+  build:
+    # In a ubuntu:22.04 container rather than on a 22.04 runner: production is 22.04, and that
+    # runner label is deprecated from 2026-09-17. The container pins glibc 2.35 either way.
+    #
+    # The storage backend is compiled in, so a host cannot pick one at startup and every backend a
+    # host might need is built here. The list is the one ci.yml already checks and tests.
+    name: Build ${{ matrix.variant }}
+    needs: guard
+    runs-on: ubuntu-latest
+    container: ubuntu:22.04
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: mmap
+            features: mmap
+          - variant: preloaded
+            features: ''
+          - variant: mmap-text
+            features: mmap,preloaded-text
+          - variant: mmap-proteins
+            features: mmap,preloaded-proteins
+          - variant: mmap-mapping
+            features: mmap,preloaded-mapping
+
+    steps:
+      # Before the checkout, which needs git in the container.
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential ca-certificates cmake curl git libssl-dev pkg-config
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.variant }}
+
+      - name: Build the release binary
+        shell: bash
+        env:
+          FEATURES: ${{ matrix.features }}
+        run: |
+          set -euo pipefail
+          if [ -n "${FEATURES}" ]; then
+            cargo build --release --locked -p unipept-api --features "${FEATURES}"
+          else
+            cargo build --release --locked -p unipept-api
+          fi
+
+      # The name is what a server asks for: VARIANT in its environment file is the last field.
+      - name: Name the asset
+        shell: bash
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          mv target/release/unipept-api "dist/unipept-api-${VERSION}-x86_64-linux-gnu-${VARIANT}"
+
+      - name: Upload the asset
+        uses: actions/upload-artifact@v7
+        with:
+          name: unipept-api-${{ matrix.variant }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Create the release
+    needs: [guard, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download every asset
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: unipept-api-*
+          merge-multiple: true
+
+      # One file for all five, so a deploy verifies what it downloaded against a single source.
+      - name: Write the checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum unipept-api-* > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --generate-notes \
+            dist/*

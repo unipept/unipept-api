@@ -28,9 +28,7 @@ http = "1.1.0"
 tower-layer = "0.3.2"
 tower-service = "0.3.2"
 itertools = "0.15.0"
-# rustls, not the platform TLS: a released binary then links no libssl, and the only request it
-# makes is to OpenSearch on localhost.
-reqwest = { version = "0.13.2", default-features = false, features = ["json", "rustls"] }
+reqwest = { version = "0.13.2", features = [ "json" ] }
 
 # Storage backend, forwarded to sa-server via `index`.
 [features]

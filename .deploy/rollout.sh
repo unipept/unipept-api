@@ -65,10 +65,12 @@ ALLOW_DOWNTIME=false
 declare -A STATUS=()
 
 while [ $# -gt 0 ]; do
+    # Two arguments or usage: `shift 2` with one left fails, and set -e would exit before the
+    # check below, saying nothing at all.
     case $1 in
-        --version) VERSION=${2:-}; shift 2 ;;
-        --only) ONLY=${2:-}; shift 2 ;;
-        --inventory) INVENTORY=${2:-}; shift 2 ;;
+        --version) [ $# -ge 2 ] || usage; VERSION=$2; shift 2 ;;
+        --only) [ $# -ge 2 ] || usage; ONLY=$2; shift 2 ;;
+        --inventory) [ $# -ge 2 ] || usage; INVENTORY=$2; shift 2 ;;
         --dry-run) DRY_RUN=true; shift ;;
         --allow-downtime) ALLOW_DOWNTIME=true; shift ;;
         *) usage ;;
@@ -101,10 +103,13 @@ ssh_target() {
     if [ -n "$SSH_USER" ]; then printf '%s@%s\n' "$SSH_USER" "$1"; else printf '%s\n' "$1"; fi
 }
 
+# -n throughout: ssh reads its standard input to forward it, and these run inside `while read`
+# loops whose standard input is the inventory. Without it the first call swallows the rest of the
+# fleet and the rollout silently stops after one server.
 on_server() {
     local host=$1; shift
     # shellcheck disable=SC2029  # the command is built here on purpose, not on the server.
-    ssh -o BatchMode=yes "$(ssh_target "$host")" "${REMOTE_DEPLOY} $*"
+    ssh -n -o BatchMode=yes "$(ssh_target "$host")" "${REMOTE_DEPLOY} $*"
 }
 
 # Downloads the release once, for every server to be fed from, and prints "name asset" per server.
@@ -142,10 +147,13 @@ preflight() {
             log "preflight: ${name} is ${states}"
             failures=$((failures + 1))
         fi
-        if [ "$(http_code "http://${host}:${port}/health")" != "200" ]; then
-            log "preflight: ${name} does not answer /health"
-            failures=$((failures + 1))
-        fi
+        local route
+        for route in /health /health/database; do
+            if [ "$(http_code "http://${host}:${port}${route}")" != "200" ]; then
+                log "preflight: ${name} does not answer ${route}"
+                failures=$((failures + 1))
+            fi
+        done
     done < <(read_inventory)
 
     [ "$failures" -eq 0 ] || die "${failures} preflight problem(s); fix the fleet before rolling out"
@@ -165,11 +173,17 @@ update_server() {
         die "${server} is the only server UP in one of ${backends//,/, }; draining it is an outage. Pass --allow-downtime to accept that."
     fi
 
+    # Until the binary is touched, nothing has changed on the server, so a failure here — a drain
+    # that does not empty, say — has to put it back rather than leave it out of rotation for a
+    # deploy that never happened.
+    restore_on_failure() { "$HAPROXY" ready "$target" || log "could not restore ${target}; do it by hand"; }
+    trap restore_on_failure ERR
     "$HAPROXY" drain "$target"
     "$HAPROXY" wait-empty "$target" "$DRAIN_TIMEOUT"
     # Out of rotation entirely while it restarts, so the checks that must fail during startup do
     # not count towards `fall` and do not email twice.
     "$HAPROXY" maint "$target"
+    trap - ERR
 
     if ! rollout_binary "$name" "$host" "$port" "$asset" "$directory"; then
         log "${name} failed; rolling it back and leaving it out of rotation"
@@ -188,16 +202,29 @@ rollout_binary() {
     local name=$1 host=$2 port=$3 asset=$4 directory=$5
     local remote="/tmp/unipept-api-rollout.$$"
 
-    ssh -o BatchMode=yes "$(ssh_target "$host")" "mkdir -p ${remote}" || return 1
-    scp -q "${directory}/${asset}" "${directory}/SHA256SUMS" "$(ssh_target "$host"):${remote}/" || return 1
+    ssh -n -o BatchMode=yes "$(ssh_target "$host")" "mkdir -p ${remote}" || return 1
 
-    on_server "$host" deploy --from "${remote}/${asset}" --timeout "$READY_TIMEOUT" || return 1
-    ssh -o BatchMode=yes "$(ssh_target "$host")" "rm -rf ${remote}" || true
+    # Cleared however this returns: a failed attempt would otherwise leave a release binary behind,
+    # and the next attempt picks a new name rather than reusing it.
+    clear_remote() { ssh -n -o BatchMode=yes "$(ssh_target "$host")" "rm -rf ${remote}" || true; }
+
+    if ! scp -q "${directory}/${asset}" "${directory}/SHA256SUMS" "$(ssh_target "$host"):${remote}/"; then
+        clear_remote
+        return 1
+    fi
+
+    if ! on_server "$host" deploy --from "${remote}/${asset}" --timeout "$READY_TIMEOUT"; then
+        clear_remote
+        return 1
+    fi
+    clear_remote
 
     # deploy.sh already waited for /health on the server itself. This asks from the load balancer,
     # which is the path that matters, and checks the database separately.
     wait_for_http "http://${host}:${port}/health" 60 || return 1
-    if [ "$(http_code "http://${host}:${port}/health/database")" != "200" ]; then
+    # Polled, not asked once: the health route gives OpenSearch 2 seconds, and a process that has
+    # just restarted can miss that on its first connection without anything being wrong.
+    if ! wait_for_http "http://${host}:${port}/health/database" 30; then
         log "${name} serves but its OpenSearch does not answer"
         return 1
     fi
@@ -218,10 +245,16 @@ rollout_binary() {
 main() {
     local directory line name host port backends server
 
-    # Once, rather than on every loop that wants it.
+    # Once, rather than on every loop that wants it. Through a variable rather than a process
+    # substitution: `read_inventory` dies on a malformed line, and a subshell's exit would leave
+    # mapfile reporting success with a short fleet and the rollout calling that a finished run.
     local -a servers=()
-    mapfile -t servers < <(read_inventory)
-    [ "${#servers[@]}" -gt 0 ] || die "the inventory selects no server"
+    local inventory
+    inventory=$(read_inventory)
+    mapfile -t servers <<<"$inventory"
+    if [ "${#servers[@]}" -eq 0 ] || [ -z "${servers[0]}" ]; then
+        die "the inventory selects no server"
+    fi
 
     if [ "$DRY_RUN" = true ]; then
         log "dry run: nothing is changed"
@@ -242,9 +275,16 @@ main() {
 
     preflight
 
-    # name -> asset, so the release is downloaded once however many servers share a variant.
+    # name -> asset, so the release is downloaded once however many servers share a variant. Read
+    # into a variable first: a failure inside fetch_release has to stop the rollout before any
+    # server is drained, and a process substitution would hide it.
+    local fetched
+    fetched=$(fetch_release "$directory")
+
     local -A asset_of=()
-    while read -r name asset; do asset_of[$name]=$asset; done < <(fetch_release "$directory")
+    while read -r name asset; do
+        [ -n "$name" ] && asset_of[$name]=$asset
+    done <<<"$fetched"
 
     for line in "${servers[@]}"; do
         read -r name host port backends server <<<"$line"

@@ -69,10 +69,14 @@ split_target() {
     printf '%s\n%s\n' "${backends//,/ }" "$server"
 }
 
-# One `show stat` covering every backend named, as "backend status sessions" per line.
+# One `show stat` covering every backend named, as "backend sessions status" per line.
 #
-# One dump answers for all of them, so a poll costs a single socat call however many backends a
-# server sits in. A backend that holds no such server is an error, not a silent omission.
+# status comes last on purpose: it is not one word — HAProxy appends the check counter in a
+# transitional state, so it reads "UP 1/100" — and anything after it in the line would be read as
+# part of it. Callers take $3 onwards as the status and $2 as the session count.
+#
+# One dump answers for all the backends, so a poll costs a single socat call however many a server
+# sits in. A backend that holds no such server is an error, not a silent omission.
 server_rows() {
     local backends=$1 server=$2 rows expected found
 
@@ -89,7 +93,7 @@ server_rows() {
             if (!status || !scur) exit 2
             next
         }
-        ($1 in want) && $2 == sv { print $1, $status, $scur }
+        ($1 in want) && $2 == sv { print $1, $scur, $status }
     ')
 
     expected=$(printf '%s' "$backends" | wc -w)
@@ -126,7 +130,7 @@ wait_empty() {
 
     deadline=$((SECONDS + timeout))
     while [ "$SECONDS" -lt "$deadline" ]; do
-        open=$(server_rows "$backends" "$server" | awk '$3 != 0 { printf "%s=%s ", $1, $3 }')
+        open=$(server_rows "$backends" "$server" | awk '$2 != 0 { printf "%s=%s ", $1, $2 }')
         if [ -z "$open" ]; then
             log "${server} has no open sessions in ${backends// /, }"
             return 0
@@ -149,7 +153,7 @@ wait_up() {
 
     deadline=$((SECONDS + timeout))
     while [ "$SECONDS" -lt "$deadline" ]; do
-        pending=$(server_rows "$backends" "$server" | awk '$2 !~ /^UP/ { printf "%s=%s ", $1, $2 }')
+        pending=$(server_rows "$backends" "$server" | awk '$3 !~ /^UP/ { printf "%s=%s ", $1, $3 }')
         if [ -z "$pending" ]; then
             log "${server} is UP in ${backends// /, }"
             return 0
@@ -196,17 +200,24 @@ least_up() {
 states() {
     local backends server
     { read -r backends; read -r server; } < <(split_target "$1")
-    server_rows "$backends" "$server" | awk '{ printf "%s=%s ", $1, $2 } END { printf "\n" }'
+    server_rows "$backends" "$server" | awk '{ printf "%s=%s ", $1, $3 } END { printf "\n" }'
 }
 
-# One field of one backend, for an operator reading a single value.
-single_field() {
-    local target=$1 column=$2 backends server
+# One value of one backend, for an operator reading it rather than a rollout waiting on it.
+#
+# `status` keeps its counter: "UP 1/100" is what HAProxy says, and truncating it to UP would hide
+# that a server is still being checked back in.
+single_value() {
+    local target=$1 field=$2 backends server
     { read -r backends; read -r server; } < <(split_target "$target")
     case $backends in
         *' '*) die "this command takes one backend, got '${backends// /, }'" ;;
     esac
-    server_rows "$backends" "$server" | awk -v c="$column" '{ print $c }'
+
+    case $field in
+        sessions) server_rows "$backends" "$server" | awk '{ print $2 }' ;;
+        status) server_rows "$backends" "$server" | awk '{ $1 = ""; $2 = ""; sub(/^  */, ""); print }' ;;
+    esac
 }
 
 [ $# -ge 2 ] || usage
@@ -218,8 +229,8 @@ case $command in
     maint) set_state "$1" maint ;;
     ready) set_state "$1" ready ;;
     states) states "$1" ;;
-    state) single_field "$1" 2 ;;
-    sessions) single_field "$1" 3 ;;
+    state) single_value "$1" status ;;
+    sessions) single_value "$1" sessions ;;
     wait-empty) [ $# -eq 2 ] || usage; wait_empty "$1" "$2" ;;
     wait-up) [ $# -eq 2 ] || usage; wait_up "$1" "$2" ;;
     up-count) up_count "$1" ;;

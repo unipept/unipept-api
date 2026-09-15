@@ -6,6 +6,11 @@ on:
   push:
     tags: ['v*']
 
+# A tag deleted and re-pushed would otherwise produce two runs racing to create one release.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -19,8 +24,24 @@ jobs:
       version: ${{ steps.version.outputs.version }}
 
     steps:
+      # The default branch too, so the tagged commit can be checked for being on it.
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # A tag is enough to publish, so it has to be a tag on reviewed code. The ruleset gates
+      # main; a tag on an unmerged branch would otherwise ship as a real release.
+      - name: Check the tag is on the default branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin "${GITHUB_REF_NAME}" "${{ github.event.repository.default_branch }}"
+          if ! git merge-base --is-ancestor "${GITHUB_REF_NAME}" \
+               "origin/${{ github.event.repository.default_branch }}"; then
+            echo "::error::${GITHUB_REF_NAME} is not on ${{ github.event.repository.default_branch }}. Merge first, then tag."
+            exit 1
+          fi
 
       - name: Compare the tag with the workspace version
         id: version
@@ -75,14 +96,15 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.variant }}
-
       # An empty --features is a no-op, so the preloaded leg needs no branch of its own.
       - name: Build the release binary
         run: cargo build --release --locked -p unipept-api --features "${{ matrix.features }}"
+
+      # The whole point of the 22.04 container is that the binary runs on 22.04. Nothing else here
+      # executes it, and a deploy finding out instead means a drained production server rolling
+      # back to the release before the one it was running.
+      - name: Check the binary runs in the container
+        run: ./target/release/unipept-api --version
 
       # The name is what a server asks for: VARIANT in its environment file is the last field.
       - name: Name the asset

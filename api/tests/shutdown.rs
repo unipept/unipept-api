@@ -29,8 +29,12 @@ async fn a_request_in_flight_outlives_sigterm() {
         get(move || {
             let entered = Arc::clone(&entered);
             async move {
-                // Reports that the request reached a handler, which is also what proves the
-                // shutdown future has been polled: `serve` polls it before it accepts.
+                // Reports that the request reached a handler. That does not prove the shutdown
+                // future has been polled — `serve` polls it from a task it spawns, with no
+                // ordering against the accept loop — so the signal below could in principle
+                // arrive before the handler is installed and end the test binary outright. The
+                // spawned task is scheduled long before a TCP connect completes, so it does not
+                // happen in practice.
                 entered.notify_one();
 
                 tokio::time::sleep(HANDLER_DURATION).await;
@@ -47,7 +51,11 @@ async fn a_request_in_flight_outlives_sigterm() {
 
     let request = tokio::spawn(async move { reqwest::get(format!("http://{address}/slow")).await });
 
-    in_a_handler.notified().await;
+    // Bounded: a request that never reaches the handler should fail this test, not hang until the
+    // CI job's own timeout takes the whole run down with nothing to read.
+    tokio::time::timeout(Duration::from_secs(30), in_a_handler.notified())
+        .await
+        .expect("the request should reach the handler");
 
     let killed = Command::new("kill")
         .args(["-TERM", &std::process::id().to_string()])

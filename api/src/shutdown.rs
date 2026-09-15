@@ -11,6 +11,14 @@ use tokio::signal::unix::{SignalKind, signal};
 ///
 /// SIGTERM is what systemd sends, SIGINT what a terminal sends, and either one means the same
 /// thing here.
+///
+/// `axum::serve` polls this from a task it spawns, so the handlers are installed when serving
+/// begins, not when `start` is called. A signal arriving during the index load therefore ends the
+/// process by its default disposition — which loses nothing, because nothing is being served yet.
+///
+/// Only the first signal is acted on. Once this resolves the streams are dropped, and tokio leaves
+/// its own handler installed process-wide, so a second SIGINT does not force an immediate exit the
+/// way it would without this module: a drain has to finish, or be ended with SIGKILL.
 pub async fn requested() {
     let signal = tokio::select! {
         name = wait_for(SignalKind::terminate(), "SIGTERM") => name,
@@ -28,10 +36,12 @@ pub async fn requested() {
 /// logged at ERROR.
 async fn wait_for(kind: SignalKind, name: &'static str) -> &'static str {
     match signal(kind) {
-        Ok(mut stream) => {
-            stream.recv().await;
-            name
-        }
+        // `None` means the stream closed rather than that a signal arrived, so it is not a request
+        // to stop and must not be treated as one, for the same reason a failed registration is not.
+        Ok(mut stream) => match stream.recv().await {
+            Some(()) => name,
+            None => std::future::pending().await
+        },
         Err(error) => {
             tracing::error!(
                 error = &error as &dyn std::error::Error,

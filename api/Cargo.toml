@@ -43,7 +43,7 @@ criterion = "0.8.2"
 futures-util = "0.3"
 fixtures = { path = "../fixtures", features = ["index-builder"] }
 tempfile = "3"
-# sync is test-only; resolver 3 keeps it out of the release build.
+# Named for the tests that use it; hyper and tokio-util already enable it in the release graph.
 tokio = { version = "1.44.2", features = ["sync"] }
 tower = { version = "0.5.3", features = ["util"] }
 httpmock = "0.7"

@@ -16,6 +16,47 @@ release_url() {
     printf 'https://github.com/%s/releases/download/%s/%s\n' "$REPOSITORY" "$tag" "$file"
 }
 
+# Every path `start` in api/src/lib.rs opens, relative to INDEX_LOCATION. The service cannot come up
+# without all of them, so a deploy that does not check them first trades a clear message for a
+# timeout.
+# shellcheck disable=SC2034  # read by the scripts that source this file.
+readonly INDEX_FILES="
+.version
+sa.bin
+proteins.bin
+mapping.bin
+kmer_table.bin
+datastore/sampledata.json
+datastore/ec_numbers.tsv
+datastore/go_terms.tsv
+datastore/interpro_entries.tsv
+datastore/proteomes.tsv
+datastore/lineages.tsv
+datastore/taxons.tsv
+"
+
+# The index files each storage backend reads into memory, by variant. The choice is compiled in, so
+# a host given the wrong build cannot correct it with a restart.
+#
+# mmap maps everything; preloaded holds all of it; hybrid maps only the suffix array, which is by far
+# the largest part, and holds the rest.
+files_resident_for() {
+    case $1 in
+        preloaded) printf 'sa.bin proteins.bin mapping.bin kmer_table.bin\n' ;;
+        hybrid) printf 'proteins.bin mapping.bin kmer_table.bin\n' ;;
+        mmap) printf '\n' ;;
+        *) die "unknown variant '$1'; expected mmap, preloaded or hybrid" ;;
+    esac
+}
+
+# A field from /proc/meminfo, in bytes. It reports kB.
+meminfo() {
+    local field=$1 value
+    value=$(awk -v f="${field}:" '$1 == f { print $2 }' /proc/meminfo)
+    [ -n "$value" ] || die "no ${field} in /proc/meminfo"
+    printf '%s\n' $((value * 1024))
+}
+
 log() {
     printf '%s  %s\n' "$(date -u '+%H:%M:%S')" "$*" >&2
 }
@@ -32,21 +73,28 @@ require_cmd() {
     done
 }
 
-# Checks one file against the SHA256SUMS that lists it.
-verify_sha256() {
+# Whether one file matches the SHA256SUMS that lists it. Returns non-zero rather than exiting, so a
+# caller that is collecting problems can carry on and report them all.
+sha256_matches() {
     local file=$1 sums=$2
     local name expected actual
 
     name=$(basename "$file")
-    [ -f "$sums" ] || die "no checksums at $sums"
+    [ -f "$sums" ] || { log "no checksums at $sums"; return 1; }
 
     expected=$(awk -v name="$name" '$2 == name || $2 == "*" name { print $1 }' "$sums")
-    [ -n "$expected" ] || die "$name is not listed in $sums"
+    [ -n "$expected" ] || { log "$name is not listed in $sums"; return 1; }
 
     actual=$(sha256sum "$file" | cut -d' ' -f1)
-    [ "$expected" = "$actual" ] || die "$name does not match its checksum"
+    [ "$expected" = "$actual" ] || { log "$name does not match its checksum"; return 1; }
 
-    log "$name matches its checksum"
+    return 0
+}
+
+# As `sha256_matches`, for a caller that has nothing to do but stop.
+verify_sha256() {
+    sha256_matches "$1" "$2" || die "refusing $(basename "$1")"
+    log "$(basename "$1") matches its checksum"
 }
 
 # The status a URL answers with, or 000 when it does not answer at all.
@@ -67,6 +115,40 @@ wait_for_http() {
     done
 
     return 1
+}
+
+# Sends one message to the team, through the MTA this host already runs for HAProxy's email-alert.
+#
+# curl rather than mail or sendmail: neither is installed on a stock Ubuntu 22.04, and curl is
+# already required here. The hostname goes in the URL path so that EHLO does not announce a filename.
+#
+# Never fatal. A rollout that has just failed must not also fail at telling somebody.
+notify() {
+    local subject=$1 body=$2 message
+
+    if [ -z "${NOTIFY_TO:-}" ]; then
+        log "no NOTIFY_TO set, so nobody was emailed: ${subject}"
+        return 0
+    fi
+
+    message=$(mktemp)
+    {
+        printf 'From: %s\n' "${NOTIFY_FROM:-unipept-rollout@$(hostname -f 2>/dev/null || hostname)}"
+        printf 'To: %s\n' "$NOTIFY_TO"
+        printf 'Subject: %s\n\n' "$subject"
+        printf '%s\n' "$body"
+    } > "$message"
+
+    if curl -s --max-time 20 \
+        --url "smtp://${NOTIFY_SMTP:-127.0.0.1:25}/$(hostname -f 2>/dev/null || hostname)" \
+        --mail-from "${NOTIFY_FROM:-unipept-rollout@$(hostname -f 2>/dev/null || hostname)}" \
+        --mail-rcpt "$NOTIFY_TO" --upload-file "$message"; then
+        log "emailed ${NOTIFY_TO}: ${subject}"
+    else
+        log "could not email ${NOTIFY_TO}; the message was: ${subject}"
+    fi
+    rm -f "$message"
+    return 0
 }
 
 # Reads one key out of `key=value` lines: a systemd environment file when given a path, otherwise

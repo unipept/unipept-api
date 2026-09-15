@@ -68,6 +68,17 @@ pub fn error_response(status: StatusCode, message: impl Into<String>) -> Respons
     (status, Json(ErrorBody { error: message.into() })).into_response()
 }
 
+impl ApiError {
+    /// Whether this service failed, or the caller asked for something it will not do.
+    ///
+    /// Not derivable from the status. `NotImplementedError` answers 501 for a combination of
+    /// parameters the caller chose, which is a refusal rather than a fault, and an error rate
+    /// counted from the status alone would page somebody for it.
+    fn is_fault(&self) -> bool {
+        matches!(self, ApiError::DatabaseError(_) | ApiError::JoinError(_))
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         // Matched by reference, so `self` survives to be logged below. The three owned messages
@@ -83,8 +94,8 @@ impl IntoResponse for ApiError {
         };
 
         // Recorded as `dyn Error` rather than as text: the subscriber walks `source()` and prints
-        // the causes. A caller's mistake is not a fault of this service, so only a 5xx is an error.
-        if status.is_server_error() {
+        // the causes.
+        if self.is_fault() {
             tracing::error!(status = status.as_u16(), error = &self as &dyn std::error::Error, "request failed");
         } else {
             tracing::warn!(status = status.as_u16(), error = &self as &dyn std::error::Error, "request refused");

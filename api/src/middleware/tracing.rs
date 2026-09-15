@@ -2,7 +2,7 @@ use std::io::IsTerminal;
 
 use tower_http::{
     classify::{ServerErrorsAsFailures, SharedClassifier},
-    trace::TraceLayer
+    trace::{DefaultMakeSpan, DefaultOnBodyChunk, DefaultOnEos, DefaultOnRequest, DefaultOnResponse, TraceLayer}
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -23,8 +23,21 @@ pub fn init_tracing_subscriber() {
         .try_init();
 }
 
-pub fn create_tracing_layer() -> TraceLayer<SharedClassifier<ServerErrorsAsFailures>> {
-    TraceLayer::new_for_http()
+/// The per-request tracing layer, with the failure line turned off.
+///
+/// `DefaultOnFailure` writes an `ERROR` for every 5xx, naming the status and the latency but not
+/// the cause. `ApiError` already writes one for the same response, and that one carries the
+/// `source()` chain. `()` is the no-op `OnFailure`, so a failed request produces one line, not two.
+pub fn create_tracing_layer() -> TraceLayer<
+    SharedClassifier<ServerErrorsAsFailures>,
+    DefaultMakeSpan,
+    DefaultOnRequest,
+    DefaultOnResponse,
+    DefaultOnBodyChunk,
+    DefaultOnEos,
+    ()
+> {
+    TraceLayer::new_for_http().on_failure(())
 }
 
 #[cfg(test)]

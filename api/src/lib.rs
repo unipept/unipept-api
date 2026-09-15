@@ -56,8 +56,10 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
 
     // Neither the version nor the backend is recorded anywhere else, so this is the only way
     // to tell what is actually running. The configurations differ enough in memory profile to
-    // be worth stating.
-    tracing::info!(version = env!("CARGO_PKG_VERSION"), backend = %Index::backend_summary(), "starting unipept api");
+    // be worth stating. The summary is itself a list of `key=value` pairs, so it is recorded as
+    // a string rather than with `%`: unquoted it would break the line into fields that are not.
+    let backend = Index::backend_summary();
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), backend, "starting unipept api");
 
     let index = Index::try_from_files(&sa, &proteins, &mappings, &kmer_table)?;
 

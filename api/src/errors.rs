@@ -25,7 +25,9 @@ pub enum ApiError {
     JsonError(#[from] serde_json::Error),
     #[error("Database error")]
     DatabaseError(#[source] database::DatabaseError),
-    #[error("Unknown rank error")]
+    // The payload is the message the caller is answered with; it names the rank itself, so the
+    // variant adds no prefix of its own.
+    #[error("{0}")]
     UnknownRankError(String),
     #[error("Join error")]
     JoinError(#[from] tokio::task::JoinError),
@@ -66,40 +68,27 @@ pub fn error_response(status: StatusCode, message: impl Into<String>) -> Respons
     (status, Json(ErrorBody { error: message.into() })).into_response()
 }
 
-impl ApiError {
-    /// The status each variant answers with.
-    fn status(&self) -> StatusCode {
-        match self {
-            ApiError::JsonError(_) => StatusCode::BAD_REQUEST,
-            ApiError::DatabaseError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            ApiError::UnknownRankError(_) => StatusCode::BAD_REQUEST,
-            ApiError::NotImplementedError(_) => StatusCode::NOT_IMPLEMENTED,
-            ApiError::InvalidParameter(_) => StatusCode::BAD_REQUEST,
-            ApiError::JoinError(_) => StatusCode::INTERNAL_SERVER_ERROR
-        }
-    }
-}
-
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let status = self.status();
+        // Matched by reference, so `self` survives to be logged below. The three owned messages
+        // are cloned rather than moved out; an error response is not a path where one `String`
+        // matters, and one match keeps the variant list in a single place.
+        let (status, message) = match &self {
+            ApiError::JsonError(_) => (StatusCode::BAD_REQUEST, "Invalid JSON".to_string()),
+            ApiError::DatabaseError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
+            ApiError::UnknownRankError(message) => (StatusCode::BAD_REQUEST, message.clone()),
+            ApiError::NotImplementedError(message) => (StatusCode::NOT_IMPLEMENTED, message.clone()),
+            ApiError::InvalidParameter(message) => (StatusCode::BAD_REQUEST, message.clone()),
+            ApiError::JoinError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
+        };
 
         // Recorded as `dyn Error` rather than as text: the subscriber walks `source()` and prints
         // the causes. A caller's mistake is not a fault of this service, so only a 5xx is an error.
         if status.is_server_error() {
-            tracing::error!(target: "unipept_api", status = status.as_u16(), error = &self as &dyn std::error::Error, "request failed");
+            tracing::error!(status = status.as_u16(), error = &self as &dyn std::error::Error, "request failed");
         } else {
-            tracing::warn!(target: "unipept_api", status = status.as_u16(), error = &self as &dyn std::error::Error, "request refused");
+            tracing::warn!(status = status.as_u16(), error = &self as &dyn std::error::Error, "request refused");
         }
-
-        let message = match self {
-            ApiError::JsonError(_) => "Invalid JSON".to_string(),
-            ApiError::DatabaseError(_) => "Internal server error".to_string(),
-            ApiError::UnknownRankError(message) => message,
-            ApiError::NotImplementedError(message) => message,
-            ApiError::InvalidParameter(message) => message,
-            ApiError::JoinError(_) => "Internal server error".to_string()
-        };
 
         error_response(status, message)
     }

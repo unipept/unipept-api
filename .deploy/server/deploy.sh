@@ -109,11 +109,13 @@ do_deploy() {
     local tag='' variant='' from='' timeout=$DEFAULT_READY_TIMEOUT
 
     while [ $# -gt 0 ]; do
+        # Two arguments or usage: `shift 2` with one left would fail, and under `set -e` that exits
+        # before the check below, so a mistyped flag would say nothing at all.
         case $1 in
-            --version) tag=${2:-}; shift 2 ;;
-            --variant) variant=${2:-}; shift 2 ;;
-            --from) from=${2:-}; shift 2 ;;
-            --timeout) timeout=${2:-}; shift 2 ;;
+            --version) [ $# -ge 2 ] || usage; tag=$2; shift 2 ;;
+            --variant) [ $# -ge 2 ] || usage; variant=$2; shift 2 ;;
+            --from) [ $# -ge 2 ] || usage; from=$2; shift 2 ;;
+            --timeout) [ $# -ge 2 ] || usage; timeout=$2; shift 2 ;;
             *) usage ;;
         esac
     done
@@ -142,14 +144,16 @@ do_deploy() {
     fi
 
     install_binary "$staged"
-    restart_service
 
-    if wait_until_healthy "$timeout"; then
+    # From here the new binary is in place, so every failure has to put the old one back. Without
+    # this, `set -e` would abort on a failed restart and leave the service down on a binary nobody
+    # chose, with the one that worked sitting in .previous.
+    if restart_service && wait_until_healthy "$timeout"; then
         log "deployed"
         return 0
     fi
 
-    log "the service did not become healthy, rolling back"
+    log "the service is not serving the new binary, rolling back"
     do_rollback --timeout "$timeout"
     die "deploy failed and was rolled back"
 }
@@ -159,7 +163,7 @@ do_rollback() {
 
     while [ $# -gt 0 ]; do
         case $1 in
-            --timeout) timeout=${2:-}; shift 2 ;;
+            --timeout) [ $# -ge 2 ] || usage; timeout=$2; shift 2 ;;
             *) usage ;;
         esac
     done
@@ -176,20 +180,24 @@ do_rollback() {
     log "rolled back"
 }
 
+# What a binary calls itself, or `unknown` for one too old to answer --version, which is every
+# release before #257. `|| true` throughout: `status` has to describe a broken host, not join it.
+reported_version() {
+    local binary=$1 reported=''
+
+    [ -x "$binary" ] || { printf -- '-\n'; return 0; }
+    reported=$("$binary" --version 2>/dev/null | awk '{ print $NF }') || true
+    printf '%s\n' "${reported:-unknown}"
+}
+
 # key=value lines, so the rollout can read them.
 do_status() {
     prepare_user_manager
 
-    local version='-' previous='-'
-
-    # An older binary has no --version, so an empty answer is reported rather than left blank.
-    [ -x "$BINARY" ] && version=$("$BINARY" --version 2>/dev/null | awk '{ print $NF }')
-    [ -x "$PREVIOUS" ] && previous=$("$PREVIOUS" --version 2>/dev/null | awk '{ print $NF }')
-
-    printf 'version=%s\n' "${version:-unknown}"
-    printf 'previous=%s\n' "${previous:-unknown}"
-    printf 'variant=%s\n' "$(env_value VARIANT "$ENV_FILE")"
-    printf 'port=%s\n' "$(env_value PORT "$ENV_FILE")"
+    printf 'version=%s\n' "$(reported_version "$BINARY")"
+    printf 'previous=%s\n' "$(reported_version "$PREVIOUS")"
+    printf 'variant=%s\n' "$(env_value VARIANT "$ENV_FILE" || true)"
+    printf 'port=%s\n' "$(env_value PORT "$ENV_FILE" || true)"
     printf 'active=%s\n' "$(systemctl --user is-active "$SERVICE" || true)"
 }
 

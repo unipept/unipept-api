@@ -20,14 +20,20 @@ readonly USER=unipept
 readonly ROOT=/opt/unipept-api
 readonly ENV_FILE="${ROOT}/etc/unipept-api.env"
 
-require_cmd install loginctl systemctl useradd
+require_cmd getent install loginctl setpriv systemctl useradd usermod
 [ "$(id -u)" -eq 0 ] || die "run this as root. It is the only step that needs it."
 
-# A home directory, because a user unit lives in it.
+# A home directory, because a user unit lives in it. A real shell, because the rollout runs
+# `ssh unipept@host .../deploy.sh`, and sshd execs a remote command through the login shell:
+# /usr/sbin/nologin answers "This account is currently not available" and runs nothing.
 if id "$USER" >/dev/null 2>&1; then
     log "the ${USER} user is already there"
+    # An account created before this script may still carry nologin, which would fail every deploy.
+    case $(getent passwd "$USER" | cut -d: -f7) in
+        *nologin | *false) usermod --shell /bin/bash "$USER"; log "gave ${USER} a login shell, for ssh" ;;
+    esac
 else
-    useradd --create-home --shell /usr/sbin/nologin "$USER"
+    useradd --create-home --shell /bin/bash "$USER"
     log "created the ${USER} user"
 fi
 
@@ -42,9 +48,12 @@ install -d -m 0755 -o "$USER" -g "$USER" "$ROOT" "${ROOT}/bin" "${ROOT}/etc" "${
 
 # Never overwritten: it holds this host's index path, its port and its storage backend.
 if [ -f "$ENV_FILE" ]; then
+    # Its contents are this host's, but the mode is ours to correct on an existing file.
+    chmod 0600 "$ENV_FILE"
     log "keeping the environment file already at ${ENV_FILE}"
 else
-    install -m 0644 -o "$USER" -g "$USER" "${HERE}/unipept-api.env.example" "$ENV_FILE"
+    # 0600: DATABASE_ADDRESS can carry credentials, and nothing but the service reads this.
+    install -m 0600 -o "$USER" -g "$USER" "${HERE}/unipept-api.env.example" "$ENV_FILE"
     log "wrote ${ENV_FILE} from the example. Edit it before starting the service."
 fi
 
@@ -81,6 +90,7 @@ cat >&2 <<EOF
 Still to do on this host:
   1. Edit ${ENV_FILE}: INDEX_LOCATION, DATABASE_ADDRESS, PORT and VARIANT.
   2. Make the index directory readable by ${USER}, and keep it out of /home.
-  3. As ${USER}: ${ROOT}/lib/deploy.sh deploy --version <tag>
-  4. Point HAProxy's server lines at PORT.
+  3. Give ${USER} an authorized_keys for the load balancer, if this host is rolled out to.
+  4. As ${USER}: ${ROOT}/lib/deploy.sh deploy --version <tag>
+  5. Point HAProxy's server lines at PORT.
 EOF

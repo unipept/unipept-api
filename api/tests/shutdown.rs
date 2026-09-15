@@ -7,14 +7,10 @@
 //! The route is a local one rather than the real router: what is under test is the shutdown
 //! future and the wait it causes, neither of which reads the request.
 
-use std::{
-    process::Command,
-    sync::{Arc, Mutex},
-    time::Duration
-};
+use std::{process::Command, sync::Arc, time::Duration};
 
 use axum::{Router, routing::get};
-use tokio::{net::TcpListener, sync::oneshot};
+use tokio::{net::TcpListener, sync::Notify};
 use unipept_api::shutdown;
 
 /// How long the handler stays in the request. Long enough that the signal lands well inside it.
@@ -23,8 +19,10 @@ const HANDLER_DURATION: Duration = Duration::from_millis(500);
 /// A request already in a handler is answered, and only then does the server return.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_request_in_flight_outlives_sigterm() {
-    let (entered, in_a_handler) = oneshot::channel();
-    let entered = Arc::new(Mutex::new(Some(entered)));
+    // `Notify` rather than a channel: axum needs the handler to be `Fn`, and it keeps one permit,
+    // so the wait below still returns when the handler got there first.
+    let entered = Arc::new(Notify::new());
+    let in_a_handler = Arc::clone(&entered);
 
     let app = Router::new().route(
         "/slow",
@@ -33,9 +31,7 @@ async fn a_request_in_flight_outlives_sigterm() {
             async move {
                 // Reports that the request reached a handler, which is also what proves the
                 // shutdown future has been polled: `serve` polls it before it accepts.
-                if let Some(entered) = entered.lock().expect("the sender lock should not be poisoned").take() {
-                    let _ = entered.send(());
-                }
+                entered.notify_one();
 
                 tokio::time::sleep(HANDLER_DURATION).await;
                 "answered"
@@ -51,7 +47,7 @@ async fn a_request_in_flight_outlives_sigterm() {
 
     let request = tokio::spawn(async move { reqwest::get(format!("http://{address}/slow")).await });
 
-    in_a_handler.await.expect("the request should reach the handler");
+    in_a_handler.notified().await;
 
     let killed = Command::new("kill")
         .args(["-TERM", &std::process::id().to_string()])

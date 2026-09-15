@@ -25,7 +25,6 @@ else
     source "${HERE}/../lib.sh"
 fi
 
-readonly REPOSITORY=unipept/unipept-api
 readonly SERVICE=unipept-api
 readonly SERVICE_USER=unipept
 readonly ROOT=/opt/unipept-api
@@ -91,14 +90,12 @@ install_binary() {
 }
 
 download_asset() {
-    local tag=$1 variant=$2 directory=$3
-    local version=${tag#v}
-    local asset="unipept-api-${version}-x86_64-linux-gnu-${variant}"
-    local base="https://github.com/${REPOSITORY}/releases/download/${tag}"
+    local tag=$1 variant=$2 directory=$3 asset
+    asset=$(asset_name "$tag" "$variant")
 
     log "downloading ${asset}"
-    curl -fsSL --retry 3 -o "${directory}/${asset}" "${base}/${asset}"
-    curl -fsSL --retry 3 -o "${directory}/SHA256SUMS" "${base}/SHA256SUMS"
+    curl -fsSL --retry 3 -o "${directory}/${asset}" "$(release_url "$tag" "$asset")"
+    curl -fsSL --retry 3 -o "${directory}/SHA256SUMS" "$(release_url "$tag" SHA256SUMS)"
 
     printf '%s\n' "${directory}/${asset}"
 }
@@ -124,11 +121,7 @@ do_deploy() {
     require_cmd curl sha256sum systemctl
     prepare_user_manager
 
-    local staged
-    local directory
-    directory=$(mktemp -d)
-    # shellcheck disable=SC2064  # $directory is wanted now, not at trap time.
-    trap "rm -rf '$directory'" EXIT
+    local staged directory
 
     if [ -n "$from" ]; then
         [ -f "$from" ] || die "no binary at $from"
@@ -138,6 +131,11 @@ do_deploy() {
         [ -n "$tag" ] || usage
         [ -n "$variant" ] || variant=$(env_value VARIANT "$ENV_FILE")
         [ -n "$variant" ] || die "no variant given and no VARIANT in $ENV_FILE"
+
+        # Only the download needs somewhere to put a file; --from installs one already delivered.
+        directory=$(mktemp -d)
+        # shellcheck disable=SC2064  # $directory is wanted now, not at trap time.
+        trap "rm -rf '$directory'" EXIT
 
         staged=$(download_asset "$tag" "$variant" "$directory")
         verify_sha256 "$staged" "${directory}/SHA256SUMS"

@@ -1,0 +1,41 @@
+[Unit]
+Description=Unipept API Server
+Documentation=https://github.com/unipept/unipept-api/wiki/Deploying-the-Unipept-API
+After=network.target opensearch.service
+
+[Service]
+# Type=exec reports a failed exec as a failed start.
+Type=exec
+EnvironmentFile=/etc/unipept-api/unipept-api.env
+ExecStart=/usr/local/bin/unipept-api -i ${INDEX_LOCATION} -d ${DATABASE_ADDRESS} --port ${PORT}
+
+User=unipept
+Group=unipept
+
+# PORT is below 1024.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+Restart=on-failure
+RestartSec=5
+# Above the 150-second request timeout, so systemd waits for the drain.
+TimeoutStopSec=180
+
+# Long requests hold more descriptors than the 1024 default allows.
+LimitNOFILE=65536
+
+# No StandardOutput or StandardError: both go to journald, where journalctl -u unipept-api
+# reads them.
+
+NoNewPrivileges=yes
+# Makes the whole hierarchy read-only, the index directory included. The API writes nothing.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=multi-user.target

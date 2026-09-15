@@ -46,30 +46,31 @@ impl DataStore {
     ) -> Result<Self, DataStoreError> {
         // One line per file, as `index` does. These eight are the slowest thing the process does
         // before it listens, and a start that stalls or dies part-way through says which file it
-        // was on.
-        tracing::info!(path = %version_file, "loading version");
+        // was on. The path is recorded as a string, not with `%`: a directory name with a space in
+        // it would otherwise break the line into fields that are not fields.
+        tracing::info!(path = version_file, "loading version");
         let version = std::fs::read_to_string(version_file)
             .map_err(|_err| DataStoreError::FileNotFound(version_file.to_string()))?;
 
-        tracing::info!(path = %sample_file, "loading sample data");
+        tracing::info!(path = sample_file, "loading sample data");
         let sample_store = SampleStore::try_from_file(sample_file)?;
 
-        tracing::info!(path = %ec_file, "loading EC numbers");
+        tracing::info!(path = ec_file, "loading EC numbers");
         let ec_store = EcStore::try_from_file(ec_file)?;
 
-        tracing::info!(path = %go_file, "loading GO terms");
+        tracing::info!(path = go_file, "loading GO terms");
         let go_store = GoStore::try_from_file(go_file)?;
 
-        tracing::info!(path = %interpro_file, "loading InterPro entries");
+        tracing::info!(path = interpro_file, "loading InterPro entries");
         let interpro_store = InterproStore::try_from_file(interpro_file)?;
 
-        tracing::info!(path = %reference_proteome_file, "loading reference proteomes");
+        tracing::info!(path = reference_proteome_file, "loading reference proteomes");
         let reference_proteome_store = ReferenceProteomeStore::try_from_file(reference_proteome_file)?;
 
-        tracing::info!(path = %lineage_file, "loading lineages");
+        tracing::info!(path = lineage_file, "loading lineages");
         let lineage_store = LineageStore::try_from_file(lineage_file)?;
 
-        tracing::info!(path = %taxon_file, "loading taxa");
+        tracing::info!(path = taxon_file, "loading taxa");
         let taxon_store = TaxonStore::try_from_file(taxon_file)?;
 
         Ok(Self {

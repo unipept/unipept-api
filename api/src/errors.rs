@@ -71,11 +71,12 @@ pub fn error_response(status: StatusCode, message: impl Into<String>) -> Respons
 impl ApiError {
     /// Whether this service failed, or the caller asked for something it will not do.
     ///
-    /// Not derivable from the status. `NotImplementedError` answers 501 for a combination of
-    /// parameters the caller chose, which is a refusal rather than a fault, and an error rate
-    /// counted from the status alone would page somebody for it.
+    /// Not derivable from the status, in either direction. `NotImplementedError` answers 501 for a
+    /// combination of parameters the caller chose, which is a refusal; `JsonError` answers 400 but
+    /// is raised only by this service serialising its own response, which is a fault. An error rate
+    /// counted from the status alone would page for the first and miss the second.
     fn is_fault(&self) -> bool {
-        matches!(self, ApiError::DatabaseError(_) | ApiError::JoinError(_))
+        matches!(self, ApiError::DatabaseError(_) | ApiError::JoinError(_) | ApiError::JsonError(_))
     }
 }
 

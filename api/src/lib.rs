@@ -73,7 +73,9 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
 
     let app = routes::create_app(app_state);
 
-    let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();
+    // `?` rather than `unwrap`: a port already in use is the most common way this fails to start,
+    // and a panic writes to stderr outside tracing, where the journal never sees it.
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
 
     tracing::info!(address = %listener.local_addr()?, "listening");
 

@@ -6,7 +6,8 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-opensearch = "^2.0.0"
+# rustls, not the platform TLS: the crate defaults to native-tls, which links libssl at runtime.
+opensearch = { version = "^2.0.0", default-features = false, features = ["rustls-tls"] }
 itertools = "0.15.0"
 thiserror = "2.0"
 tokio = { version = "*", features = ["full"] }

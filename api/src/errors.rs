@@ -68,6 +68,21 @@ pub fn error_response(status: StatusCode, message: impl Into<String>) -> Respons
     (status, Json(ErrorBody { error: message.into() })).into_response()
 }
 
+/// A refusal from an extractor, logged and answered.
+///
+/// An extractor rejects before any handler runs, so no [`ApiError`] exists and nothing else writes
+/// the reason down. Without this the journal holds a status and a latency for such a request and
+/// nothing about what was wrong with it.
+///
+/// `reason` is what the caller is told. `cause` is what it is not: recorded as `dyn Error`, the
+/// same as on the [`ApiError`] path, so the subscriber walks `source()` and the log holds the whole
+/// chain — `serde_qs` naming the field it could not read, rather than a fixed "invalid query
+/// string". A `None` cause records no field at all.
+pub fn reject(status: StatusCode, reason: &'static str, cause: Option<&(dyn std::error::Error + 'static)>) -> Response {
+    tracing::warn!(status = status.as_u16(), reason, error = cause, "request refused");
+    error_response(status, reason)
+}
+
 impl ApiError {
     /// Whether this service failed, or the caller asked for something it will not do.
     ///

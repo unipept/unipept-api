@@ -68,3 +68,40 @@ async fn a_served_request_is_logged() {
     assert!(logged.contains("status=200"), "the request was not logged: {logged}");
     assert!(logged.contains(r#"route="/health""#), "the route is missing: {logged}");
 }
+
+/// An unparseable query string is logged with what the parser actually objected to.
+///
+/// The caller is told "invalid query string" and nothing more, deliberately. The journal gets the
+/// rest, so a client reporting a 400 can be answered without reproducing the request.
+#[tokio::test]
+async fn an_unparseable_query_string_is_logged_with_its_cause() {
+    let request = Request::get("/private_api/taxa/filter?start=notanumber").body(Body::empty()).unwrap();
+
+    let logged = common::log_of(create_app, request).await;
+
+    assert!(logged.contains("request refused"), "no refusal was logged: {logged}");
+    assert!(logged.contains("status=400"), "the status is missing: {logged}");
+    assert!(logged.contains(r#"reason="invalid query string""#), "the reason is missing: {logged}");
+    assert!(
+        logged.contains(r#"error=invalid type: string "notanumber", expected usize"#),
+        "the cause is missing: {logged}"
+    );
+}
+
+/// A body that is not the JSON it claims to be is logged with the parse error.
+#[tokio::test]
+async fn a_malformed_json_body_is_logged_with_its_cause() {
+    let request = Request::post("/api/v2/taxa2tree")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from("{not json"))
+        .unwrap();
+
+    let logged = common::log_of(create_app, request).await;
+
+    assert!(logged.contains("request refused"), "no refusal was logged: {logged}");
+    assert!(logged.contains("status=422"), "the status is missing: {logged}");
+    assert!(logged.contains(r#"reason="Invalid request body""#), "the reason is missing: {logged}");
+    // The chain the subscriber walked: axum's wording, then serde_json's position.
+    assert!(logged.contains("error.sources=["), "the cause chain is missing: {logged}");
+    assert!(logged.contains("line 1 column 2"), "the parse position is missing: {logged}");
+}

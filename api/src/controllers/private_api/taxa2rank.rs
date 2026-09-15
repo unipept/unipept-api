@@ -31,7 +31,10 @@ async fn handler(
     // user typed, so `GENUS` is not `genus`, exactly as for `descendants_ranks` on
     // `/api/v2/taxonomy`. Which spellings `rank_to_idx` accepts is its own business.
     let rank_idx = LineageStore::rank_to_idx(&rank)
-        .ok_or_else(|| ApiError::UnknownRankError(format!("Invalid rank: {}", rank)))?;
+        // `{rank:?}` rather than `{rank}`: this string becomes the error's `Display`, which the
+        // log records unquoted. A rank carrying a newline would otherwise write a second line into
+        // the journal that reads exactly like a real one.
+        .ok_or_else(|| ApiError::UnknownRankError(format!("Invalid rank: {rank:?}")))?;
 
     let lineage_store = datastore.lineage_store();
 

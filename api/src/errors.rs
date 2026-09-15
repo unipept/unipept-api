@@ -83,7 +83,7 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         // Matched by reference, so `self` survives to be logged below. The three owned messages
         // are cloned rather than moved out; an error response is not a path where one `String`
-        // matters, and one match keeps the variant list in a single place.
+        // matters.
         let (status, message) = match &self {
             ApiError::JsonError(_) => (StatusCode::BAD_REQUEST, "Invalid JSON".to_string()),
             ApiError::DatabaseError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
@@ -94,7 +94,8 @@ impl IntoResponse for ApiError {
         };
 
         // Recorded as `dyn Error` rather than as text: the subscriber walks `source()` and prints
-        // the causes.
+        // the causes. The field is written unquoted, so any caller-supplied text a variant carries
+        // has to reach its message through `{:?}`, or a newline in it forges a line in the journal.
         if self.is_fault() {
             tracing::error!(status = status.as_u16(), error = &self as &dyn std::error::Error, "request failed");
         } else {

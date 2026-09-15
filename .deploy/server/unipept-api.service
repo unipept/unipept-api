@@ -24,7 +24,9 @@ ExecStart=/opt/unipept-api/bin/unipept-api -i ${INDEX_LOCATION} -d ${DATABASE_AD
 
 Restart=on-failure
 RestartSec=5
-# Above the 150-second request timeout, so systemd waits for the drain rather than cutting it off.
+# Above the 150-second request timeout, so systemd waits for a drain instead of cutting it off.
+# The drain itself is the graceful shutdown in #267; until that is released, a stop ends the
+# process at once and this only sets the ceiling. api/tests/deploy.rs holds the two to each other.
 TimeoutStopSec=180
 
 # Long requests hold more descriptors than the 1024 default allows.

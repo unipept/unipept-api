@@ -80,17 +80,9 @@ jobs:
         with:
           key: ${{ matrix.variant }}
 
+      # An empty --features is a no-op, so the preloaded leg needs no branch of its own.
       - name: Build the release binary
-        shell: bash
-        env:
-          FEATURES: ${{ matrix.features }}
-        run: |
-          set -euo pipefail
-          if [ -n "${FEATURES}" ]; then
-            cargo build --release --locked -p unipept-api --features "${FEATURES}"
-          else
-            cargo build --release --locked -p unipept-api
-          fi
+        run: cargo build --release --locked -p unipept-api --features "${{ matrix.features }}"
 
       # The name is what a server asks for: VARIANT in its environment file is the last field.
       - name: Name the asset

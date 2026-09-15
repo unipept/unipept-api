@@ -6,9 +6,13 @@ use tower_http::{
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+// The bare `warn` is the base every other target falls back to, so a crate that is not named here
+// still reports its problems. Without it, a `warn!` added to `database` or `datastore` would go
+// nowhere until somebody remembered to add a directive for it.
+//
 // axum logs rejections from built-in extractors with the `axum::rejection` target, at `TRACE`
 // level. `axum::rejection=trace` enables showing those events.
-const DEFAULT_FILTER: &str = "unipept_api=info,index=info,tower_http=info,axum::rejection=trace";
+const DEFAULT_FILTER: &str = "warn,unipept_api=info,index=info,tower_http=info,axum::rejection=trace";
 
 /// Installs the global tracing subscriber, once.
 ///

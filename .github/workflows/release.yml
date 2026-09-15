@@ -39,8 +39,9 @@ jobs:
     # In a ubuntu:22.04 container rather than on a 22.04 runner: production is 22.04, and that
     # runner label is deprecated from 2026-09-17. The container pins glibc 2.35 either way.
     #
-    # The storage backend is compiled in, so a host cannot pick one at startup and every backend a
-    # host might need is built here. The list is the one ci.yml already checks and tests.
+    # The storage backend is compiled in, so a host cannot pick one at startup. Three variants are
+    # built: everything mapped, everything resident, and the hybrid that maps only the suffix array.
+    # ci.yml's backends job checks and tests all three.
     name: Build ${{ matrix.variant }}
     needs: guard
     runs-on: ubuntu-latest
@@ -56,12 +57,8 @@ jobs:
             features: mmap
           - variant: preloaded
             features: ''
-          - variant: mmap-text
-            features: mmap,preloaded-text
-          - variant: mmap-proteins
-            features: mmap,preloaded-proteins
-          - variant: mmap-mapping
-            features: mmap,preloaded-mapping
+          - variant: hybrid
+            features: mmap,preloaded-text,preloaded-proteins,preloaded-mapping
 
     steps:
       # Before the checkout, which needs git in the container.
@@ -129,7 +126,7 @@ jobs:
           pattern: unipept-api-*
           merge-multiple: true
 
-      # One file for all five, so a deploy verifies what it downloaded against a single source.
+      # One file for all three, so a deploy verifies what it downloaded against a single source.
       - name: Write the checksums
         shell: bash
         run: |

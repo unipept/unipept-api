@@ -2,9 +2,13 @@
 #
 # The HAProxy runtime API, as the rollout needs it. Run on the load balancer.
 #
-# Every HAProxy detail lives here, so rollout.sh holds the sequence and nothing else. Fields are
-# located by name in the `show stat` header rather than by column number, because that layout is
-# not a stable interface.
+# Every HAProxy detail lives here, so rollout.sh holds the sequence and nothing else. That includes
+# knowing that one server sits in several backends: a target is `<backend[,backend...]>/<server>`,
+# and the commands that change or wait on state take all of them at once. A rollout therefore never
+# loops over backends, and a wait spends one deadline rather than one per backend.
+#
+# Fields are located by name in the `show stat` header, because that column layout is not a stable
+# interface.
 #
 # The socket is srw------- root:haproxy. Either run as root, or give the socket `mode 660` in
 # haproxy.cfg and put the operator in the haproxy group.
@@ -18,18 +22,21 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 
 usage() {
     cat >&2 <<'EOF'
-usage: haproxy.sh <command> <backend>/<server> [arguments]
+usage: haproxy.sh <command> <backend[,backend...]>/<server> [arguments]
 
-  drain <b>/<s>               stop sending new connections, let the open ones finish
-  maint <b>/<s>               take out of rotation and stop health checking it
-  ready <b>/<s>               put back in rotation
-  state <b>/<s>               print the status field, for example UP, UP 1/100 or MAINT
-  sessions <b>/<s>            print the current session count
-  wait-empty <b>/<s> <secs>   wait until the session count reaches 0
-  wait-up <b>/<s> <secs>      wait until the status field reads UP
-  up-count <b>                print how many servers in the backend are UP
+  drain <target>               stop sending new connections, let the open ones finish
+  maint <target>               take out of rotation and stop health checking it
+  ready <target>               put back in rotation
+  states <target>              print "backend=status" for each backend
+  state <target>               print the status field of one backend, for example UP or UP 1/100
+  sessions <target>            print the current session count of one backend
+  wait-empty <target> <secs>   wait until every backend reports no open sessions
+  wait-up <target> <secs>      wait until every backend reports UP
+  up-count <backend>           print how many servers in one backend are UP
+  least-up <backend[,...]>     print the smallest UP count across the backends
 
-The socket path comes from HAPROXY_SOCKET, default /run/haproxy/haproxy.sock.
+Every command but state, sessions, up-count and least-up takes several backends at once. The
+socket path comes from HAPROXY_SOCKET.
 EOF
     exit 2
 }
@@ -46,108 +53,117 @@ runtime() {
         die "cannot talk to $HAPROXY_SOCKET. Run as root, or join the haproxy group."
 }
 
-# Splits backend/server, refusing anything else: a typo here would address a server that does
-# not exist, and `set server` on an unknown name is not an error HAProxy reports usefully.
+# Splits `<backends>/<server>` into a backend list and a server name, one per line.
+#
+# A typo here would address a server that does not exist, and `set server` on an unknown name is
+# not an error HAProxy reports usefully, so the shape is checked before anything is sent.
 split_target() {
-    case ${1:-} in
-        */*) backend=${1%%/*}; server=${1##*/} ;;
-        *) die "expected <backend>/<server>, got '${1:-}'" ;;
+    local target=${1:-} backends server
+    case $target in
+        */*) backends=${target%%/*}; server=${target##*/} ;;
+        *) die "expected <backend[,backend...]>/<server>, got '${target}'" ;;
     esac
-    if [ -z "$backend" ] || [ -z "$server" ]; then
-        die "expected <backend>/<server>, got '$1'"
+    if [ -z "$backends" ] || [ -z "$server" ]; then
+        die "expected <backend[,backend...]>/<server>, got '${target}'"
     fi
+    printf '%s\n%s\n' "${backends//,/ }" "$server"
 }
 
-# Reads one named field for one server out of `show stat`.
+# One `show stat` covering every backend named, as "backend status sessions" per line.
 #
-# `status` is not always one word: HAProxy appends the check counter while a server is in
-# transition, so a healthy server reads `UP` or `UP 1/100`. Callers compare the first word.
-stat_field() {
-    local backend=$1 server=$2 field=$3 value
+# One dump answers for all of them, so a poll costs a single socat call however many backends a
+# server sits in. A backend that holds no such server is an error, not a silent omission.
+server_rows() {
+    local backends=$1 server=$2 rows expected found
 
-    value=$(runtime "show stat" | awk -F, -v px="$backend" -v sv="$server" -v want="$field" '
+    rows=$(runtime "show stat" | awk -F, -v wanted="$backends" -v sv="$server" '
+        BEGIN { split(wanted, list, " "); for (i in list) want[list[i]] = 1 }
         # The header names every column, and the first is written "# pxname".
         /^#/ {
             for (i = 1; i <= NF; i++) {
                 name = $i
                 sub(/^# */, "", name)
-                if (name == want) column = i
+                if (name == "status") status = i
+                if (name == "scur") scur = i
             }
-            if (!column) exit 2
+            if (!status || !scur) exit 2
             next
         }
-        $1 == px && $2 == sv { print $column; found = 1; exit }
-        END { if (!found) exit 1 }
-    ') || die "$backend/$server is not in the HAProxy configuration"
+        ($1 in want) && $2 == sv { print $1, $status, $scur }
+    ')
 
-    printf '%s\n' "$value"
+    expected=$(printf '%s' "$backends" | wc -w)
+    found=$(printf '%s' "$rows" | grep -c . || true)
+    [ "$found" -eq "$expected" ] || die "${server} is not in every one of: ${backends// /, }"
+
+    printf '%s\n' "$rows"
 }
 
+# Applies one state to the server in every backend named.
 set_state() {
-    local target=$1 state=$2
-    split_target "$target"
+    local target=$1 state=$2 backends server backend answer
+    { read -r backends; read -r server; } < <(split_target "$target")
 
-    local answer
-    answer=$(runtime "set server ${backend}/${server} state ${state}")
+    # Proves every backend really holds this server before any of them is changed.
+    server_rows "$backends" "$server" >/dev/null
 
-    # A refused command answers with a message; an accepted one answers with nothing.
-    [ -z "${answer//[[:space:]]/}" ] || die "HAProxy refused the change: ${answer}"
-
-    log "${backend}/${server} set to ${state}"
+    for backend in $backends; do
+        answer=$(runtime "set server ${backend}/${server} state ${state}")
+        # A refused command answers with a message; an accepted one answers with nothing.
+        [ -z "${answer//[[:space:]]/}" ] || die "HAProxy refused the change: ${answer}"
+        log "${backend}/${server} set to ${state}"
+    done
 }
 
-# Waits for the open sessions to finish, so a restart does not cut them off.
+# Waits for the open sessions to finish in every backend, so a restart does not cut them off.
 #
-# The API's own request timeout is 150 seconds, so a server that is draining answers or gives up
-# within that. `timeout server` on this load balancer is 1800 seconds, far above it, so this waits
-# on the application rather than on HAProxy.
+# One deadline for all of them, because they drain at the same time. The API's own request timeout
+# is 150 seconds, so a draining server answers or gives up within that; `timeout server` on this
+# load balancer is 1800 seconds, far above it, so this waits on the application, not on HAProxy.
 wait_empty() {
-    local target=$1 timeout=$2
-    split_target "$target"
+    local target=$1 timeout=$2 backends server deadline open
+    { read -r backends; read -r server; } < <(split_target "$target")
 
-    local deadline=$((SECONDS + timeout)) sessions
+    deadline=$((SECONDS + timeout))
     while [ "$SECONDS" -lt "$deadline" ]; do
-        sessions=$(stat_field "$backend" "$server" scur)
-        if [ "${sessions:-0}" -eq 0 ]; then
-            log "${backend}/${server} has no open sessions"
+        open=$(server_rows "$backends" "$server" | awk '$3 != 0 { printf "%s=%s ", $1, $3 }')
+        if [ -z "$open" ]; then
+            log "${server} has no open sessions in ${backends// /, }"
             return 0
         fi
-        log "${backend}/${server} still has ${sessions} open, waiting"
+        log "${server} still has ${open}open, waiting"
         sleep 2
     done
 
-    die "${backend}/${server} still had sessions open after ${timeout}s"
+    die "${server} still had sessions open after ${timeout}s"
 }
 
-# Waits for HAProxy to agree the server is back.
+# Waits for HAProxy to agree the server is back in every backend.
 #
 # The rollout has already confirmed the server answers /health directly, so this waits only for
-# HAProxy to see it: `rise` defaults to 2 checks, and the check interval on this backend is the
-# default 2 seconds.
+# HAProxy to see it: `rise` defaults to 2 checks, and the check interval here is the default 2
+# seconds. `UP` and `UP 1/100` both mean it is being routed to, which is what this waits for.
 wait_up() {
-    local target=$1 timeout=$2
-    split_target "$target"
+    local target=$1 timeout=$2 backends server deadline pending
+    { read -r backends; read -r server; } < <(split_target "$target")
 
-    local deadline=$((SECONDS + timeout)) state
+    deadline=$((SECONDS + timeout))
     while [ "$SECONDS" -lt "$deadline" ]; do
-        state=$(stat_field "$backend" "$server" status)
-        # `UP` and `UP 1/100` both mean HAProxy is routing to it, which is what this waits for.
-        case $state in
-            UP*)
-                log "${backend}/${server} is UP"
-                return 0
-                ;;
-        esac
+        pending=$(server_rows "$backends" "$server" | awk '$2 !~ /^UP/ { printf "%s=%s ", $1, $2 }')
+        if [ -z "$pending" ]; then
+            log "${server} is UP in ${backends// /, }"
+            return 0
+        fi
         sleep 2
     done
 
-    die "${backend}/${server} did not come UP within ${timeout}s"
+    die "${server} did not come UP in every backend within ${timeout}s"
 }
 
-# How much of the backend is actually serving, so the rollout can refuse to empty it.
+# How much of a backend is actually serving, so the rollout can refuse to empty one.
 #
-# Counts a backup server too: with one primary drained and a backup configured, the backup is what
-# answers, so it is real capacity.
+# Counts a backup server too: with the primaries drained and a backup configured, the backup is
+# what answers, so it is real capacity.
 up_count() {
     local backend=$1
     runtime "show stat" | awk -F, -v px="$backend" '
@@ -166,6 +182,33 @@ up_count() {
     '
 }
 
+# The thinnest of the backends, which is the one a drain empties first.
+least_up() {
+    local backend count least=''
+    for backend in ${1//,/ }; do
+        count=$(up_count "$backend")
+        if [ -z "$least" ] || [ "$count" -lt "$least" ]; then least=$count; fi
+    done
+    printf '%s\n' "${least:-0}"
+}
+
+# "backend=status" per backend, for a caller that wants to report rather than wait.
+states() {
+    local backends server
+    { read -r backends; read -r server; } < <(split_target "$1")
+    server_rows "$backends" "$server" | awk '{ printf "%s=%s ", $1, $2 } END { printf "\n" }'
+}
+
+# One field of one backend, for an operator reading a single value.
+single_field() {
+    local target=$1 column=$2 backends server
+    { read -r backends; read -r server; } < <(split_target "$target")
+    case $backends in
+        *' '*) die "this command takes one backend, got '${backends// /, }'" ;;
+    esac
+    server_rows "$backends" "$server" | awk -v c="$column" '{ print $c }'
+}
+
 [ $# -ge 2 ] || usage
 command=$1
 shift
@@ -174,10 +217,12 @@ case $command in
     drain) set_state "$1" drain ;;
     maint) set_state "$1" maint ;;
     ready) set_state "$1" ready ;;
-    state) split_target "$1"; stat_field "$backend" "$server" status ;;
-    sessions) split_target "$1"; stat_field "$backend" "$server" scur ;;
+    states) states "$1" ;;
+    state) single_field "$1" 2 ;;
+    sessions) single_field "$1" 3 ;;
     wait-empty) [ $# -eq 2 ] || usage; wait_empty "$1" "$2" ;;
     wait-up) [ $# -eq 2 ] || usage; wait_up "$1" "$2" ;;
     up-count) up_count "$1" ;;
+    least-up) least_up "$1" ;;
     *) usage ;;
 esac

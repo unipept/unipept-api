@@ -26,6 +26,15 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
     // — those are the failures that matter most.
     middleware::tracing::init_tracing_subscriber();
 
+    // Before the loading starts, so it is the first line of the run rather than one buried among
+    // the files. Neither the version nor the backend is recorded anywhere else, so this is the
+    // only way to tell what is actually running, and the configurations differ enough in memory
+    // profile to be worth stating. The summary is itself a list of `key=value` pairs, so it is
+    // recorded as a string rather than with `%`: unquoted it would break the line into fields
+    // that are not.
+    let backend = Index::backend_summary();
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), backend, "starting unipept api");
+
     let version = format!("{}/.version", index_location);
 
     let sampledata = format!("{}/datastore/sampledata.json", index_location);
@@ -53,13 +62,6 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
         &lineages,
         &taxons
     )?;
-
-    // Neither the version nor the backend is recorded anywhere else, so this is the only way
-    // to tell what is actually running. The configurations differ enough in memory profile to
-    // be worth stating. The summary is itself a list of `key=value` pairs, so it is recorded as
-    // a string rather than with `%`: unquoted it would break the line into fields that are not.
-    let backend = Index::backend_summary();
-    tracing::info!(version = env!("CARGO_PKG_VERSION"), backend, "starting unipept api");
 
     let index = Index::try_from_files(&sa, &proteins, &mappings, &kmer_table)?;
 

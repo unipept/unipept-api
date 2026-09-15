@@ -12,7 +12,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 //
 // axum logs rejections from built-in extractors with the `axum::rejection` target, at `TRACE`
 // level. `axum::rejection=trace` enables showing those events.
-const DEFAULT_FILTER: &str = "warn,unipept_api=info,index=info,tower_http=info,axum::rejection=trace";
+const DEFAULT_FILTER: &str = "warn,unipept_api=info,datastore=info,index=info,tower_http=info,axum::rejection=trace";
 
 /// Installs the global tracing subscriber, once.
 ///

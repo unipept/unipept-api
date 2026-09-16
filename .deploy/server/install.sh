@@ -6,6 +6,21 @@
 # touches and restarts its own unit, so no deploy uses sudo.
 #
 # It installs no binary: deploy.sh does that, here and on every release after it.
+#
+# Flow:
+#   1. Check that every command it uses is installed, and that this runs as root.
+#   2. Create the unipept user, or give an account that already exists a login shell: the rollout
+#      runs the deploy over ssh, and sshd needs a shell to exec a remote command.
+#   3. Create /opt/unipept-api and its bin, etc and lib directories, owned by that user.
+#   4. Write etc/unipept-api.env from the example, or keep the file already there.
+#   5. Install deploy.sh and lib.sh in lib/, which is the path the rollout calls over ssh.
+#   6. Install the port redirect script and its system unit, both owned by root.
+#   7. Install the service unit in the service user's ~/.config/systemd/user.
+#   8. Enable and restart unipept-api-ports, so port 80 reaches the port the service binds.
+#   9. Enable lingering for the service user, and wait for its runtime directory to appear.
+#  10. Enable the user unit as that user. It is not started: there is no binary until a deploy.
+#  11. Print what is left to do by hand on this host.
+#  12. Run `deploy.sh check`, and report what is still wrong now rather than at the first deploy.
 
 set -euo pipefail
 

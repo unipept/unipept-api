@@ -10,6 +10,34 @@
 # already delivered. Both then take the same path.
 #
 # A deploy that does not come back healthy rolls itself back.
+#
+# Flow:
+#   The first argument selects what runs. The signal handlers are installed before it is read, so an
+#   interrupt always clears the staged file, and one after the swap rolls back.
+#
+#   deploy:
+#     1. Parse the flags, and reject a --timeout that is not a number of seconds.
+#     2. Run the same checks as `check`. A host that is not ready installs nothing.
+#     3. Point `systemctl --user` at the user manager through XDG_RUNTIME_DIR.
+#     4. Take the binary: verify the checksum of the one at --from, or download the asset for this
+#        tag and variant into a temporary directory and verify that one.
+#     5. Copy it to bin/unipept-api.new, run --version on the copy, keep the binary in place as
+#        .previous, and rename the copy over it.
+#     6. Restart the unit, then wait for /health on 127.0.0.1 and this host's PORT.
+#     7. Healthy: clear the staged files and report the deploy. Not healthy: with --no-rollback,
+#        leave it in place for the caller to decide; on a first install, report that there is
+#        nothing to go back to; otherwise roll back and then fail.
+#
+#   rollback: keep the binary in place as .failed, put .previous back, restart, and wait for
+#   /health. .previous is only removed once it serves.
+#
+#   check: collect every problem instead of stopping at the first — the commands, the user, the
+#   runtime directory, the values in the environment file, the index files, memory for the variant,
+#   the port redirect, free space, and with --from the checksum and that the binary runs here. Print
+#   key=value for a caller to read, and exit non-zero if anything is wrong.
+#
+#   status: print the installed version, the previous one, the variant, the port, and whether the
+#   unit is active.
 
 set -euo pipefail
 

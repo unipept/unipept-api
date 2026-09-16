@@ -12,12 +12,22 @@ holding copies.
 
 ## A user unit, so a deploy needs no privilege
 
-The service runs as a systemd user unit owned by the `unipept` user, started at boot by
-lingering. That user owns `/opt/unipept-api`, so it replaces the binary and restarts its own unit
-without root, sudo or a polkit rule. Only the first install needs root.
+The service runs as a systemd user unit owned by the `unipept` user, started at boot by lingering.
+That user owns `/opt/unipept-api`, so it replaces the binary and restarts its own unit without root,
+sudo or a polkit rule. Only the first install needs root.
 
-This is why the API listens above port 1024: binding a lower port needs a capability that an
-unprivileged unit cannot hold. HAProxy's `server` lines must name the port in the environment file.
+A user manager holds no capability to grant, so the service cannot bind port 80 itself — measured on
+systemd 249, `AmbientCapabilities=CAP_NET_BIND_SERVICE` fails with *"Failed to apply ambient
+capabilities (before UID change): Operation not permitted"* and the unit exits 218.
+
+So the service listens above 1024 and a netfilter rule sends what arrives on 80 to it.
+`unipept-api-ports.service` holds that rule and install.sh puts it there. **Nothing on the network
+changes**: the packet is addressed to port 80 on the wire and is rewritten inside the host, so
+HAProxy keeps its `server ...:80` lines and the campus firewall needs nothing.
+
+The alternative, lowering `net.ipv4.ip_unprivileged_port_start`, was rejected: it would let any
+unprivileged account on the host bind anything from 80 upwards, and 443 is open on these servers
+with nothing listening on it.
 
 ## The storage backend is a host property
 

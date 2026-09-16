@@ -1,0 +1,153 @@
+# A release is the consequence of a tag, not a separate manual step. A tag that disagrees with the
+# workspace version releases nothing: no build runs and no release is created.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# A tag deleted and re-pushed would otherwise produce two runs racing to create one release.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    # The tag and the workspace version are one decision. Nothing else compares them.
+    name: Tag matches the workspace version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      # The default branch too, so the tagged commit can be checked for being on it.
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # A tag is enough to publish, so it has to be a tag on reviewed code. The ruleset gates
+      # main; a tag on an unmerged branch would otherwise ship as a real release.
+      - name: Check the tag is on the default branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin "${GITHUB_REF_NAME}" "${{ github.event.repository.default_branch }}"
+          if ! git merge-base --is-ancestor "${GITHUB_REF_NAME}" \
+               "origin/${{ github.event.repository.default_branch }}"; then
+            echo "::error::${GITHUB_REF_NAME} is not on ${{ github.event.repository.default_branch }}. Merge first, then tag."
+            exit 1
+          fi
+
+      - name: Compare the tag with the workspace version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          declared=$(python3 -c "import tomllib; print(tomllib.load(open('Cargo.toml','rb'))['workspace']['package']['version'])")
+          tagged=${GITHUB_REF_NAME#v}
+          if [ "$declared" != "$tagged" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match the workspace version ${declared}. Bump the version in the commit you tag."
+            exit 1
+          fi
+          echo "version=${declared}" >> "$GITHUB_OUTPUT"
+
+  build:
+    # Pinned to 24.04, not ubuntu-latest: every server runs 24.04, and the binary links glibc, so the
+    # build host decides the oldest glibc the release can run on. ubuntu-latest moves to the next LTS
+    # on GitHub's schedule and would ship binaries the servers cannot start.
+    #
+    # The storage backend is compiled in, so a host cannot pick one at startup. Three variants are
+    # built: everything mapped, everything resident, and the hybrid that maps only the suffix array.
+    # ci.yml's backends job checks and tests all three.
+    name: Build ${{ matrix.variant }}
+    needs: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: mmap
+            features: mmap
+          - variant: preloaded
+            features: ''
+          - variant: hybrid
+            features: mmap,preloaded-text,preloaded-proteins,preloaded-mapping
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # An empty --features is a no-op, so the preloaded leg needs no branch of its own.
+      - name: Build the release binary
+        run: cargo build --release --locked -p unipept-api --features "${{ matrix.features }}"
+
+      # Nothing else here executes what it builds. A deploy finding out instead means a drained
+      # production server rolling back to the release before the one it was running.
+      - name: Check the binary runs
+        run: ./target/release/unipept-api --version
+
+      # The name is what a server asks for: VARIANT in its environment file is the last field.
+      - name: Name the asset
+        shell: bash
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          mv target/release/unipept-api "dist/unipept-api-${VERSION}-x86_64-linux-gnu-${VARIANT}"
+
+      - name: Upload the asset
+        uses: actions/upload-artifact@v7
+        with:
+          name: unipept-api-${{ matrix.variant }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Create the release
+    needs: [guard, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download every asset
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: unipept-api-*
+          merge-multiple: true
+
+      # One file for all three, so a deploy verifies what it downloaded against a single source.
+      - name: Write the checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum unipept-api-* > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --generate-notes \
+            dist/*

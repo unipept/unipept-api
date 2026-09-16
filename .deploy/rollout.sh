@@ -22,12 +22,14 @@
 #      drained and nothing installed.
 #   7. Phase 2: one server at a time, in that order. Check the backends can spare it, drain it,
 #      wait for its connections to end, put it in maintenance, install the staged binary through
-#      `deploy.sh deploy --no-rollback`, confirm /health and /health/database over the network, and
-#      return it to the pool only then. A failure asks the server what actually happened, acts on
-#      the answer, and stops the run, so the servers after it are never touched.
+#      `deploy.sh deploy --no-rollback` on the deadline that server asked for, confirm /health and
+#      /health/database over the network, and return it to the pool only then. A failure asks the
+#      server what actually happened, acts on the answer, and stops the run, so the servers after
+#      it are never touched.
 #   8. Phase 3: on every exit, including a signal. Clear the staging directory on every server it
 #      reached, write one journal line per server, and email if an update failed or a server is out
-#      of the pool.
+#      of the pool — a server this run drained and never put back included, which is what an
+#      interrupted install leaves behind.
 
 set -euo pipefail
 
@@ -53,7 +55,13 @@ HAPROXY_SOCKET=/run/haproxy/haproxy.sock
 SSH_USER=unipept
 REMOTE_DEPLOY=/opt/unipept-api/lib/deploy.sh
 DRAIN_TIMEOUT=$DEFAULT_DRAIN_TIMEOUT
+# Stands in for a server that reports no deadline of its own, which is one still running an older
+# deploy.sh. Each server's own READY_TIMEOUT is what a rollout uses where it has one.
 READY_TIMEOUT=$DEFAULT_READY_TIMEOUT
+# Seconds to give a server to look healthy once its deploy is finished: on its own two health routes,
+# and then in HAProxy. Separate from READY_TIMEOUT, which covers a service reading its index. By here
+# it is already answering, and this is only the time to confirm it.
+HEALTH_TIMEOUT=60
 LOCK_FILE=/tmp/unipept-rollout.lock
 # Empty means nobody is emailed; rollout.conf sets it.
 NOTIFY_TO=''
@@ -104,6 +112,9 @@ STATUS_ONLY=false
 declare -A STATUS=()
 # name -> the release asset that server takes, resolved once in phase 0.
 declare -A ASSET_OF=()
+# name -> the seconds that server asks to be given to answer /health, read in phase 1. A host whose
+# index is not resident needs far longer than the rest, and it is the one that knows how long.
+declare -A TIMEOUT_OF=()
 # Hosts that have a staging directory, so the cleanup reaches every one of them.
 STAGED_ON=''
 # Servers this run left out of the pool or down, which is what the team is told about.
@@ -121,6 +132,11 @@ ssh_connection=${SSH_CONNECTION:-}
 readonly RUN_FROM="${ssh_connection%% *}"
 # The load balancer's own scratch directory, and where a run stages on a server.
 TMP_DIR=''
+# The server this run has taken out of the pool, for as long as it is out. `finish` is all that still
+# runs after a signal, and without this it cannot tell that a server was left in maintenance: an
+# interrupt during an install emailed nobody and recorded nothing.
+CURRENT_NAME=''
+CURRENT_TARGET=''
 readonly REMOTE_STAGING="/tmp/unipept-api-rollout.$$"
 
 while [ $# -gt 0 ]; do
@@ -305,6 +321,15 @@ preflight() {
         local index_version
         index_version=$(printf '%s\n' "$report" | env_value index_version)
         versions="${versions}${name}=${index_version} "
+
+        # What this host asks to be given to answer /health. A server still running an older
+        # deploy.sh reports none, and then this load balancer's own setting stands in.
+        local asked
+        asked=$(printf '%s\n' "$report" | env_value ready_timeout)
+        case ${asked:-} in
+            '' | *[!0-9]*) asked=$READY_TIMEOUT ;;
+        esac
+        TIMEOUT_OF[$name]=$asked
     done <<<"$lines"
 
     [ "$failures" -eq 0 ] || die "${failures} preflight problem(s); nothing was touched"
@@ -336,6 +361,19 @@ stage_on() {
         "$(ssh_target "$host"):${REMOTE_STAGING}/" || return 1
 }
 
+# Puts a server back where a failure or a signal arrived before its binary was touched. Nothing has
+# changed on it at that point, so it belongs in the pool. A restore that fails leaves the run's own
+# record of it standing, so `finish` still reports what is out there.
+restore_target() {
+    local target=$1
+
+    if "$HAPROXY" ready "$target"; then
+        CURRENT_TARGET=''
+    else
+        log "could not restore ${target}; do it by hand"
+    fi
+}
+
 # One server, start to finish. A failure here stops the run: the servers after it are never
 # attempted, so a bad release can never take the whole fleet down.
 update_server() {
@@ -350,6 +388,11 @@ update_server() {
         die "${server} is the only server UP in one of ${backends//,/, }; draining it is an outage. Pass --allow-downtime to accept that."
     fi
 
+    # From the drain until the server is back, this is the one server outside the pool, and after a
+    # signal `finish` is the only thing left to say so.
+    CURRENT_NAME=$name
+    CURRENT_TARGET=$target
+
     # Until the binary is touched nothing has changed on the server, so a failure here — or an
     # interrupt — puts it back rather than leaving it out for a deploy that never happened.
     #
@@ -357,11 +400,11 @@ update_server() {
     # to install anyway, which is the opposite of what an interrupt asks for. 130 is what the global
     # handler uses, so the two agree.
     restore_on_failure() {
-        "$HAPROXY" ready "$target" || log "could not restore ${target}; do it by hand"
+        restore_target "$target"
         exit 130
     }
     trap restore_on_failure INT TERM
-    trap '"$HAPROXY" ready "$target" || log "could not restore ${target}; do it by hand"' ERR
+    trap 'restore_target "$target"' ERR
 
     "$HAPROXY" drain "$target"
     "$HAPROXY" wait-empty "$target" "$DRAIN_TIMEOUT"
@@ -377,7 +420,8 @@ update_server() {
 
     if install_on "$name" "$host" "$port" "$asset"; then
         "$HAPROXY" ready "$target"
-        "$HAPROXY" wait-up "$target" 60
+        "$HAPROXY" wait-up "$target" "$HEALTH_TIMEOUT"
+        CURRENT_TARGET=''
         log "${name} is back in rotation"
         return 0
     fi
@@ -388,13 +432,21 @@ update_server() {
     resolve_failure "$name" "$host" "$port" "$target"
 }
 
-# Decides what a failed deploy left behind, and acts once.
 # Whether a server answers on both routes. A server is only worth returning to the pool when it does:
 # db_handlers routes to it as well, so serving /health alone is not enough.
+#
+# Polled rather than asked once. A process that has just been restarted can miss a first connection
+# without anything being wrong — the database route the more easily, since the health route gives
+# OpenSearch only two seconds of its own. A single sample was leaving a server that is fine out of
+# the pool, and mailing about it.
+#
+# The deadline is the caller's, because the two ask different questions. Returning a server to the
+# pool is a gate and waits; asking whether a failed deploy is serving after all is a diagnosis, and a
+# long wait there only delays the rollback that the answer leads to.
 serving() {
-    local host=$1 port=$2
-    [ "$(http_code "http://${host}:${port}/health")" = "200" ] &&
-        [ "$(http_code "http://${host}:${port}/health/database")" = "200" ]
+    local host=$1 port=$2 timeout=$3
+    wait_for_http "http://${host}:${port}/health" "$timeout" &&
+        wait_for_http "http://${host}:${port}/health/database" "$timeout"
 }
 
 # Puts a server back, or says why it is being left out. Every path back into the pool goes through
@@ -402,17 +454,19 @@ serving() {
 return_to_pool() {
     local name=$1 host=$2 port=$3 target=$4
 
-    if ! serving "$host" "$port"; then
+    if ! serving "$host" "$port" "$HEALTH_TIMEOUT"; then
         log "${name} does not answer both health routes; leaving it out of the pool"
         note_down "$name" "$target"
         return 1
     fi
 
     "$HAPROXY" ready "$target"
-    "$HAPROXY" wait-up "$target" 60
+    "$HAPROXY" wait-up "$target" "$HEALTH_TIMEOUT"
+    CURRENT_TARGET=''
     log "${name} is back in rotation"
 }
 
+# Decides what a failed deploy left behind, and acts once.
 resolve_failure() {
     local name=$1 host=$2 port=$3 target=$4
     local report installed
@@ -426,7 +480,10 @@ resolve_failure() {
     fi
     installed=$(printf '%s\n' "$report" | env_value version)
 
-    if [ "$installed" = "${VERSION#v}" ] && serving "$host" "$port"; then
+    # install_on has just polled both routes for HEALTH_TIMEOUT and they failed, so this is not
+    # asking again — it is asking whether the answer came over a connection that died. Ten seconds
+    # covers one missed connection; anything longer is a rollback held up for nothing.
+    if [ "$installed" = "${VERSION#v}" ] && serving "$host" "$port" 10; then
         # The deploy worked; only the connection to it failed.
         log "${name} is serving ${installed} after all, so only the connection failed"
         STATUS[$name]=$report
@@ -445,7 +502,7 @@ resolve_failure() {
     fi
 
     log "${name} is not serving ${VERSION#v}; rolling it back"
-    if on_server "$host" rollback --timeout "$READY_TIMEOUT"; then
+    if on_server "$host" rollback --timeout "${TIMEOUT_OF[$name]:-$READY_TIMEOUT}"; then
         # It is serving a binary that was known good, and the load balancer has just watched it come
         # up, so keeping it out of the pool would cost capacity for nothing.
         if return_to_pool "$name" "$host" "$port" "$target"; then
@@ -474,6 +531,8 @@ note_failed_update() {
 note_down() {
     NEEDS_ATTENTION="${NEEDS_ATTENTION}${1} [${2}] "
     DOWN_NAMES="${DOWN_NAMES}${1} "
+    # Left out of the pool, but said so. `finish` reports only what nothing else did.
+    CURRENT_TARGET=''
 }
 
 # Installs the already-staged binary and verifies the result from here, rather than trusting what the
@@ -483,14 +542,14 @@ install_on() {
 
     # --no-rollback: this side decides what a failure means, so the two of them cannot each roll back.
     on_server "$host" deploy --from "${REMOTE_STAGING}/${asset}" \
-        --timeout "$READY_TIMEOUT" --no-rollback || return 1
+        --timeout "${TIMEOUT_OF[$name]:-$READY_TIMEOUT}" --no-rollback || return 1
 
     # deploy.sh already waited for /health on the server itself. This asks over the network, which is
     # the path that matters, and checks the database separately.
-    wait_for_http "http://${host}:${port}/health" 60 || return 1
+    wait_for_http "http://${host}:${port}/health" "$HEALTH_TIMEOUT" || return 1
     # Polled, not asked once: the health route gives OpenSearch 2 seconds, and a process that has just
     # restarted can miss that on its first connection without anything being wrong.
-    if ! wait_for_http "http://${host}:${port}/health/database" 30; then
+    if ! wait_for_http "http://${host}:${port}/health/database" "$HEALTH_TIMEOUT"; then
         log "${name} serves but its OpenSearch does not answer"
         return 1
     fi
@@ -511,6 +570,18 @@ install_on() {
 # Runs on every exit, including a signal, so nothing is left behind and nothing goes unreported.
 finish() {
     local status=$? host
+
+    # A server this run drained and never put back. Only a signal during the install arrives here
+    # with this still set: every decided failure has already reported itself through note_down.
+    #
+    # Reported, not returned to the pool. deploy.sh has its own HUP handler and may be rolling the
+    # binary back at this moment, so what the server is serving is not known from here, and putting
+    # it back could route traffic at a host that is about to restart. Saying so is what was missing:
+    # an interrupt used to leave a server in maintenance with no mail and no journal line naming it.
+    if [ -n "$CURRENT_TARGET" ]; then
+        log "${CURRENT_NAME} was left out of the pool by a run that did not finish"
+        note_down "$CURRENT_NAME" "$CURRENT_TARGET"
+    fi
 
     for host in $STAGED_ON; do
         # shellcheck disable=SC2029  # the path is built here on purpose: this run owns it.

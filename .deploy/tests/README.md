@@ -18,9 +18,9 @@ boot; nothing else needs it.
 
 | Suite | Runs against | Covers |
 | --- | --- | --- |
-| `server/suite.sh` | systemd 255 on Ubuntu 24.04, with a user manager and lingering | the first install, a deploy with no privilege, `check` and each failure it reports, the memory arm per variant, the binary swap under signal, rollback, and the interrupt paths |
+| `server/suite.sh` | systemd 255 on Ubuntu 24.04, with a user manager and lingering | the first install, a deploy with no privilege, `check` and each failure it reports, the memory arm per variant, the binary swap under signal, rollback, the interrupt paths, and the per-host `READY_TIMEOUT` with the unit watch that makes a long one safe |
 | `loadbalancer/haproxy-suite.sh` | HAProxy 2.8 | reading `show stat` by field name, multi-backend targets, the drain cycle, a transitional `UP 1/100` status, backups |
-| `loadbalancer/rollout-suite.sh` | HAProxy 2.8 with two backends over three servers | the four phases, the lock, ordering, preflight, each failure-resolution path, cleanup, and the record |
+| `loadbalancer/rollout-suite.sh` | HAProxy 2.8 with two backends over three servers | the four phases, the lock, ordering, preflight, each failure-resolution path, cleanup, the record, an interrupt during an install, and the deadline each server asks for |
 
 ## Why containers rather than mocks
 
@@ -33,6 +33,8 @@ Every bug these suites caught was one a mock would have hidden:
   in, which shifted every field after it.
 * A hard link is refused when the caller does not own the file, because `fs.protected_hardlinks` is
   on by default.
+* `Type=exec` reports the exec, not readiness, so systemd calls a binary that exits at once started
+  and a health wait watching only the port sits there until the deadline.
 
 ## Writing a case
 

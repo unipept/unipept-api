@@ -54,9 +54,10 @@ A rollout runs in four phases, and the order is the point:
    `deploy.sh check` with the real binary staged, so a build that cannot run on a host is found
    before another host is drained. Every problem in the fleet is reported together.
 3. **Update** — one server at a time. It leaves the pool, takes the binary, and returns to the pool
-   before the next one starts.
+   before the next one starts. Each server is given the deadline it asked for in phase 2.
 4. **Finish** — always: staging cleared on every server, one journal line per server, and an email if
-   a server needs attention.
+   a server needs attention — including a server this run drained and never put back, which is what
+   an interrupted install leaves behind.
 
 **At most one server is ever outside the pool.** A failure stops the run, so the servers after it are
 never attempted. The capacity guard refuses to drain the last server that is UP — a backup counts as
@@ -64,7 +65,24 @@ capacity — and `--allow-downtime` is how an operator overrides that deliberate
 
 A server whose deploy failed is rolled back and, if it comes back healthy, returned to the pool: it is
 serving a version that was known good, so holding it out would cost capacity for nothing. Only a
-server that cannot be routed to is left out, and that is the case that sends mail.
+server that cannot be routed to is left out, and that is the case that sends mail. Health is polled
+rather than sampled once, because every one of those checks lands just after a restart.
+
+## A slow host sets its own deadline
+
+`READY_TIMEOUT` in a server's environment file is how long that server may take to answer `/health`
+after a restart. It belongs to the host, beside `VARIANT`, because it describes the same thing: a
+host holding the preloaded build on a spinning disk reads the whole index before it answers, and
+needs far longer than the rest. One deadline for the fleet is wrong in both directions — too short
+for that host, or every other host waiting its hour before a real failure is reported.
+
+`deploy.sh check` reports the value and the rollout gives each server its own. A server too old to
+report one falls back to `READY_TIMEOUT` in `rollout.conf`.
+
+A long deadline is safe because the wait watches the unit as well as the port. `Type=exec` reports
+the exec rather than readiness, so a binary that exits at once and one that is still loading both
+look started and neither answers. The pid separates them, and a binary that already gave up is
+reported at once instead of at the deadline.
 
 ## Reading what happened
 

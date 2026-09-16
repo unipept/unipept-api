@@ -73,7 +73,13 @@ if [ -n "$upload" ]; then cat "$upload" >> /tmp/mail.txt; exit 0; fi
 for a in "$@"; do
   case $a in
     *"/health/database"*)
-      if [ -f /tmp/no-database ] && [[ $a == *"$(cat /tmp/no-database)"* ]]; then echo -n 503; exit 0; fi ;;
+      if [ -f /tmp/no-database ] && [[ $a == *"$(cat /tmp/no-database)"* ]]; then echo -n 503; exit 0; fi
+      # "<host> <epoch>": down until that second, the way a restarted OpenSearch is. What tells a
+      # server that is still coming back from one that is broken is only how long it takes.
+      if [ -f /tmp/no-database-until ]; then
+        read -r who until_when < /tmp/no-database-until
+        if [[ $a == *"$who"* ]] && [ "$(date +%s)" -lt "$until_when" ]; then echo -n 503; exit 0; fi
+      fi ;;
   esac
 done
 for a in "$@"; do case $a in *"/health"*) [ -f /tmp/unhealthy ] && { echo -n 503; exit 0; } ;; esac; done
@@ -419,6 +425,126 @@ check "did not roll back"    "$(grep -c '^ROLLBACK' /tmp/ssh.log)" "0"
 check "says it cannot ask"   "$(grep -c 'cannot be reached to ask' /tmp/r21.txt)" "1"
 check "left out of the pool" "$($H state all_handlers/selma)" "MAINT"
 cp /tmp/ssh.keep /usr/local/bin/ssh; rm -f /tmp/gone
+
+reset_fleet
+section "18. a run interrupted during an install reports the server it left out"
+# The one path that used to leave a server in maintenance and tell nobody: the traps hand back to the
+# global handler once the server is in maint, so a signal during the install reached `finish` with
+# nothing recorded. It has to be mailed and journalled like every other server left out of the pool.
+cat > /usr/local/bin/ssh <<'EOF'
+#!/usr/bin/env bash
+args=("$@"); cmd=""
+for a in "${args[@]}"; do case $a in -o|BatchMode=yes|ConnectTimeout=10|ServerAliveInterval=15|ServerAliveCountMax=4|-n) ;; *) cmd="$cmd $a" ;; esac; done
+echo "SSH:$cmd" >> /tmp/ssh.log
+case "$cmd" in
+  *"deploy.sh check"*) printf 'variant=hybrid\nport=80\nindex_version=2026.09-test\nproblems=0\n'; exit 0 ;;
+  # Still installing when the signal arrives, which is where a real deploy spends its minutes. The
+  # duration is the marker the case kills it by, so it is distinctive rather than round.
+  *"deploy --from"*)   sleep 971; exit 0 ;;
+  *status*)            printf 'version=2.5.3\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n'; exit 0 ;;
+esac
+exit 0
+EOF
+chmod +x /usr/local/bin/ssh
+: > /tmp/ssh.log; : > /tmp/mail.txt; : > /tmp/logged.txt
+$R --version v2.6.0 --only patty --allow-downtime >/tmp/r22.txt 2>&1 &
+runner=$!
+# Signal it once it is inside the install, which is after the drain and the wait for an empty
+# server. Bounded, so a run that never gets there fails the case instead of hanging the suite.
+waited=0
+until grep -q 'deploy --from' /tmp/ssh.log 2>/dev/null; do
+  sleep 1; waited=$((waited + 1))
+  [ "$waited" -lt 60 ] || break
+done
+check "reached the install"   "$(grep -c 'deploy --from' /tmp/ssh.log)" "1"
+kill -TERM $runner 2>/dev/null
+# The install is a foreground child, and bash runs a trap only once that returns, so the stand-in
+# deploy has to end before `finish` does anything. Ending it here is what a dying ssh does to a real
+# one; without it the case waits out the whole sleep for a signal it has already delivered.
+pkill -f 'sleep 971' >/dev/null 2>&1
+wait $runner 2>/dev/null
+check "left in maintenance"   "$($H state all_handlers/patty)" "MAINT"
+check "said so"               "$(grep -c 'left out of the pool by a run that did not finish' /tmp/r22.txt)" "1"
+check "mailed about it"       "$(grep -c 'needs attention' /tmp/mail.txt)" "1"
+check "named the server"      "$(grep -c 'patty' /tmp/mail.txt)" "1"
+check "journalled it"         "$(grep -c 'server=patty.*outcome=needs-attention' /tmp/logged.txt)" "1"
+check "did not roll back"     "$(grep -c '^ROLLBACK' /tmp/ssh.log)" "0"
+
+reset_fleet
+section "19. a server is given time to answer, not one sample"
+# Both callers of `serving` reach it just after the server was restarted, and a process that has come
+# back can miss a first connection without anything being wrong. The database route the more easily:
+# it gives OpenSearch two seconds of its own. Sampled once, a server that is fine was left out of the
+# pool and mailed about.
+cat > /usr/local/bin/ssh <<'EOF'
+#!/usr/bin/env bash
+args=("$@"); cmd=""
+for a in "${args[@]}"; do case $a in -o|BatchMode=yes|ConnectTimeout=10|ServerAliveInterval=15|ServerAliveCountMax=4|-n) ;; *) cmd="$cmd $a" ;; esac; done
+echo "SSH:$cmd" >> /tmp/ssh.log
+case "$cmd" in
+  *"deploy.sh check"*) printf 'variant=hybrid\nport=80\nindex_version=2026.09-test\nproblems=0\n'; exit 0 ;;
+  # Installs nothing and leaves the database route slow to come back, which is the state a restarted
+  # OpenSearch is in. 15 seconds: beyond any single sample, well inside HEALTH_TIMEOUT.
+  *"deploy --from"*)   printf 'selma %s\n' "$(( $(date +%s) + 15 ))" > /tmp/no-database-until; exit 1 ;;
+  *status*)            printf 'version=2.5.3\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n'; exit 0 ;;
+esac
+exit 0
+EOF
+chmod +x /usr/local/bin/ssh
+rm -f /tmp/no-database-until; : > /tmp/ssh.log; : > /tmp/mail.txt
+$R --version v2.6.0 --only selma --allow-downtime >/tmp/r23.txt 2>&1
+check "stopped the run"        "$(grep -c 'stopped at selma' /tmp/r23.txt)" "1"
+check "waited for the route"   "$(printf '%s' "$($H state all_handlers/selma)" | cut -d' ' -f1)" "UP"
+check "and the db backend too" "$(printf '%s' "$($H state db_handlers/selma)" | cut -d' ' -f1)" "UP"
+check "not called down"        "$(grep -c 'does not answer both health routes' /tmp/r23.txt)" "0"
+check "no urgent mail"         "$(grep -c 'needs attention' /tmp/mail.txt)" "0"
+rm -f /tmp/no-database-until
+
+reset_fleet
+section "20. each server is given the deadline it asks for"
+# rick holds the preloaded build on a slow disk and reads its index before it answers, so it needs far
+# longer than the rest. One deadline for the fleet is wrong either way: too short for rick, or every
+# other server waiting rick's hour before a real failure is reported.
+cat > /usr/local/bin/ssh <<'EOF'
+#!/usr/bin/env bash
+args=("$@"); cmd=""
+for a in "${args[@]}"; do case $a in -o|BatchMode=yes|ConnectTimeout=10|ServerAliveInterval=15|ServerAliveCountMax=4|-n) ;; *) cmd="$cmd $a" ;; esac; done
+echo "SSH:$cmd" >> /tmp/ssh.log
+host=$(printf '%s' "$cmd" | sed -n 's/.*@\([a-z]*\).*/\1/p')
+case "$cmd" in
+  *"deploy.sh check"*)
+    # rick names its own; patty answers like a server whose deploy.sh is too old to report one.
+    printf 'variant=hybrid\nport=80\nindex_version=2026.09-test\nproblems=0\n'
+    [ "$host" = rick ] && printf 'ready_timeout=4200\n'
+    exit 0 ;;
+  *status*) printf 'version=2.6.0\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n'; exit 0 ;;
+esac
+exit 0
+EOF
+chmod +x /usr/local/bin/ssh
+: > /tmp/ssh.log
+$R --version v2.6.0 --only rick --allow-downtime >/tmp/r24.txt 2>&1
+check "rick gets its own"   "$(grep -c 'deploy --from.*--timeout 4200' /tmp/ssh.log)" "1"
+: > /tmp/ssh.log
+$R --version v2.6.0 --only patty --allow-downtime >/tmp/r25.txt 2>&1
+check "patty falls back"    "$(grep -c 'deploy --from.*--timeout 900' /tmp/ssh.log)" "1"
+# A value that is not seconds must not reach `$((SECONDS + timeout))` on the server.
+cat > /usr/local/bin/ssh <<'EOF'
+#!/usr/bin/env bash
+args=("$@"); cmd=""
+for a in "${args[@]}"; do case $a in -o|BatchMode=yes|ConnectTimeout=10|ServerAliveInterval=15|ServerAliveCountMax=4|-n) ;; *) cmd="$cmd $a" ;; esac; done
+echo "SSH:$cmd" >> /tmp/ssh.log
+case "$cmd" in
+  *"deploy.sh check"*) printf 'variant=hybrid\nport=80\nindex_version=2026.09-test\nready_timeout=soon\nproblems=0\n'; exit 0 ;;
+  *status*) printf 'version=2.6.0\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n'; exit 0 ;;
+esac
+exit 0
+EOF
+chmod +x /usr/local/bin/ssh
+: > /tmp/ssh.log
+$R --version v2.6.0 --only selma --allow-downtime >/tmp/r26.txt 2>&1
+check "a bad value is not passed on" "$(grep -c 'deploy --from.*--timeout 900' /tmp/ssh.log)" "1"
+cp /tmp/ssh.keep /usr/local/bin/ssh
 
 # The fake backends hold stdout open; without this a pipe on the outside never sees EOF.
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1

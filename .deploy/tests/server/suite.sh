@@ -355,6 +355,20 @@ systemctl restart unipept-api-ports >/dev/null 2>&1
 check "still one redirect rule" "$(iptables -t nat -S UNIPEPT_API | grep -c REDIRECT)" "$before"
 check "80 still reaches it"     "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:80/health)" "200"
 
+section "install.sh says what is still wrong"
+# A first install, before anybody has edited the environment file: the check has to report the
+# placeholder index rather than let the operator find out at the first deploy.
+cp /opt/unipept-api/etc/unipept-api.env /tmp/env.good
+sed -i 's#^INDEX_LOCATION=.*#INDEX_LOCATION=/mnt/nothing-here#' /opt/unipept-api/etc/unipept-api.env
+$R/server/install.sh >/tmp/inst2.log 2>&1
+check "still exits 0"        "$?" "0"
+check "names the bad index"  "$([ "$(grep -c '/mnt/nothing-here' /tmp/inst2.log)" -ge 1 ] && echo yes)" "yes"
+check "says what to do next" "$(grep -c 'what to fix before deploying' /tmp/inst2.log)" "1"
+cp /tmp/env.good /opt/unipept-api/etc/unipept-api.env
+systemctl restart unipept-api-ports >/dev/null 2>&1
+$R/server/install.sh >/tmp/inst3.log 2>&1
+check "and says so once fixed" "$(grep -c 'this host is ready' /tmp/inst3.log)" "1"
+
 echo "== install.sh is idempotent and keeps an edited env file =="
 $R/server/install.sh >/dev/null 2>&1; check "exit 0" "$?" "0"
 check "PORT kept" "$(sed -n 's/^PORT=//p' /opt/unipept-api/etc/unipept-api.env)" "8099"

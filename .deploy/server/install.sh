@@ -110,3 +110,21 @@ Still to do on this host:
 HAProxy keeps its server lines on port 80: the redirect installed here sends 80 to PORT inside this
 host, so nothing on the network changes. Changing PORT later means re-running this script.
 EOF
+
+# What is still wrong, now, rather than at the first deploy.
+#
+# Everything above is installed with values nobody has edited yet, so this is expected to report
+# problems on a first run. Saying what they are turns "install, deploy, read a failure, edit, deploy
+# again" into "install, read this list, edit, re-run".
+printf '\n' >&2
+log "checking this host against ${ENV_FILE}"
+
+# One call: the key=value lines are not useful here and go to /dev/null, the problems go to the
+# terminal on stderr, and the exit status decides what to say about them.
+if as_user "${ROOT}/lib/deploy.sh" check >/dev/null; then
+    log "this host is ready; the deploy above is the only step left"
+else
+    printf '\n' >&2
+    log "the lines above are what to fix before deploying. Then re-run this script, or:"
+    log "  sudo -u ${USER} ${ROOT}/lib/deploy.sh check"
+fi

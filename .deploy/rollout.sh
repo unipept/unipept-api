@@ -39,6 +39,9 @@ if [ -f "${HERE}/rollout.conf" ]; then
     source "${HERE}/rollout.conf"
 fi
 
+# What `die` raises when it is called from inside a subshell.
+trap 'exit 1' USR1
+
 export HAPROXY_SOCKET NOTIFY_TO NOTIFY_SMTP
 
 usage() {
@@ -509,8 +512,7 @@ do_status() {
 }
 
 main() {
-    # Once, through a variable: read_inventory dies on a malformed line, and inside a process
-    # substitution that would kill only the subshell while this carried on with a short fleet.
+    # Read once and passed around, rather than re-read by each phase that wants it.
     local inventory
     inventory=$(read_inventory) || exit 1
     validate_inventory "$inventory"

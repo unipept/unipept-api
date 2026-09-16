@@ -18,6 +18,9 @@ set -euo pipefail
 # shellcheck source-path=SCRIPTDIR source=../lib.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 
+# What `die` raises when it is called from inside a subshell.
+trap 'exit 1' USR1
+
 : "${HAPROXY_SOCKET:=/run/haproxy/haproxy.sock}"
 
 usage() {

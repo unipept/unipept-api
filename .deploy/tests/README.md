@@ -5,18 +5,22 @@ a mock gets wrong too. So these suites run against a real systemd and a real HAP
 versions production runs.
 
 ```bash
-.deploy/tests/run-tests.sh            # every suite
+.deploy/tests/run-tests.sh            # every suite, about four minutes
 .deploy/tests/run-tests.sh server     # install.sh and deploy.sh
+.deploy/tests/run-tests.sh haproxy    # haproxy.sh
+.deploy/tests/run-tests.sh rollout    # rollout.sh
 ```
 
 Docker is the only requirement. The server suite runs its container `--privileged` so systemd can
-boot.
+boot; nothing else needs it.
 
 ## What each suite covers
 
 | Suite | Runs against | Covers |
 | --- | --- | --- |
 | `server/suite.sh` | systemd 255 on Ubuntu 24.04, with a user manager and lingering | the first install, a deploy with no privilege, `check` and each failure it reports, the memory arm per variant, the binary swap under signal, rollback, and the interrupt paths |
+| `loadbalancer/haproxy-suite.sh` | HAProxy 2.4 | reading `show stat` by field name, multi-backend targets, the drain cycle, a transitional `UP 1/100` status, backups |
+| `loadbalancer/rollout-suite.sh` | HAProxy 2.4 with two backends over three servers | the four phases, the lock, ordering, preflight, each failure-resolution path, cleanup, and the record |
 
 ## Why containers rather than mocks
 
@@ -25,6 +29,8 @@ Every bug these suites caught was one a mock would have hidden:
 * `systemctl --user` needs `XDG_RUNTIME_DIR`, which only exists when lingering is really enabled.
 * `AmbientCapabilities=` makes a *user* unit fail to start, with exit 218. Nothing in the
   documentation says so.
+* HAProxy's `status` field is not one word: it reads `UP 1/100` while a server is being checked back
+  in, which shifted every field after it.
 * A hard link is refused when the caller does not own the file, because `fs.protected_hardlinks` is
   on by default.
 
@@ -46,12 +52,13 @@ Two rules worth keeping:
 1. **Make a new case fail first.** Every case here was run against the unfixed code and observed to
    fail. A case that has never failed is a case that may be asserting nothing — the swap test is the
    clearest example, and it drives the old two-move pair to prove the point.
-2. **Reset what you changed.** A case that leaves the host altered makes the next one fail, and the
-   failure then points at the wrong thing.
+2. **Reset what you changed.** `reset_fleet` in the rollout suite puts every server back in the pool
+   before a case starts. Without it one case's leftovers fail the next, and the failure points at
+   the wrong thing.
 
 ## Not in CI
 
-These do not run in GitHub Actions yet. The server suite needs a privileged container with the host's
-cgroups mounted, and whether that works on a hosted runner is untested — so it is a deliberate gap
-rather than an oversight. `ci.yml` runs `shellcheck` over every script here, which catches the class
-of mistake that does not need a container.
+These do not run in GitHub Actions yet. The server suite needs a privileged container with the
+host's cgroups mounted, and whether that works on a hosted runner is untested — so it is a
+deliberate gap rather than an oversight. `ci.yml` runs `shellcheck` over every script here, which
+catches the class of mistake that does not need a container.

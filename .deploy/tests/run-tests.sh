@@ -4,12 +4,14 @@
 #
 #   run-tests.sh                  every suite
 #   run-tests.sh server           install.sh and deploy.sh, against a real systemd user manager
+#   run-tests.sh haproxy          haproxy.sh, against a real HAProxy
+#   run-tests.sh rollout          rollout.sh, against a real HAProxy with two backends
 #
-# A container rather than a mock, because what these scripts get wrong is exactly what a mock gets
-# wrong too: `systemctl --user` without an init, lingering, a user unit that cannot drop capabilities.
-# The image is built from the version production runs.
+# Containers rather than mocks, because what these scripts get wrong is exactly what a mock gets wrong
+# too: `systemctl --user` without an init, a `show stat` field layout, a status that reads "UP 1/100"
+# while a server is being checked back in. Both images are built from the versions production runs.
 #
-# Needs Docker, and --privileged so systemd can boot.
+# Needs Docker, and the server suite needs to run a container with --privileged so systemd can boot.
 
 set -euo pipefail
 
@@ -17,6 +19,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 readonly DEPLOY="${HERE}/.."
 readonly SERVER_IMAGE=unipept-deploy-test-server
+readonly LB_IMAGE=unipept-deploy-test-loadbalancer
 readonly CONTAINER=unipept-deploy-test
 
 log() { printf '\n\033[1m%s\033[0m\n' "$*"; }
@@ -52,12 +55,33 @@ run_server_suite() {
     docker exec "$CONTAINER" bash /deploy/tests/server/suite.sh
 }
 
+run_lb_suite() {
+    local suite=$1 title=$2
+
+    log "Building the load balancer image"
+    docker build -q -t "$LB_IMAGE" "${HERE}/loadbalancer" >/dev/null
+
+    log "$title"
+    docker run --rm --user root \
+        -v "${DEPLOY}:/deploy:ro" \
+        -v "${HERE}/loadbalancer:/test:ro" \
+        --entrypoint bash "$LB_IMAGE" -c \
+        "mkdir -p /etc/haproxy && cp /test/haproxy.cfg /etc/haproxy/haproxy.cfg && bash /deploy/tests/loadbalancer/${suite}"
+}
+
 cleanup() { docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 case "${1:-all}" in
-    server | all) run_server_suite ;;
-    *) sed -n '2,10p' "${BASH_SOURCE[0]}" >&2; exit 2 ;;
+    server)  run_server_suite ;;
+    haproxy) run_lb_suite haproxy-suite.sh "HAProxy suite: haproxy.sh" ;;
+    rollout) run_lb_suite rollout-suite.sh "Rollout suite: rollout.sh" ;;
+    all)
+        run_server_suite
+        run_lb_suite haproxy-suite.sh "HAProxy suite: haproxy.sh"
+        run_lb_suite rollout-suite.sh "Rollout suite: rollout.sh"
+        ;;
+    *) sed -n '2,12p' "${BASH_SOURCE[0]}" >&2; exit 2 ;;
 esac
 
 log "Every suite passed"

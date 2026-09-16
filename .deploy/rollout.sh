@@ -20,8 +20,14 @@ source "${HERE}/lib.sh"
 
 readonly HAPROXY="${HERE}/loadbalancer/haproxy.sh"
 
-# Defaults, overridden by rollout.conf beside this script.
-INVENTORY="${HERE}/servers.conf"
+# This host's own settings live outside the checkout, because the inventory names the fleet and the
+# configuration names where failures are emailed. Beside the script is the fallback, so running from
+# a checkout still works while developing.
+CONFIG_DIR=/etc/unipept-rollout
+[ -d "$CONFIG_DIR" ] || CONFIG_DIR=$HERE
+
+# Defaults, overridden by rollout.conf.
+INVENTORY="${CONFIG_DIR}/servers.conf"
 HAPROXY_SOCKET=/run/haproxy/haproxy.sock
 # The service user owns the binary directory and restarts its own user unit, so a deploy needs no
 # privilege and the rollout carries no sudo.
@@ -34,9 +40,9 @@ LOCK_FILE=/tmp/unipept-rollout.lock
 NOTIFY_TO=''
 NOTIFY_SMTP=127.0.0.1:25
 
-if [ -f "${HERE}/rollout.conf" ]; then
+if [ -f "${CONFIG_DIR}/rollout.conf" ]; then
     # shellcheck source=/dev/null  # written on the load balancer, not in this repository.
-    source "${HERE}/rollout.conf"
+    source "${CONFIG_DIR}/rollout.conf"
 fi
 
 # What `die` raises when it is called from inside a subshell.
@@ -86,6 +92,11 @@ FAILED_UPDATE=''
 NEEDS_ATTENTION=''
 # Who to name in the record and the mail. SUDO_USER first, so a run through sudo names the person.
 readonly RUN_BY="${SUDO_USER:-$(id -un)}"
+# Everyone logs in as the same account, so the name alone cannot say who ran this. The address they
+# came from is not attribution, but it is the difference between "someone" and "someone at that
+# machine" when a record is read back months later.
+ssh_connection=${SSH_CONNECTION:-}
+readonly RUN_FROM="${ssh_connection%% *}"
 # The load balancer's own scratch directory, and where a run stages on a server.
 TMP_DIR=''
 readonly REMOTE_STAGING="/tmp/unipept-api-rollout.$$"
@@ -479,7 +490,7 @@ record_run() {
 
     for name in "${!STATUS[@]}"; do
         logger -t unipept-rollout -- \
-            "version=${VERSION} server=${name} by=${RUN_BY} outcome=deployed $(printf '%s' "${STATUS[$name]}" | tr '\n' ' ')"
+            "version=${VERSION} server=${name} by=${RUN_BY} from=${RUN_FROM:-local} outcome=deployed $(printf '%s' "${STATUS[$name]}" | tr '\n' ' ')"
     done
     for name in $FAILED_UPDATE; do
         case $name in \(*) continue ;; esac
@@ -489,7 +500,7 @@ record_run() {
         case $name in \[*) continue ;; esac
         logger -t unipept-rollout -- "version=${VERSION} server=${name} by=${RUN_BY} outcome=needs-attention"
     done
-    logger -t unipept-rollout -- "version=${VERSION} by=${RUN_BY} exit=${status}"
+    logger -t unipept-rollout -- "version=${VERSION} by=${RUN_BY} from=${RUN_FROM:-local} exit=${status}"
 }
 
 # Reads the fleet without changing any of it. What to reach for after a run stopped part way, or

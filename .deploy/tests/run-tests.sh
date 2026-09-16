@@ -6,6 +6,7 @@
 #   run-tests.sh server           install.sh and deploy.sh, against a real systemd user manager
 #   run-tests.sh haproxy          haproxy.sh, against a real HAProxy
 #   run-tests.sh rollout          rollout.sh, against a real HAProxy with two backends
+#   run-tests.sh lb-install       loadbalancer/install.sh, against a real HAProxy
 #
 # Containers rather than mocks, because what these scripts get wrong is exactly what a mock gets wrong
 # too: `systemctl --user` without an init, a `show stat` field layout, a status that reads "UP 1/100"
@@ -76,10 +77,12 @@ case "${1:-all}" in
     server)  run_server_suite ;;
     haproxy) run_lb_suite haproxy-suite.sh "HAProxy suite: haproxy.sh" ;;
     rollout) run_lb_suite rollout-suite.sh "Rollout suite: rollout.sh" ;;
+    lb-install) run_lb_suite install-suite.sh "Load balancer install suite" ;;
     all)
         run_server_suite
         run_lb_suite haproxy-suite.sh "HAProxy suite: haproxy.sh"
         run_lb_suite rollout-suite.sh "Rollout suite: rollout.sh"
+        run_lb_suite install-suite.sh "Load balancer install suite"
         ;;
     *) sed -n '2,12p' "${BASH_SOURCE[0]}" >&2; exit 2 ;;
 esac

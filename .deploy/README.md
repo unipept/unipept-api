@@ -27,6 +27,18 @@ One server, on that server, as the `unipept` user:
 /opt/unipept-api/lib/deploy.sh rollback
 ```
 
+On the load balancer, once:
+
+```bash
+sudo .deploy/loadbalancer/install.sh
+```
+
+It installs the scripts in `/opt/unipept-rollout`, writes this host's configuration to
+`/etc/unipept-rollout` — outside any checkout, since the inventory names the fleet — and then audits
+what a rollout depends on: the admin socket, the backends HAProxy is **actually running**, the
+health-check URIs, and whether every server in the inventory can be reached. It never edits
+`haproxy.cfg`; where something is missing it writes the fragment out and names the file.
+
 Every server, from the load balancer:
 
 ```bash

@@ -8,5 +8,6 @@ USER root
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -qq \
  && apt-get install -y -qq --no-install-recommends socat curl procps netcat-openbsd \
+      openssh-client sudo iproute2 \
  && rm -rf /var/lib/apt/lists/* \
- && command -v socat && command -v curl && command -v pgrep
+ && command -v socat && command -v curl && command -v pgrep && command -v scp && command -v sudo

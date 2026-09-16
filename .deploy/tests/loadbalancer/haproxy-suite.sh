@@ -27,18 +27,18 @@ source /deploy/tests/lib.sh
 
 echo "== haproxy version =="; haproxy -v | head -1
 
-echo "== 1. state and sessions are read by column name =="
+section "1. state and sessions are read by column name"
 check "patty is UP"        "$($H state all_handlers/patty)" "UP"
 check "sessions is 0"      "$($H sessions all_handlers/patty)" "0"
 check "up-count counts 3"  "$($H up-count all_handlers)" "3"
 
-echo "== 2. an unknown server is refused, not silently wrong =="
+section "2. an unknown server is refused, not silently wrong"
 $H state all_handlers/nosuch >/tmp/e1 2>&1; check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says not in config" "$(grep -c 'is not in every one of' /tmp/e1)" "1"
 $H state bogus >/tmp/e2 2>&1; check "bad target exit 1" "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says expected form" "$(grep -c 'expected <backend' /tmp/e2)" "1"
 
-echo "== 3. drain, then maint, then ready =="
+section "3. drain, then maint, then ready"
 $H drain all_handlers/patty >/dev/null 2>&1
 check "state is DRAIN"     "$($H state all_handlers/patty)" "DRAIN"
 check "up-count drops to 2" "$($H up-count all_handlers)" "2"
@@ -51,7 +51,7 @@ $H wait-up all_handlers/patty 60 >/dev/null 2>&1; check "wait-up exit 0" "$?" "0
 back=$($H state all_handlers/patty); check "back to UP" "${back%% *}" "UP"
 check "up-count back to 3" "$($H up-count all_handlers)" "3"
 
-echo "== 3b. one call drains and restores every backend a server is in =="
+section "3b. one call drains and restores every backend a server is in"
 $H drain all_handlers,db_handlers/patty >/dev/null 2>&1
 check "drained in both"   "$($H states all_handlers,db_handlers/patty)" "all_handlers=DRAIN db_handlers=DRAIN "
 $H wait-empty all_handlers,db_handlers/patty 30 >/dev/null 2>&1; check "one wait covers both" "$?" "0"
@@ -61,13 +61,13 @@ $H ready all_handlers,db_handlers/patty >/dev/null 2>&1
 $H wait-up all_handlers,db_handlers/patty 60 >/dev/null 2>&1; check "one wait-up covers both" "$?" "0"
 check "least-up across both" "$($H least-up all_handlers,db_handlers)" "3"
 
-echo "== 3c. a backend that does not hold the server is refused =="
+section "3c. a backend that does not hold the server is refused"
 $H drain all_handlers,nosuch/patty >/tmp/e4 2>&1; check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
 check "names the set" "$(grep -c 'is not in every one of' /tmp/e4)" "1"
 check "patty untouched" "$($H state all_handlers/patty | cut -d' ' -f1)" "UP"
 $H state all_handlers,db_handlers/patty >/tmp/e5 2>&1; check "state refuses a list" "$([ $? -ne 0 ] && echo yes)" "yes"
 
-echo "== 3d. a transitional status does not shift the session count =="
+section "3d. a transitional status does not shift the session count"
 # rick has `fall 10`, so HAProxy reports "UP 1/10" for it: the counter must not be read as scur.
 rick_state=$($H state all_handlers/rick)
 check "state keeps the counter"  "$(printf '%s' "$rick_state" | grep -cE '^UP')" "1"
@@ -75,25 +75,25 @@ check "sessions is a number"     "$(printf '%s' "$($H sessions all_handlers/rick
 $H wait-empty all_handlers/rick 6 >/dev/null 2>&1
 check "wait-empty sees it empty" "$?" "0"
 
-echo "== 4. a backup server counts as capacity =="
+section "4. a backup server counts as capacity"
 $H maint all_handlers/patty >/dev/null 2>&1
 $H maint all_handlers/selma >/dev/null 2>&1
 check "only rick left"     "$($H up-count all_handlers)" "1"
 $H ready all_handlers/patty >/dev/null 2>&1; $H ready all_handlers/selma >/dev/null 2>&1
 
-echo "== 5. wait-empty gives up rather than hanging =="
+section "5. wait-empty gives up rather than hanging"
 $H drain all_handlers/selma >/dev/null 2>&1
 start=$SECONDS
 $H wait-empty all_handlers/selma 4 >/dev/null 2>&1
 check "wait-empty on an idle server is instant" "$([ $((SECONDS-start)) -lt 4 ] && echo yes)" "yes"
 $H ready all_handlers/selma >/dev/null 2>&1
 
-echo "== 6. no socket is a clear error =="
+section "6. no socket is a clear error"
 HAPROXY_SOCKET=/run/haproxy/absent.sock $H state all_handlers/patty >/tmp/e3 2>&1
 check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
 check "names the socket" "$(grep -c 'no HAProxy socket' /tmp/e3)" "1"
 
-echo "== 7. a socket that accepts and never answers is reported, not waited on =="
+section "7. a socket that accepts and never answers is reported, not waited on"
 # Case 6 covers a socket that is not there. This is one that is there and says nothing: a wedged
 # HAProxy, or a stats socket whose backlog is never served. The call has to come back and say so,
 # because every poll in this script is built on it.

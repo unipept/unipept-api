@@ -47,7 +47,12 @@ section "a group of cases"
 ```
 
 `check` never stops the suite, so one run reports everything that is wrong rather than the first
-thing. `summary` at the end sets the exit status.
+thing. `summary` at the end sets the exit status and repeats every failure, because a run is long
+enough that the first one has scrolled away by the time it ends.
+
+**Head every group with `section`, not `echo`.** A failure prints the section it is in, which is
+what makes `FAIL exit non-zero` identify one case rather than one of twelve. A heading printed with
+`echo` records nothing, so its failures would name no case.
 
 Two rules worth keeping:
 

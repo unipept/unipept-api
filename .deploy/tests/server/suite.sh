@@ -10,7 +10,7 @@ R=/deploy
 # shellcheck source-path=SCRIPTDIR source=../lib.sh
 source /deploy/tests/lib.sh
 
-echo "== install.sh (the one root step) =="
+section "install.sh (the one root step)"
 $R/server/install.sh >/tmp/install.log 2>&1; check "exit 0" "$?" "0"
 check "linger on"      "$(loginctl show-user unipept -p Linger --value)" "yes"
 check "bin dir owned"  "$(stat -c %U /opt/unipept-api/bin)" "unipept"
@@ -54,7 +54,7 @@ EOF
   echo "$d"
 }
 
-echo "== deploy as the unipept user, no sudo =="
+section "deploy as the unipept user, no sudo"
 d1=$(stage 2.6.0 yes)
 as_user "/opt/unipept-api/lib/deploy.sh deploy --from $d1/unipept-api-2.6.0-x86_64-linux-gnu-hybrid --timeout 30" >/tmp/d1.log 2>&1
 check "exit 0" "$?" "0"
@@ -62,30 +62,30 @@ check "unit active"    "$(as_user 'systemctl --user is-active unipept-api')" "ac
 check "health answers" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8099/health)" "200"
 check "version live"   "$(/opt/unipept-api/bin/unipept-api --version)" "unipept-api 2.6.0"
 
-echo "== the journal has the unit's output =="
+section "the journal has the unit's output"
 check "journal readable as root" "$([ -n "$(journalctl -n 20 _SYSTEMD_USER_UNIT=unipept-api.service 2>/dev/null)" ] && echo yes)" "yes"
 
-echo "== status, read the way the rollout reads it =="
+section "status, read the way the rollout reads it"
 as_user "/opt/unipept-api/lib/deploy.sh status" > /tmp/st.txt 2>/dev/null
 check "version line" "$(sed -n 's/^version=//p' /tmp/st.txt)" "2.6.0"
 check "variant line" "$(sed -n 's/^variant=//p' /tmp/st.txt)" "hybrid"
 check "active line"  "$(sed -n 's/^active=//p' /tmp/st.txt)" "active"
 
-echo "== upgrade keeps the old binary =="
+section "upgrade keeps the old binary"
 d2=$(stage 2.7.0 yes)
 as_user "/opt/unipept-api/lib/deploy.sh deploy --from $d2/unipept-api-2.7.0-x86_64-linux-gnu-hybrid --timeout 30" >/tmp/d2.log 2>&1
 check "exit 0" "$?" "0"
 check "new version" "$(/opt/unipept-api/bin/unipept-api --version)" "unipept-api 2.7.0"
 check "previous kept" "$(/opt/unipept-api/bin/unipept-api.previous --version)" "unipept-api 2.6.0"
 
-echo "== an unhealthy deploy rolls itself back =="
+section "an unhealthy deploy rolls itself back"
 d3=$(stage 2.9.0 no)
 as_user "/opt/unipept-api/lib/deploy.sh deploy --from $d3/unipept-api-2.9.0-x86_64-linux-gnu-hybrid --timeout 12" >/tmp/d3.log 2>&1
 check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
 check "back on the previous" "$(/opt/unipept-api/bin/unipept-api --version)" "unipept-api 2.7.0"
 check "serving again" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8099/health)" "200"
 
-echo "== a corrupted binary is refused before anything is installed =="
+section "a corrupted binary is refused before anything is installed"
 d4=$(stage 3.0.0 yes)
 echo tampered >> "$d4/unipept-api-3.0.0-x86_64-linux-gnu-hybrid"
 as_user "/opt/unipept-api/lib/deploy.sh deploy --from $d4/unipept-api-3.0.0-x86_64-linux-gnu-hybrid --timeout 20" >/tmp/d4.log 2>&1
@@ -93,33 +93,33 @@ check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says checksum"  "$([ "$(grep -c 'checksum' /tmp/d4.log)" -ge 1 ] && echo yes)" "yes"
 check "binary untouched" "$(/opt/unipept-api/bin/unipept-api --version)" "unipept-api 2.7.0"
 
-echo "== rollback with nothing to go back to =="
+section "rollback with nothing to go back to"
 rm -f /opt/unipept-api/bin/unipept-api.previous
 as_user "/opt/unipept-api/lib/deploy.sh rollback --timeout 5" >/tmp/d5.log 2>&1
 check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says no previous" "$(grep -c 'no previous binary' /tmp/d5.log)" "1"
 
-echo "== deploy with neither --from nor --version =="
+section "deploy with neither --from nor --version"
 as_user "/opt/unipept-api/lib/deploy.sh deploy" >/tmp/d6.log 2>&1
 check "exit 2" "$?" "2"
 
-echo "== root is refused, to keep the user manager the right one =="
+section "root is refused, to keep the user manager the right one"
 /opt/unipept-api/lib/deploy.sh status >/tmp/root.log 2>&1
 check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says run as unipept" "$(grep -c 'run this as unipept' /tmp/root.log)" "1"
 
-echo "== the service user can run a remote command over ssh =="
+section "the service user can run a remote command over ssh"
 check "login shell is not nologin" "$(getent passwd unipept | cut -d: -f7)" "/bin/bash"
 
-echo "== the environment file is not world readable =="
+section "the environment file is not world readable"
 check "mode 0600" "$(stat -c %a /opt/unipept-api/etc/unipept-api.env)" "600"
 
-echo "== a flag without its value says usage =="
+section "a flag without its value says usage"
 as_user "/opt/unipept-api/lib/deploy.sh deploy --version" >/tmp/f1.log 2>&1
 check "exit 2"      "$?" "2"
 check "printed usage" "$(grep -c 'usage:' /tmp/f1.log)" "1"
 
-echo "== status answers for a binary too old for --version =="
+section "status answers for a binary too old for --version"
 printf '#!/bin/sh\nexit 2\n' > /opt/unipept-api/bin/unipept-api.old && chmod 755 /opt/unipept-api/bin/unipept-api.old
 cp /opt/unipept-api/bin/unipept-api /tmp/keep-real
 cp /opt/unipept-api/bin/unipept-api.old /opt/unipept-api/bin/unipept-api
@@ -129,7 +129,7 @@ check "says unknown"    "$(sed -n 's/^version=//p' /tmp/f2.log)" "unknown"
 check "still reports variant" "$(sed -n 's/^variant=//p' /tmp/f2.log)" "hybrid"
 cp /tmp/keep-real /opt/unipept-api/bin/unipept-api
 
-echo "== a restart that fails rolls back rather than aborting =="
+section "a restart that fails rolls back rather than aborting"
 cp /opt/unipept-api/bin/unipept-api /opt/unipept-api/bin/unipept-api.previous
 # A unit that cannot start: the binary exits at once, so restart fails.
 # shellcheck disable=SC2016  # $1 belongs to the generated script, not to this one.
@@ -142,7 +142,7 @@ check "exit non-zero"  "$([ $? -ne 0 ] && echo yes)" "yes"
 check "rolled back"    "$([ "$(grep -c 'rolled back' /tmp/f3.log)" -ge 1 ] && echo yes)" "yes"
 check "serving again"  "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8099/health)" "200"
 
-echo "== a restart that returns non-zero rolls back, rather than aborting =="
+section "a restart that returns non-zero rolls back, rather than aborting"
 # systemctl shadowed so `restart` fails: this is the path where the binary is already swapped and
 # set -e would otherwise abort with the service down and the good binary in .previous.
 mkdir -p /tmp/fakebin
@@ -162,13 +162,13 @@ check "exit non-zero"   "$([ $? -ne 0 ] && echo yes)" "yes"
 check "rollback ran"    "$([ "$(grep -c 'rolling back' /tmp/f4.log)" -ge 1 ] && echo yes)" "yes"
 check "old binary back" "$(/opt/unipept-api/bin/unipept-api --version)" "unipept-api 2.7.0"
 
-echo "== check passes on a good host and reports the index version =="
+section "check passes on a good host and reports the index version"
 as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/c0.log 2>&1
 check "exit 0"            "$?" "0"
 check "index_version"     "$(sed -n 's/^index_version=//p' /tmp/c0.log)" "2026.09-test"
 check "no problems"       "$(sed -n 's/^problems=//p' /tmp/c0.log)" "0"
 
-echo "== each failure on its own =="
+section "each failure on its own"
 # A missing index file.
 mv /srv/index/mapping.bin /srv/mapping.bin.away
 as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/c1.log 2>&1
@@ -208,7 +208,7 @@ mkdir -p /tmp/emptybin
 setpriv --reuid unipept --regid unipept --init-groups env XDG_RUNTIME_DIR=/run/user/"$UID_N" HOME=/home/unipept PATH=/tmp/emptybin /opt/unipept-api/lib/deploy.sh check >/tmp/c6.log 2>&1
 check "no commands: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
 
-echo "== the memory arm judges each variant on what it holds resident =="
+section "the memory arm judges each variant on what it holds resident"
 # A 'sa.bin' larger than RAM: fatal for preloaded, irrelevant for mmap, ignored by hybrid.
 total_kb=$(awk '$1 == "MemTotal:" { print $2 }' /proc/meminfo)
 truncate -s "$(( (total_kb + 1048576) * 1024 ))" /srv/index/sa.bin
@@ -224,7 +224,7 @@ as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/c9.log 2>&1
 check "hybrid ignores sa.bin: exit 0" "$?" "0"
 truncate -s 0 /srv/index/sa.bin
 
-echo "== check --from validates the delivered binary =="
+section "check --from validates the delivered binary"
 d20=$(stage 4.0.0 yes)
 as_user "/opt/unipept-api/lib/deploy.sh check --from $d20/unipept-api-4.0.0-x86_64-linux-gnu-hybrid" >/tmp/c10.log 2>&1
 check "good binary: exit 0" "$?" "0"
@@ -240,7 +240,7 @@ as_user "/opt/unipept-api/lib/deploy.sh check --from $d21/unipept-api-4.1.0-x86_
 check "unrunnable: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says does not run"    "$(grep -c 'does not run on this host' /tmp/c12.log)" "1"
 
-echo "== deploy refuses when check fails, before swapping anything =="
+section "deploy refuses when check fails, before swapping anything"
 running_before=$(/opt/unipept-api/bin/unipept-api --version)
 sed -i 's#^VARIANT=.*#VARIANT=nonsense#' /opt/unipept-api/etc/unipept-api.env
 d22=$(stage 4.2.0 yes)
@@ -250,7 +250,7 @@ check "says not ready"     "$(grep -c 'not ready' /tmp/c13.log)" "1"
 check "binary untouched"   "$(/opt/unipept-api/bin/unipept-api --version)" "$running_before"
 sed -i 's#^VARIANT=.*#VARIANT=hybrid#' /opt/unipept-api/etc/unipept-api.env
 
-echo "== --no-rollback leaves the decision to the caller =="
+section "--no-rollback leaves the decision to the caller"
 d23=$(stage 4.3.0 no)
 as_user "/opt/unipept-api/lib/deploy.sh deploy --from $d23/unipept-api-4.3.0-x86_64-linux-gnu-hybrid --timeout 10 --no-rollback" >/tmp/c14.log 2>&1
 check "exit non-zero"        "$([ $? -ne 0 ] && echo yes)" "yes"
@@ -261,7 +261,7 @@ check "no orphan .new"       "$([ -e /opt/unipept-api/bin/unipept-api.new ] && e
 # Put the host back for the cases after this.
 as_user "/opt/unipept-api/lib/deploy.sh rollback --timeout 20" >/dev/null 2>&1
 
-echo "== a failed rollback keeps .previous and the rejected binary =="
+section "a failed rollback keeps .previous and the rejected binary"
 # The scenario is both binaries being bad. .previous cannot simply be overwritten with a broken one,
 # because install_binary derives it from whatever is currently installed — so the *installed* binary
 # is the one that has to be unhealthy. mv, not cp, so the running service keeps its own inode.
@@ -278,7 +278,7 @@ check ".failed kept"         "$([ -f /opt/unipept-api/bin/unipept-api.failed ] &
 check "says previous intact" "$(grep -c 'is intact' /tmp/c15.log)" "1"
 rm -f /opt/unipept-api/bin/unipept-api.failed /opt/unipept-api/bin/unipept-api.previous
 
-echo "== the swap never leaves the binary absent =="
+section "the swap never leaves the binary absent"
 # install_binary is keep_copy then an atomic rename, so no instant has nothing at the binary path.
 # The probe stops between the two steps; `mv BINARY .previous; mv .new BINARY` fails this.
 cp /opt/unipept-api/bin/unipept-api /tmp/swapsrc
@@ -295,7 +295,7 @@ check "binary present at every check" "$absent" "0"
 check "and still runs"                "$([ -n "$(/opt/unipept-api/bin/unipept-api --version)" ] && echo yes)" "yes"
 rm -f /opt/unipept-api/bin/unipept-api.previous
 
-echo "== an interrupt after the swap rolls back =="
+section "an interrupt after the swap rolls back"
 # A binary that never answers /health, so the deploy is still inside its health wait when the signal
 # lands. TERM there has to put the old binary back rather than walk away.
 as_user "/opt/unipept-api/lib/deploy.sh deploy --from $d1/unipept-api-2.6.0-x86_64-linux-gnu-hybrid --timeout 30" >/dev/null 2>&1
@@ -313,7 +313,7 @@ check "old binary restored"  "$(/opt/unipept-api/bin/unipept-api --version)" "$b
 check "serving again"        "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8099/health)" "200"
 check "no orphan .new"       "$([ -e /opt/unipept-api/bin/unipept-api.new ] && echo present || echo absent)" "absent"
 
-echo "== HUP behaves like TERM, which is what a dying ssh sends =="
+section "HUP behaves like TERM, which is what a dying ssh sends"
 d31=$(stage 7.1.0 no)
 as_user "/opt/unipept-api/lib/deploy.sh deploy --from $d31/unipept-api-7.1.0-x86_64-linux-gnu-hybrid --timeout 120" >/tmp/i2.log 2>&1 &
 runner=$!
@@ -324,7 +324,7 @@ check "caught HUP"          "$(grep -c 'caught HUP' /tmp/i2.log)" "1"
 check "rolled back"         "$(grep -c 'rolling back' /tmp/i2.log)" "1"
 check "serving again"       "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8099/health)" "200"
 
-echo "== an interrupt before the swap changes nothing =="
+section "an interrupt before the swap changes nothing"
 running=$(/opt/unipept-api/bin/unipept-api --version)
 as_user "/opt/unipept-api/lib/deploy.sh deploy --version v9.9.9 --timeout 30" >/tmp/i3.log 2>&1 &
 runner=$!
@@ -502,7 +502,7 @@ check "never called it failing" "$(grep -c 'failing, not loading' /tmp/t6.log)" 
 check "rolled back"             "$([ "$(grep -c 'rolled back' /tmp/t6.log)" -ge 1 ] && echo yes)" "yes"
 check "serving the old binary"  "$(/opt/unipept-api/bin/unipept-api --version)" "unipept-api 8.1.0"
 
-echo "== install.sh is idempotent and keeps an edited env file =="
+section "install.sh is idempotent and keeps an edited env file"
 $R/server/install.sh >/dev/null 2>&1; check "exit 0" "$?" "0"
 check "PORT kept" "$(sed -n 's/^PORT=//p' /opt/unipept-api/etc/unipept-api.env)" "8099"
 

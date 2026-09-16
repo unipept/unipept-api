@@ -130,7 +130,7 @@ start_backend() { socat TCP-LISTEN:"$1",reuseaddr,fork SYSTEM:'cat /response.htt
 # shellcheck source-path=SCRIPTDIR source=../lib.sh
 source /deploy/tests/lib.sh
 
-echo "== 1. --dry-run reads every server and changes nothing =="
+section "1. --dry-run reads every server and changes nothing"
 $R --version v2.6.0 --dry-run > /tmp/dry.txt 2>&1; check "exit 0" "$?" "0"
 check "lists three servers" "$(grep -c 'server=' /tmp/dry.txt)" "3"
 check "a primary comes first" "$(grep -oE '^(rick|patty|selma)' /tmp/dry.txt | head -1)" "patty"
@@ -138,29 +138,29 @@ check "the backup comes last" "$(grep -oE '^(rick|patty|selma)' /tmp/dry.txt | t
 check "reads the variant"   "$(grep -c 'variant=hybrid' /tmp/dry.txt)" "3"
 check "haproxy untouched"   "$(/work/loadbalancer/haproxy.sh up-count all_handlers)" "3"
 
-echo "== 2. --only selects one server =="
+section "2. --only selects one server"
 $R --version v2.6.0 --only patty --dry-run > /tmp/only.txt 2>&1
 check "one line"  "$(grep -c 'server=' /tmp/only.txt)" "1"
 check "it's patty" "$(grep -c 'patty' /tmp/only.txt)" "1"
 
-echo "== 3. an unknown --only name is refused, not a silent no-op =="
+section "3. an unknown --only name is refused, not a silent no-op"
 $R --version v2.6.0 --only nosuch --dry-run > /tmp/no.txt 2>&1
 check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says so" "$(grep -c 'selects no server' /tmp/no.txt)" "1"
 
-echo "== 4. no --version is a usage error =="
+section "4. no --version is a usage error"
 $R --dry-run > /tmp/usage.txt 2>&1; check "exit 2" "$?" "2"
 $R --version > /tmp/usage2.txt 2>&1
 check "valueless --version exits 2" "$?" "2"
 check "and says usage" "$(grep -c 'usage:' /tmp/usage2.txt)" "1"
 
-echo "== 4b. every server is reached, not just the first =="
+section "4b. every server is reached, not just the first"
 # ssh reads stdin; without -n the first call would swallow the rest of the inventory.
 : > /tmp/ssh.log
 $R --version v2.6.0 --dry-run >/tmp/dry3.txt 2>&1
 check "all three queried" "$(grep -c 'status' /tmp/ssh.log)" "3"
 
-echo "== 4c. a malformed inventory line stops the run =="
+section "4c. a malformed inventory line stops the run"
 cp /work/servers.conf /tmp/servers.keep
 printf 'rick   rick 9103 all_handlers,db_handlers rick\nbroken 127.0.0.1\n' > /work/servers.conf
 $R --version v2.6.0 >/tmp/bad.txt 2>&1
@@ -169,7 +169,7 @@ check "says too few"   "$(grep -c 'too few fields' /tmp/bad.txt)" "1"
 check "nothing drained" "$(/work/loadbalancer/haproxy.sh state all_handlers/rick | cut -d' ' -f1)" "UP"
 cp /tmp/servers.keep /work/servers.conf
 
-echo "== 5. preflight refuses a fleet that is already down =="
+section "5. preflight refuses a fleet that is already down"
 /work/loadbalancer/haproxy.sh maint all_handlers/selma >/dev/null 2>&1
 $R --version v2.6.0 > /tmp/pre.txt 2>&1
 check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
@@ -178,7 +178,7 @@ check "nothing was drained" "$(/work/loadbalancer/haproxy.sh state all_handlers/
 /work/loadbalancer/haproxy.sh ready all_handlers/selma >/dev/null 2>&1
 sleep 5
 
-echo "== 6. the downtime guard refuses to empty the backend =="
+section "6. the downtime guard refuses to empty the backend"
 /work/loadbalancer/haproxy.sh maint all_handlers/selma >/dev/null 2>&1
 /work/loadbalancer/haproxy.sh maint all_handlers/rick >/dev/null 2>&1
 $R --version v2.6.0 --only patty > /tmp/guard.txt 2>&1
@@ -186,7 +186,7 @@ check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says outage"    "$(grep -c 'is an outage' /tmp/guard.txt)" "1"
 check "patty still UP" "$(/work/loadbalancer/haproxy.sh state all_handlers/patty | cut -d' ' -f1)" "UP"
 
-echo "== 7. --allow-downtime overrides it, and the sequence is drain then maint then ready =="
+section "7. --allow-downtime overrides it, and the sequence is drain then maint then ready"
 : > /tmp/ssh.log
 $R --version v2.6.0 --only patty --allow-downtime > /tmp/allow.txt 2>&1
 check "exit 0" "$?" "0"
@@ -198,7 +198,7 @@ check "patty back UP"       "$(/work/loadbalancer/haproxy.sh state all_handlers/
 check "patty back UP in db" "$(/work/loadbalancer/haproxy.sh state db_handlers/patty | cut -d' ' -f1)" "UP"
 check "no rollback ran"     "$(grep -c '^ROLLBACK' /tmp/ssh.log)" "0"
 
-echo "== 8a. a deploy that installed nothing returns the server to the pool and stops =="
+section "8a. a deploy that installed nothing returns the server to the pool and stops"
 reset_fleet
 FAKE_DEPLOY_FAILS=1 FAKE_VERSION=2.5.3 $R --version v2.6.0 --only patty --allow-downtime >/tmp/r8a.txt 2>&1
 check "exit non-zero"        "$([ $? -ne 0 ] && echo yes)" "yes"
@@ -208,7 +208,7 @@ check "back in the pool"       "$(printf '%s' "$($H state all_handlers/patty)" |
 check "stopped the run"        "$(grep -c 'stopped at patty' /tmp/r8a.txt)" "1"
 check "mailed a failed update" "$(grep -c 'was rolled back' /tmp/mail.txt)" "1"
 
-echo "== 8b. installed but unhealthy: rolled back, then returned to the pool =="
+section "8b. installed but unhealthy: rolled back, then returned to the pool"
 reset_fleet
 # The deploy lands and reports the new version, then the server stops answering: exactly the case the
 # rollback exists for. Preflight saw it healthy, so the failure is discovered where it should be.
@@ -222,7 +222,7 @@ check "back in the db pool"  "$(printf '%s' "$($H state db_handlers/patty)" | cu
 check "stopped the run"      "$(grep -c 'stopped at patty' /tmp/r8b.txt)" "1"
 check "mailed a failed update" "$(grep -c 'was rolled back' /tmp/mail.txt)" "1"
 
-echo "== 8c. a rollback that also fails leaves the server out and mails urgently =="
+section "8c. a rollback that also fails leaves the server out and mails urgently"
 reset_fleet
 FAKE_DEPLOY_BREAKS_HEALTH=1 FAKE_VERSION=2.6.0 FAKE_ROLLBACK_FAILS=1 \
   $R --version v2.6.0 --only selma --allow-downtime >/tmp/r8c.txt 2>&1
@@ -233,7 +233,7 @@ rm -f /tmp/unhealthy
 check "mailed urgently"      "$(grep -c 'needs attention' /tmp/mail.txt)" "1"
 check "names the command"    "$(grep -c 'haproxy.sh ready' /tmp/mail.txt)" "1"
 
-echo "== 8d. a deploy that worked while the connection died is not undone =="
+section "8d. a deploy that worked while the connection died is not undone"
 reset_fleet
 # The deploy call fails, but the server is serving the new version and is healthy: only ssh broke.
 FAKE_DEPLOY_FAILS=1 FAKE_VERSION=2.6.0 $R --version v2.6.0 --only rick --allow-downtime >/tmp/r8d.txt 2>&1
@@ -244,7 +244,7 @@ check "back in the pool"    "$(printf '%s' "$($H state all_handlers/rick)" | cut
 check "no mail"             "$(grep -c . /tmp/mail.txt)" "0"
 
 reset_fleet
-echo "== 9. backups are updated last, whatever the inventory says =="
+section "9. backups are updated last, whatever the inventory says"
 # rick is the backup in this config; put it first in the file and it must still go last.
 cat > /work/servers.conf <<EOF
 rick   rick 9103 all_handlers,db_handlers rick
@@ -257,7 +257,7 @@ $R --version v2.6.0 --dry-run >/tmp/order.txt 2>&1
 check "rick is listed last" "$(grep -oE '^(rick|patty|selma)' /tmp/order.txt | tail -1)" "rick"
 
 reset_fleet
-echo "== 10. one rollout at a time =="
+section "10. one rollout at a time"
 ( flock -n 9 || exit 1; sleep 25 ) 9>/tmp/unipept-rollout.lock &
 holder=$!
 sleep 1
@@ -267,7 +267,7 @@ check "names the lock"  "$(grep -c 'another rollout holds' /tmp/lock.txt)" "1"
 check "nothing drained" "$(/work/loadbalancer/haproxy.sh state all_handlers/patty | cut -d' ' -f1)" "UP"
 kill $holder 2>/dev/null; wait $holder 2>/dev/null
 
-echo "== 11. a bad inventory is refused =="
+section "11. a bad inventory is refused"
 printf 'patty   patty 9101 all_handlers patty\npatty   npatty 9102 all_handlers selma\n' > /work/servers.conf
 $R --version v2.6.0 >/tmp/dup.txt 2>&1
 check "duplicate name: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
@@ -286,7 +286,7 @@ rick   rick 9103 all_handlers,db_handlers rick
 EOF
 
 reset_fleet
-echo "== 12. a check failure stops the run before anything is drained =="
+section "12. a check failure stops the run before anything is drained"
 FAKE_CHECK_FAILS="the index is missing" $R --version v2.6.0 >/tmp/pre2.txt 2>&1
 check "exit non-zero"      "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says not ready"     "$(grep -c 'is not ready' /tmp/pre2.txt)" "3"
@@ -294,7 +294,7 @@ check "nothing was touched" "$(grep -c 'nothing was touched' /tmp/pre2.txt)" "1"
 check "patty still UP"     "$(/work/loadbalancer/haproxy.sh state all_handlers/patty | cut -d' ' -f1)" "UP"
 
 reset_fleet
-echo "== 13. a fleet that disagrees on its index stops the run =="
+section "13. a fleet that disagrees on its index stops the run"
 cat > /usr/local/bin/ssh <<'EOF'
 #!/usr/bin/env bash
 args=("$@"); cmd=""
@@ -318,7 +318,7 @@ check "override proceeds"    "$(grep -c 'does not agree' /tmp/idx2.txt)" "1"
 check "and reached the servers" "$([ "$(grep -c '=== ' /tmp/idx2.txt)" -ge 1 ] && echo yes)" "yes"
 
 reset_fleet
-echo "== 14. staging is cleared on every path, and the run is recorded =="
+section "14. staging is cleared on every path, and the run is recorded"
 # A marker directory per host, created by the fake ssh's mkdir and removed by its rm.
 cat > /usr/local/bin/ssh <<'EOF'
 #!/usr/bin/env bash
@@ -360,7 +360,7 @@ kill -TERM $runner 2>/dev/null; wait $runner 2>/dev/null
 sleep 1
 check "after an interrupt: staging gone" "$(ls -d /tmp/staged-* 2>/dev/null | wc -l | tr -d ' ')" "0"
 
-echo "== 15. rollout.sh status reads the fleet without changing it =="
+section "15. rollout.sh status reads the fleet without changing it"
 reset_fleet
 $R status >/tmp/r16.txt 2>&1
 check "exit 0"            "$?" "0"

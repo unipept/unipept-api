@@ -6,10 +6,10 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-opensearch = "^2.0.0"
+# rustls, not native-tls: this crate's default links libssl at runtime.
+opensearch = { version = "^2.0.0", default-features = false, features = ["rustls-tls"] }
 itertools = "0.15.0"
 thiserror = "2.0"
-tokio = { version = "*", features = ["full"] }
 url = "2.5.4"
 serde = "~1"
 serde_json = "~1"
@@ -17,3 +17,5 @@ serde_json = "~1"
 [dev-dependencies]
 fixtures = { path = "../fixtures" }
 httpmock = "0.7"
+# Test-only: the crate itself never names tokio, and the tests need only #[tokio::test].
+tokio = { version = "1.44.2", features = ["macros", "rt"] }

@@ -408,6 +408,61 @@ check "exit non-zero"     "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says what it takes" "$(grep -c 'takes seconds' /tmp/t1.log)" "1"
 check "binary untouched"   "$(/opt/unipept-api/bin/unipept-api --version)" "$running"
 
+section "READY_TIMEOUT belongs to the host"
+# The fleet cannot share one deadline: the preloaded build on a slow disk needs far longer than the
+# rest, and giving every host that number means a real failure anywhere takes as long to report.
+as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/t2.log 2>&1
+check "check reports a default"  "$(sed -n 's/^ready_timeout=//p' /tmp/t2.log)" "900"
+printf 'READY_TIMEOUT=1800\n' >> /opt/unipept-api/etc/unipept-api.env
+as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/t3.log 2>&1
+check "and follows the file"     "$(sed -n 's/^ready_timeout=//p' /tmp/t3.log)" "1800"
+# A value that is not seconds falls back rather than refusing, so `check` is what has to say so.
+sed -i 's/^READY_TIMEOUT=.*/READY_TIMEOUT=twenty/' /opt/unipept-api/etc/unipept-api.env
+as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/t4.log 2>&1
+check "a bad value is a problem" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "and is named"             "$(grep -c "READY_TIMEOUT is 'twenty'" /tmp/t4.log)" "1"
+check "the fallback still holds" "$(sed -n 's/^ready_timeout=//p' /tmp/t4.log)" "900"
+sed -i '/^READY_TIMEOUT=/d' /opt/unipept-api/etc/unipept-api.env
+
+section "a binary that exits at once is reported at once, not at the deadline"
+# What a long READY_TIMEOUT costs if the wait only ever watches the port: the deadline that is right
+# for a host loading an index is an hour of waiting for a binary that already gave up. The unit is
+# the difference — Restart=on-failure replaces the process, so the pid it started on is gone.
+d41=$(stage 8.1.0 yes)
+as_user "/opt/unipept-api/lib/deploy.sh deploy --from $d41/unipept-api-8.1.0-x86_64-linux-gnu-hybrid --timeout 30" >/dev/null 2>&1
+check "on a good binary first" "$(/opt/unipept-api/bin/unipept-api --version)" "unipept-api 8.1.0"
+
+d42=$(mktemp -d); chmod 755 "$d42"
+# shellcheck disable=SC2016  # $1 belongs to the generated script, not to this one.
+printf '#!/bin/sh\nif [ "$1" = --version ]; then echo "unipept-api 8.2.0"; exit 0; fi\nexit 3\n' \
+  > "$d42/unipept-api-8.2.0-x86_64-linux-gnu-hybrid"
+chmod 755 "$d42/unipept-api-8.2.0-x86_64-linux-gnu-hybrid"
+( cd "$d42" && sha256sum unipept-api-* > SHA256SUMS )
+
+began=$SECONDS
+as_user "/opt/unipept-api/lib/deploy.sh deploy --from $d42/unipept-api-8.2.0-x86_64-linux-gnu-hybrid --timeout 300" >/tmp/t5.log 2>&1
+status=$?
+elapsed=$((SECONDS - began))
+check "exit non-zero"          "$([ "$status" -ne 0 ] && echo yes)" "yes"
+check "says it is failing"     "$(grep -c 'failing, not loading' /tmp/t5.log)" "1"
+check "well inside the 300s"   "$([ "$elapsed" -lt 120 ] && echo yes)" "yes"
+check "rolled back"            "$([ "$(grep -c 'rolled back' /tmp/t5.log)" -ge 1 ] && echo yes)" "yes"
+check "serving the old binary" "$(/opt/unipept-api/bin/unipept-api --version)" "unipept-api 8.1.0"
+
+section "a binary that is still loading is given its whole deadline"
+# The other half of the same watch, and the one that matters on a slow host: a service that is still
+# reading its index keeps one pid and answers nothing for minutes. Only the deadline may end that
+# wait, or the watch would cut short exactly the deploy it was added to protect.
+d43=$(stage 8.3.0 no)
+began=$SECONDS
+as_user "/opt/unipept-api/lib/deploy.sh deploy --from $d43/unipept-api-8.3.0-x86_64-linux-gnu-hybrid --timeout 20" >/tmp/t6.log 2>&1
+elapsed=$((SECONDS - began))
+check "waited out the deadline" "$([ "$elapsed" -ge 20 ] && echo yes)" "yes"
+check "and said so"             "$(grep -c 'did not answer /health within 20s' /tmp/t6.log)" "1"
+check "never called it failing" "$(grep -c 'failing, not loading' /tmp/t6.log)" "0"
+check "rolled back"             "$([ "$(grep -c 'rolled back' /tmp/t6.log)" -ge 1 ] && echo yes)" "yes"
+check "serving the old binary"  "$(/opt/unipept-api/bin/unipept-api --version)" "unipept-api 8.1.0"
+
 echo "== install.sh is idempotent and keeps an edited env file =="
 $R/server/install.sh >/dev/null 2>&1; check "exit 0" "$?" "0"
 check "PORT kept" "$(sed -n 's/^PORT=//p' /opt/unipept-api/etc/unipept-api.env)" "8099"

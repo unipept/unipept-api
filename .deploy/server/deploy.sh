@@ -16,14 +16,16 @@
 #   interrupt always clears the staged file, and one after the swap rolls back.
 #
 #   deploy:
-#     1. Parse the flags, and reject a --timeout that is not a number of seconds.
+#     1. Parse the flags. --timeout defaults to READY_TIMEOUT in the environment file, so a host
+#        that loads slowly carries its own deadline; a value that is not seconds is refused.
 #     2. Run the same checks as `check`. A host that is not ready installs nothing.
 #     3. Point `systemctl --user` at the user manager through XDG_RUNTIME_DIR.
 #     4. Take the binary: verify the checksum of the one at --from, or download the asset for this
 #        tag and variant into a temporary directory and verify that one.
 #     5. Copy it to bin/unipept-api.new, run --version on the copy, keep the binary in place as
 #        .previous, and rename the copy over it.
-#     6. Restart the unit, then wait for /health on 127.0.0.1 and this host's PORT.
+#     6. Restart the unit, then wait for /health on 127.0.0.1 and this host's PORT. The wait ends
+#        early when the process is replaced, which is what a binary that exits at once does.
 #     7. Healthy: clear the staged files and report the deploy. Not healthy: with --no-rollback,
 #        leave it in place for the caller to decide; on a first install, report that there is
 #        nothing to go back to; otherwise roll back and then fail.
@@ -78,7 +80,8 @@ usage:
   --variant       storage backend build. Defaults to VARIANT in the environment file.
   --from          install this binary instead of downloading, or with check, validate it.
                   SHA256SUMS must sit beside it.
-  --timeout       seconds to wait for /health. Defaults to 900.
+  --timeout       seconds to wait for /health. Defaults to READY_TIMEOUT in the environment
+                  file, or 900 where that is unset.
   --no-rollback   report a failure instead of rolling back, for a caller that decides.
 
 Run as the unipept user. Nothing here needs root.
@@ -95,15 +98,67 @@ prepare_user_manager() {
     [ -d "$XDG_RUNTIME_DIR" ] || die "no ${XDG_RUNTIME_DIR}; is lingering enabled for ${SERVICE_USER}?"
 }
 
+# Seconds to give this host to answer /health, from its own environment file.
+#
+# A host whose index is not resident yet needs longer than one the whole fleet can share: the
+# preloaded build reads the index before it answers, and that is minutes on a spinning disk. Reading
+# it here rather than taking it from the caller keeps the deadline with the host it describes, the
+# way VARIANT already is.
+#
+# A value that is not a number falls back to the shared default instead of stopping the run. `check`
+# is what reports it, so the operator hears about it there rather than from a deploy that refuses.
+ready_timeout() {
+    local configured
+    configured=$(env_value READY_TIMEOUT "$ENV_FILE" 2>/dev/null || true)
+    case ${configured:-} in
+        '' | *[!0-9]*) printf '%s\n' "$DEFAULT_READY_TIMEOUT" ;;
+        *) printf '%s\n' "$configured" ;;
+    esac
+}
+
+# The process systemd is watching, or 0 when none is running.
+main_pid() {
+    systemctl --user show -p MainPID --value "$SERVICE" 2>/dev/null || printf '0\n'
+}
+
 # Waits for the service to answer its own health route, on this host rather than through the load
 # balancer.
+#
+# The process is watched as well as the port, because a binary that exits at once looks exactly like
+# one that is slowly loading. Type=exec reports the exec rather than readiness, so systemd calls both
+# of them started, and /health answers for neither. What separates them is the pid: a loading service
+# keeps the one it started with, and a failing one is replaced by Restart=on-failure and gets
+# another. So a pid that changed ends the wait at once instead of at the deadline, which on a host
+# with a long READY_TIMEOUT is an hour of waiting for a binary that already gave up.
 wait_until_healthy() {
-    local timeout=$1 port
+    local timeout=$1 port started now deadline
     port=$(env_value PORT "$ENV_FILE") || die "cannot read ${ENV_FILE}"
     [ -n "$port" ] || die "PORT is not set in ${ENV_FILE}"
 
+    started=$(main_pid)
+    deadline=$((SECONDS + timeout))
+
     log "waiting for /health on port ${port}, up to ${timeout}s"
-    wait_for_http "http://127.0.0.1:${port}/health" "$timeout"
+    while [ "$SECONDS" -lt "$deadline" ]; do
+        if [ "$(http_code "http://127.0.0.1:${port}/health")" = "200" ]; then
+            return 0
+        fi
+
+        # 0 until the first reading finds a process, so a restart that has not finished exec'ing is
+        # not read as one that already died.
+        now=$(main_pid)
+        if [ "$started" = 0 ]; then
+            started=$now
+        elif [ "$now" != "$started" ]; then
+            log "${SERVICE} is on pid ${now} and started on ${started}: it is failing, not loading"
+            return 1
+        fi
+
+        sleep 2
+    done
+
+    log "${SERVICE} did not answer /health within ${timeout}s"
+    return 1
 }
 
 # A second name for a file, so the original stays readable.
@@ -169,7 +224,7 @@ on_signal() {
     if [ "$swapped" = true ]; then
         if [ -f "$PREVIOUS" ]; then
             log "the binary was already swapped, rolling back"
-            rollback_to_previous "$DEFAULT_READY_TIMEOUT" ||
+            rollback_to_previous "$(ready_timeout)" ||
                 log "could not roll back; ${PREVIOUS} is intact and the service needs attention"
         else
             log "the binary was already swapped and there is nothing to go back to; the service needs attention"
@@ -240,6 +295,16 @@ do_check() {
             mmap | preloaded | hybrid) ;;
             '') fail "VARIANT is not set; expected mmap, preloaded or hybrid" ;;
             *) fail "VARIANT is '${variant}'; expected mmap, preloaded or hybrid" ;;
+        esac
+
+        # Optional, so only a value that is set and wrong is a problem. Reported here because
+        # `ready_timeout` falls back rather than refusing, and a host that silently kept the shared
+        # 900 is the failure this whole setting exists to avoid.
+        local configured_timeout
+        configured_timeout=$(env_value READY_TIMEOUT "$ENV_FILE")
+        case $configured_timeout in
+            '') ;;
+            *[!0-9]*) fail "READY_TIMEOUT is '${configured_timeout}', which is not a number of seconds" ;;
         esac
     else
         fail "cannot read ${ENV_FILE}"
@@ -352,6 +417,7 @@ do_check() {
     printf 'variant=%s\n' "${variant:-unknown}"
     printf 'port=%s\n' "${port:-unknown}"
     printf 'index_version=%s\n' "$index_version"
+    printf 'ready_timeout=%s\n' "$(ready_timeout)"
     printf 'problems=%s\n' "$problems"
     printf 'warnings=%s\n' "$warnings"
 
@@ -359,7 +425,7 @@ do_check() {
 }
 
 do_deploy() {
-    local tag='' variant='' from='' timeout=$DEFAULT_READY_TIMEOUT no_rollback=false
+    local tag='' variant='' from='' timeout='' no_rollback=false
 
     while [ $# -gt 0 ]; do
         # Two arguments or usage: `shift 2` with one left would fail, and under `set -e` that exits
@@ -373,6 +439,8 @@ do_deploy() {
             *) usage ;;
         esac
     done
+
+    [ -n "$timeout" ] || timeout=$(ready_timeout)
 
     # Before anything else: `$((SECONDS + timeout))` on a non-numeric value is fatal under `set -u`,
     # and it is only reached after the binary has been swapped, where nothing would roll it back.
@@ -438,7 +506,7 @@ do_deploy() {
 }
 
 do_rollback() {
-    local timeout=$DEFAULT_READY_TIMEOUT
+    local timeout=''
 
     while [ $# -gt 0 ]; do
         case $1 in
@@ -446,6 +514,8 @@ do_rollback() {
             *) usage ;;
         esac
     done
+
+    [ -n "$timeout" ] || timeout=$(ready_timeout)
 
     case $timeout in
         '' | *[!0-9]*) die "--timeout takes seconds, not '${timeout}'" ;;

@@ -115,6 +115,8 @@ declare -A ASSET_OF=()
 # name -> the seconds that server asks to be given to answer /health, read in phase 1. A host whose
 # index is not resident needs far longer than the rest, and it is the one that knows how long.
 declare -A TIMEOUT_OF=()
+# name -> the version that server was running before this rollout touched it, read in phase 0.
+declare -A VERSION_BEFORE=()
 # Hosts that have a staging directory, so the cleanup reaches every one of them.
 STAGED_ON=''
 # Servers this run left out of the pool or down, which is what the team is told about.
@@ -264,6 +266,10 @@ fetch_release() {
             die "${name} reports no variant; check VARIANT in its environment file"
         fi
 
+        # What it is running now, for the report below. Free here: this is the same answer the
+        # variant came out of.
+        VERSION_BEFORE[$name]=$(printf '%s\n' "$report" | env_value version)
+
         asset=$(asset_name "$VERSION" "$variant")
         if [ ! -f "${directory}/${asset}" ]; then
             log "fetching ${asset} for ${name}"
@@ -272,7 +278,40 @@ fetch_release() {
         fi
         ASSET_OF[$name]=$asset
     done <<<"$lines"
+
+    report_fleet_versions
 }
+
+# What the fleet is running before anything is installed.
+#
+# Reported, never refused. A fleet that disagrees is what a run which stopped part way leaves
+# behind, and rolling out again is how that is put right — so refusing here would block the recovery
+# rather than protect anything. The index check is the one that refuses, because two servers on
+# different index versions answer the same request differently and no health check ever notices.
+#
+# Said out loud because nothing else says it. After a run stopped at the second of three servers,
+# the next rollout used to start with no mention that the fleet was split.
+report_fleet_versions() {
+    local name versions='' distinct target="${VERSION#v}" already=''
+
+    for name in "${!VERSION_BEFORE[@]}"; do
+        versions="${versions}${name}=${VERSION_BEFORE[$name]:-unknown} "
+        [ "${VERSION_BEFORE[$name]}" = "$target" ] && already="${already}${name} "
+    done
+
+    distinct=$(printf '%s' "$versions" | tr ' ' '\n' | sed 's/^[^=]*=//' | grep -v '^$' | sort -u | wc -l)
+    if [ "$distinct" -gt 1 ]; then
+        log "the fleet is not on one version: ${versions}"
+        log "rolling out ${VERSION} to all of it is what puts that right"
+    else
+        log "the fleet is on ${versions}"
+    fi
+
+    # Not a reason to stop: a server that already has the version still has to be proven to serve
+    # it, and re-installing the same binary is what the rest of this run does anyway.
+    [ -z "$already" ] || log "already on ${target}: ${already}"
+}
+
 
 # Refuses to start from a fleet that cannot take the change, before anything is drained.
 #

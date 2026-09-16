@@ -457,7 +457,9 @@ case "$cmd" in
   *"deploy.sh check"*) printf 'variant=hybrid\nport=80\nindex_version=2026.09-test\nproblems=0\n'; exit 0 ;;
   # Still installing when the signal arrives, which is where a real deploy spends its minutes. The
   # duration is the marker the case kills it by, so it is distinctive rather than round.
-  *"deploy --from"*)   sleep 971; exit 0 ;;
+  # exec, so the stand-in is the sleep rather than a shell waiting on one: a real ssh is a binary
+  # that dies on TERM, and a shell would defer the signal until its own child returned.
+  *"deploy --from"*)   exec sleep 971 ;;
   *status*)            printf 'version=2.5.3\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n'; exit 0 ;;
 esac
 exit 0
@@ -564,7 +566,37 @@ check "a bad value is not passed on" "$(grep -c 'deploy --from.*--timeout 900' /
 cp /tmp/ssh.keep /usr/local/bin/ssh
 
 reset_fleet
-section "22. a run that changes nothing is not recorded as a rollout"
+section "22. the fleet's own versions are reported before anything is installed"
+# A fleet that disagrees is what a run which stopped part way leaves behind, and rolling out again
+# is the cure — so this is said, never refused. Before this, the next rollout began with no mention
+# that the fleet was split.
+cat > /usr/local/bin/ssh <<'EOF'
+#!/usr/bin/env bash
+args=("$@"); cmd=""
+for a in "${args[@]}"; do case $a in -o|BatchMode=yes|ConnectTimeout=10|ServerAliveInterval=15|ServerAliveCountMax=4|-n) ;; *) cmd="$cmd $a" ;; esac; done
+echo "SSH:$cmd" >> /tmp/ssh.log
+host=$(printf '%s' "$cmd" | sed -n 's/.*@\([a-z]*\).*/\1/p')
+case "$cmd" in
+  *"deploy.sh check"*) printf 'variant=hybrid\nport=80\nindex_version=2026.09-test\nproblems=0\n'; exit 0 ;;
+  # patty is already on the new one; the other two are behind, which is a stopped run's fleet.
+  *status*)
+    if [ "$host" = patty ]; then v=2.6.0; else v=2.5.3; fi
+    printf 'version=%s\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n' "$v"; exit 0 ;;
+esac
+exit 0
+EOF
+chmod +x /usr/local/bin/ssh
+$R --version v2.6.0 --dry-run >/dev/null 2>&1
+: > /tmp/ssh.log
+$R --version v2.6.0 --allow-downtime >/tmp/r27.txt 2>&1
+check "says the fleet is split"  "$(grep -c 'the fleet is not on one version' /tmp/r27.txt)" "1"
+check "names each version"       "$([ "$(grep -c 'selma=2.5.3' /tmp/r27.txt)" -ge 1 ] && echo yes)" "yes"
+check "names the one ahead"      "$([ "$(grep -c 'already on 2.6.0: patty' /tmp/r27.txt)" -ge 1 ] && echo yes)" "yes"
+check "and did not refuse"       "$(grep -c 'preflight passed' /tmp/r27.txt)" "1"
+cp /tmp/ssh.keep /usr/local/bin/ssh
+
+reset_fleet
+section "23. a run that changes nothing is not recorded as a rollout"
 # `trap finish EXIT` covers every invocation, so `status` used to journal `version= exit=0` and read
 # back as a rollout of nothing.
 : > /tmp/logged.txt

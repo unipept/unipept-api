@@ -116,9 +116,22 @@ ready_timeout() {
     esac
 }
 
-# The process systemd is watching, or 0 when none is running.
-main_pid() {
-    systemctl --user show -p MainPID --value "$SERVICE" 2>/dev/null || printf '0\n'
+# How many times systemd has restarted the unit on its own, as a number whatever it answers.
+#
+# A failure to read it counts as no restarts, so an unreadable manager delays this judgement rather
+# than making it wrongly: the deadline is still there to end the wait.
+restart_count() {
+    local count
+    count=$(systemctl --user show -p NRestarts --value "$SERVICE" 2>/dev/null) || count=''
+    case ${count:-} in
+        '' | *[!0-9]*) printf '0\n' ;;
+        *) printf '%s\n' "$count" ;;
+    esac
+}
+
+# What systemd makes of the unit: active, activating, failed, inactive.
+unit_state() {
+    systemctl --user is-active "$SERVICE" 2>/dev/null || true
 }
 
 # Waits for the service to answer its own health route, on this host rather than through the load
@@ -131,11 +144,11 @@ main_pid() {
 # another. So a pid that changed ends the wait at once instead of at the deadline, which on a host
 # with a long READY_TIMEOUT is an hour of waiting for a binary that already gave up.
 wait_until_healthy() {
-    local timeout=$1 port started now deadline
+    local timeout=$1 port began_with restarts state deadline
     port=$(env_value PORT "$ENV_FILE") || die "cannot read ${ENV_FILE}"
     [ -n "$port" ] || die "PORT is not set in ${ENV_FILE}"
 
-    started=$(main_pid)
+    began_with=$(restart_count)
     deadline=$((SECONDS + timeout))
 
     log "waiting for /health on port ${port}, up to ${timeout}s"
@@ -144,15 +157,29 @@ wait_until_healthy() {
             return 0
         fi
 
-        # 0 until the first reading finds a process, so a restart that has not finished exec'ing is
-        # not read as one that already died.
-        now=$(main_pid)
-        if [ "$started" = 0 ]; then
-            started=$now
-        elif [ "$now" != "$started" ]; then
-            log "${SERVICE} is on pid ${now} and started on ${started}: it is failing, not loading"
+        # Restarted since this wait began, so the process is being replaced rather than working.
+        #
+        # The count, rather than the pid or the unit state, because neither of those can see this.
+        # Measured on systemd 255: a binary that exits at once with `Restart=on-failure` and
+        # `RestartSec=5` never trips the default start limit of five starts in ten seconds, so the
+        # unit reads `activating` for ever and never `failed`; and its live window is shorter than
+        # any poll, so `MainPID` reads 0 at every one of them. The count is the only thing that
+        # moves.
+        restarts=$(restart_count)
+        if [ "$restarts" -gt "$began_with" ]; then
+            log "${SERVICE} restarted $((restarts - began_with)) time(s) while starting: it is failing, not loading"
             return 1
         fi
+
+        # And the state for the case the count cannot show: a unit that did reach its start limit
+        # has given up, and is failed with nothing running.
+        state=$(unit_state)
+        case $state in
+            failed | inactive)
+                log "${SERVICE} is ${state} and not running: it is failing, not loading"
+                return 1
+                ;;
+        esac
 
         sleep 2
     done

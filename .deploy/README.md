@@ -25,10 +25,6 @@ So the service listens above 1024 and a netfilter rule sends what arrives on 80 
 changes**: the packet is addressed to port 80 on the wire and is rewritten inside the host, so
 HAProxy keeps its `server ...:80` lines.
 
-The alternative, lowering `net.ipv4.ip_unprivileged_port_start`, was rejected: it would let any
-unprivileged account on the host bind anything from 80 upwards, and 443 is open on these servers
-with nothing listening on it.
-
 ## The storage backend is a host property
 
 The index has one implementation holding owned memory and one borrowing a memory mapping, and

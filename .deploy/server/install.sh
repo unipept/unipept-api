@@ -15,6 +15,9 @@ readonly HERE
 # shellcheck source-path=SCRIPTDIR source=../lib.sh
 source "${HERE}/../lib.sh"
 
+# What `die` raises when it is called from inside a subshell.
+trap 'exit 1' USR1
+
 readonly SERVICE=unipept-api
 readonly USER=unipept
 readonly ROOT=/opt/unipept-api

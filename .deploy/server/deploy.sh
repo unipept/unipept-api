@@ -25,6 +25,9 @@ else
     source "${HERE}/../lib.sh"
 fi
 
+# What `die` raises when it is called from inside a subshell.
+trap 'exit 1' USR1
+
 readonly SERVICE=unipept-api
 readonly SERVICE_USER=unipept
 readonly ROOT=/opt/unipept-api
@@ -33,9 +36,6 @@ readonly PREVIOUS="${ROOT}/bin/unipept-api.previous"
 readonly STAGED="${BINARY}.new"
 readonly REJECTED="${BINARY}.failed"
 readonly ENV_FILE="${ROOT}/etc/unipept-api.env"
-
-# The preloaded and hybrid builds read the index into memory before they answer.
-readonly DEFAULT_READY_TIMEOUT=900
 
 usage() {
     cat >&2 <<'EOF'
@@ -71,7 +71,8 @@ prepare_user_manager() {
 # balancer.
 wait_until_healthy() {
     local timeout=$1 port
-    port=$(env_value PORT "$ENV_FILE")
+    port=$(env_value PORT "$ENV_FILE") || die "cannot read ${ENV_FILE}"
+    [ -n "$port" ] || die "PORT is not set in ${ENV_FILE}"
 
     log "waiting for /health on port ${port}, up to ${timeout}s"
     wait_for_http "http://127.0.0.1:${port}/health" "$timeout"
@@ -412,6 +413,7 @@ do_status() {
     printf 'previous=%s\n' "$(reported_version "$PREVIOUS")"
     printf 'variant=%s\n' "$(env_value VARIANT "$ENV_FILE" || true)"
     printf 'port=%s\n' "$(env_value PORT "$ENV_FILE" || true)"
+
     printf 'active=%s\n' "$(systemctl --user is-active "$SERVICE" || true)"
 }
 

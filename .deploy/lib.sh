@@ -2,7 +2,22 @@
 #
 # Shared by the deploy scripts. Sourced, never run.
 
+# The script's own PID, captured before any subshell can shadow it, so `die` can stop the run from
+# inside one. Each script arms the trap that answers it.
+readonly MAIN_PID=$$
+
 readonly REPOSITORY=unipept/unipept-api
+
+# Seconds to wait for a restarted server to answer /health. Generous because the preloaded and
+# hybrid builds read the index into memory before they answer, and the index is hundreds of
+# gigabytes. Both the server and the load balancer start from this.
+# shellcheck disable=SC2034  # read by the scripts that source this file.
+readonly DEFAULT_READY_TIMEOUT=900
+
+# Seconds to wait for a draining server to finish. Above the API's own 150-second request timeout,
+# so a server answers or gives up before this runs out.
+# shellcheck disable=SC2034  # read by the scripts that source this file.
+readonly DEFAULT_DRAIN_TIMEOUT=240
 
 # The asset names release.yml publishes. Both the server and the load balancer ask for them, so the
 # format lives here rather than being spelled out on each side.
@@ -61,8 +76,19 @@ log() {
     printf '%s  %s\n' "$(date -u '+%H:%M:%S')" "$*" >&2
 }
 
+# Stops the run, from anywhere.
+#
+# `exit` alone is not enough: inside $( ), < ( ) or a pipeline it ends only that subshell, and the
+# script carries on with a message printed and nothing else changed. Reading an inventory, fetching a
+# release and checking a file are all done that way, so this has to work there or a failure is
+# announced and then ignored.
+#
+# $$ stays the script's own PID inside a subshell while BASHPID is the subshell's, which is how one
+# tells the two apart. USR1 rather than TERM, so that a caller can keep telling a real interrupt from
+# a failure; the script traps it and exits 1, running whatever cleanup it has registered.
 die() {
     log "error: $*"
+    [ "$$" = "$BASHPID" ] || kill -USR1 "$MAIN_PID" 2>/dev/null
     exit 1
 }
 
@@ -153,11 +179,15 @@ notify() {
 
 # Reads one key out of `key=value` lines: a systemd environment file when given a path, otherwise
 # standard input, which is the shape `deploy.sh status` prints for the rollout to read.
+#
+# Returns non-zero for a file it cannot read rather than calling `die`. `status` and `check` both
+# describe a host that is broken, and a helper that stopped the run would leave them unable to say
+# what is wrong with it.
 env_value() {
     local key=$1 file=${2:-}
 
     if [ -n "$file" ]; then
-        [ -f "$file" ] || die "no environment file at $file"
+        [ -f "$file" ] || return 1
         sed -n "s/^${key}=//p" "$file" | tail -1
     else
         sed -n "s/^${key}=//p" | tail -1

@@ -408,6 +408,41 @@ check "exit non-zero"     "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says what it takes" "$(grep -c 'takes seconds' /tmp/t1.log)" "1"
 check "binary untouched"   "$(/opt/unipept-api/bin/unipept-api --version)" "$running"
 
+section "a release download is bounded by throughput, not left to hang"
+# `--retry` acts on a failure that finished, so a transfer that connects and then goes quiet is not
+# covered by it: without a throughput bound a stalled download waits forever, and on the server side
+# that is a person's deploy sitting there with no output.
+#
+# This asserts the option set reaches the download. That a stall then aborts is curl's own behaviour,
+# and exercising it here would cost the suite two minutes of real waiting: the bound is 30 seconds of
+# silence and `--retry 3` spends it four times.
+mkdir -p /tmp/curlbin
+cat > /tmp/curlbin/curl <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> /tmp/curl-args.log
+exit 1
+EOF
+chmod +x /tmp/curlbin/curl
+# Writable by the service user, which is who runs the deploy: root owns this file otherwise and the
+# stand-in cannot append to it, so every assertion below would read an empty log and report that no
+# download was attempted.
+: > /tmp/curl-args.log
+chmod 666 /tmp/curl-args.log
+setpriv --reuid unipept --regid unipept --init-groups \
+  env XDG_RUNTIME_DIR=/run/user/"$UID_N" HOME=/home/unipept PATH=/tmp/curlbin:/usr/bin:/bin \
+  /opt/unipept-api/lib/deploy.sh deploy --version v9.9.9 --timeout 10 >/tmp/t7.log 2>&1
+# Two downloads: the asset and its SHA256SUMS. `check`'s own health probe uses curl as well, so the
+# lines are selected by the release URL rather than counted.
+downloads=$(grep -c 'releases/download' /tmp/curl-args.log)
+check "both files were fetched"   "$downloads" "2"
+check "a connect timeout on each" "$(grep 'releases/download' /tmp/curl-args.log | grep -c -- '--connect-timeout 20')" "2"
+check "a throughput floor"        "$(grep 'releases/download' /tmp/curl-args.log | grep -c -- '--speed-limit 1024')" "2"
+check "and a window for it"       "$(grep 'releases/download' /tmp/curl-args.log | grep -c -- '--speed-time 30')" "2"
+check "retries are still asked"   "$(grep 'releases/download' /tmp/curl-args.log | grep -c -- '--retry 3')" "2"
+# The health probe must keep its own short bound rather than inherit the download's.
+check "the probe is unchanged"    "$(grep -c -- '--max-time 5' /tmp/curl-args.log)" "1"
+rm -rf /tmp/curlbin
+
 section "READY_TIMEOUT belongs to the host"
 # The fleet cannot share one deadline: the preloaded build on a slow disk needs far longer than the
 # rest, and giving every host that number means a real failure anywhere takes as long to report.

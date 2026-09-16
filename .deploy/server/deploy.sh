@@ -203,8 +203,8 @@ download_asset() {
     asset=$(asset_name "$tag" "$variant")
 
     log "downloading ${asset}"
-    curl -fsSL --retry 3 -o "${directory}/${asset}" "$(release_url "$tag" "$asset")"
-    curl -fsSL --retry 3 -o "${directory}/SHA256SUMS" "$(release_url "$tag" SHA256SUMS)"
+    curl "${CURL_DOWNLOAD[@]}" -o "${directory}/${asset}" "$(release_url "$tag" "$asset")"
+    curl "${CURL_DOWNLOAD[@]}" -o "${directory}/SHA256SUMS" "$(release_url "$tag" SHA256SUMS)"
 
     printf '%s\n' "${directory}/${asset}"
 }

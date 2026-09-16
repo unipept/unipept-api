@@ -19,6 +19,18 @@ readonly DEFAULT_READY_TIMEOUT=900
 # shellcheck disable=SC2034  # read by the scripts that source this file.
 readonly DEFAULT_DRAIN_TIMEOUT=240
 
+# What a release download may not do: wait forever.
+#
+# `--retry` acts on a failure that finished, so it does nothing for a transfer that connects and then
+# goes quiet, which is what a half-open connection through a NAT looks like. A flat `--max-time` is
+# the wrong bound the other way: the binary is large and a slow link is not a failure.
+#
+# So the bound is on throughput. Below 1 KiB/s for 30 seconds is a stall, curl reports it as the
+# timeout it is, and `--retry` treats a timeout as transient and tries again. Three tries and it
+# gives up, which is the behaviour every caller here already handles.
+# shellcheck disable=SC2034  # read by the scripts that source this file.
+readonly CURL_DOWNLOAD=(-fsSL --retry 3 --connect-timeout 20 --speed-limit 1024 --speed-time 30)
+
 # The asset names release.yml publishes. Both the server and the load balancer ask for them, so the
 # format lives here rather than being spelled out on each side.
 asset_name() {

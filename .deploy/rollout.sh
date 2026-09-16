@@ -623,8 +623,13 @@ Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
 }
 
 # One journal line per server, so "who deployed what, when" has an answer that outlives a terminal.
+#
+# Only for a run that set out to change something. `trap finish EXIT` covers every invocation, so
+# `status` recorded `version= ... exit=0` and read back as a rollout of nothing.
 record_run() {
     local status=$1 name
+
+    [ -n "$VERSION" ] || return 0
 
     for name in "${!STATUS[@]}"; do
         logger -t unipept-rollout -- \

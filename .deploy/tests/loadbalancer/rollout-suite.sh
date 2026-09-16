@@ -563,6 +563,17 @@ $R --version v2.6.0 --only selma --allow-downtime >/tmp/r26.txt 2>&1
 check "a bad value is not passed on" "$(grep -c 'deploy --from.*--timeout 900' /tmp/ssh.log)" "1"
 cp /tmp/ssh.keep /usr/local/bin/ssh
 
+reset_fleet
+section "22. a run that changes nothing is not recorded as a rollout"
+# `trap finish EXIT` covers every invocation, so `status` used to journal `version= exit=0` and read
+# back as a rollout of nothing.
+: > /tmp/logged.txt
+$R status >/dev/null 2>&1
+check "status journalled nothing" "$(grep -c . /tmp/logged.txt)" "0"
+: > /tmp/logged.txt
+$R --version v2.6.0 --only patty --allow-downtime >/dev/null 2>&1
+check "a rollout still is"        "$([ "$(grep -c 'version=v2.6.0' /tmp/logged.txt)" -ge 1 ] && echo yes)" "yes"
+
 # The fake backends hold stdout open; without this a pipe on the outside never sees EOF.
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1
 kill "$(jobs -p)" >/dev/null 2>&1

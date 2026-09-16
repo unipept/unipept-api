@@ -692,6 +692,76 @@ check "both came back"   "$(grep -c '2 server(s) returned to the pool' /tmp/r37.
 check "patty is up"      "$(printf '%s' "$($H state all_handlers/patty)" | cut -d' ' -f1)" "UP"
 check "rick is up"       "$(printf '%s' "$($H state all_handlers/rick)" | cut -d' ' -f1)" "UP"
 
+reset_fleet
+section "27. the lock is shared between the operator and root"
+# Both run rollouts: the operator directly, and root through sudo, which is why RUN_BY reads
+# SUDO_USER first. A file one leaves behind has to be usable by the other.
+#
+# Opened for writing, a root-owned lock was refused to the operator — and bash reports that itself
+# and carries on with the descriptor unopened, so flock then failed on a bad descriptor and the run
+# said another rollout held a lock that nobody held.
+useradd -m op 2>/dev/null
+chmod -R a+rX /work
+cp /tmp/ssh.keep /usr/local/bin/ssh
+rm -f /tmp/unipept-rollout.state
+: > /tmp/unipept-rollout.lock; chmod 644 /tmp/unipept-rollout.lock; chown root:root /tmp/unipept-rollout.lock
+su op -c "PATH=/usr/local/bin:\$PATH /work/rollout.sh ready patty" >/tmp/r40.txt 2>&1
+check "no phantom holder"     "$(grep -c 'another rollout holds' /tmp/r40.txt)" "0"
+check "it reached the fleet"  "$([ "$(grep -c 'already in the pool\|returned to the pool' /tmp/r40.txt)" -ge 1 ] && echo yes)" "yes"
+
+section "28. status does not leave a lock file behind"
+# flock creates the file it is given. A status run by root would leave one the operator's next
+# rollout has to work around, which is the failure case 27 is about.
+rm -f /tmp/unipept-rollout.lock
+$R status >/dev/null 2>&1
+check "no lock was created" "$([ -e /tmp/unipept-rollout.lock ] && echo present || echo absent)" "absent"
+
+section "29. a state file the run cannot rewrite is named, not written past"
+# note_phase tolerates a failed write so a rollout is never lost to one, which is why this has to be
+# settled before the run starts: a silent failure there leaves status and abort reading a phase that
+# has moved on.
+printf 'pid=1\nversion=v0.0.0\nphase=stale\n' > /tmp/unipept-rollout.state
+chmod 600 /tmp/unipept-rollout.state; chown root:root /tmp/unipept-rollout.state
+su op -c "PATH=/usr/local/bin:\$PATH /work/rollout.sh --version v2.6.0 --only patty --allow-downtime" >/tmp/r41.txt 2>&1
+check "names the owner"        "$(grep -c 'unipept-rollout.state belongs to root' /tmp/r41.txt)" "1"
+check "and who can clear it"   "$(grep -c 'who has to remove it' /tmp/r41.txt)" "1"
+check "no raw rm error"        "$(grep -c 'Operation not permitted' /tmp/r41.txt)" "0"
+check "nothing was drained"    "$(printf '%s' "$($H state all_handlers/patty)" | cut -d' ' -f1)" "UP"
+rm -f /tmp/unipept-rollout.state
+
+section "30. a state file a run creates is usable by the other account"
+# The normal path, and what stops case 29 from being reached a second time. The run clears its own
+# state when it ends, so the mode has to be read while it is still going.
+reset_fleet
+rm -f /tmp/unipept-rollout.state
+cat > /usr/local/bin/ssh <<'EOF'
+#!/usr/bin/env bash
+args=("$@"); cmd=""
+for a in "${args[@]}"; do case $a in -o|BatchMode=yes|ConnectTimeout=10|ServerAliveInterval=15|ServerAliveCountMax=4|-n) ;; *) cmd="$cmd $a" ;; esac; done
+echo "SSH:$cmd" >> /tmp/ssh.log
+case "$cmd" in
+  *"deploy.sh check"*) printf 'variant=hybrid\nport=80\nindex_version=2026.09-test\nproblems=0\n'; exit 0 ;;
+  *"deploy --from"*)   exec sleep 971 ;;
+  *status*)            printf 'version=2.5.3\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n'; exit 0 ;;
+esac
+exit 0
+EOF
+chmod +x /usr/local/bin/ssh
+: > /tmp/ssh.log
+$R --version v2.6.0 --only patty --allow-downtime >/dev/null 2>&1 &
+runner=$!
+waited=0
+until [ -e /tmp/unipept-rollout.state ]; do
+  sleep 1; waited=$((waited + 1)); [ "$waited" -lt 60 ] || break
+done
+check "the run wrote its state" "$([ -e /tmp/unipept-rollout.state ] && echo yes)" "yes"
+check "world-writable, so either account can rewrite it" "$(stat -c %a /tmp/unipept-rollout.state)" "666"
+$R abort >/dev/null 2>&1
+wait $runner 2>/dev/null
+pkill -f 'sleep 971' >/dev/null 2>&1
+cp /tmp/ssh.keep /usr/local/bin/ssh
+rm -f /tmp/shared.lock
+
 # The fake backends hold stdout open; without this a pipe on the outside never sees EOF.
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1
 kill "$(jobs -p)" >/dev/null 2>&1

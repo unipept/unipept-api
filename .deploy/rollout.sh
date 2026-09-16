@@ -194,10 +194,20 @@ require_cmd curl sha256sum socat ssh scp flock logger
 # the other has to find the lock held to have anything to do. Taking it here meant `status` failed
 # during a rollout, which is the one time it is worth running — and the message below said to run
 # it.
+#
+# Opened for reading, which is all flock needs and is what makes the lock usable by both the
+# operator and root. Opened for writing, a file root created is refused to the operator — and bash
+# reports that itself and carries on with the descriptor unopened, so `flock` then failed on a bad
+# descriptor and this said another rollout was holding a lock that nobody held.
 case $COMMAND in
     status | abort) ;;
     *)
-        exec 9> "$LOCK_FILE"
+        if [ ! -e "$LOCK_FILE" ]; then
+            : > "$LOCK_FILE" 2>/dev/null ||
+                die "cannot create ${LOCK_FILE}; set LOCK_FILE in rollout.conf to a path this account can write"
+        fi
+        exec 9< "$LOCK_FILE" ||
+            die "cannot read ${LOCK_FILE}, which belongs to $(stat -c %U "$LOCK_FILE" 2>/dev/null || echo someone)"
         flock -n 9 || die "another rollout holds ${LOCK_FILE}; wait for it, or run 'rollout.sh status'"
         ;;
 esac
@@ -661,8 +671,12 @@ finish() {
     done
     [ -n "$TMP_DIR" ] && rm -rf "$TMP_DIR"
     # Only a run that wrote one clears it, so a recovery command cannot delete the state of a
-    # rollout that is still going.
-    [ -n "$VERSION" ] && [ -n "$RUN_STATE" ] && rm -f "$RUN_STATE"
+    # rollout that is still going. Quietly, because a file this run could not own is already
+    # reported where it is prepared, and failing to clear it must not be the last word of a rollout
+    # that worked.
+    if [ -n "$VERSION" ] && [ -n "$RUN_STATE" ]; then
+        rm -f "$RUN_STATE" 2>/dev/null || true
+    fi
 
     record_run "$status"
 
@@ -718,6 +732,28 @@ record_run() {
     logger -t unipept-rollout -- "version=${VERSION} by=${RUN_BY} from=${RUN_FROM:-local} exit=${status}"
 }
 
+# Makes the state file writable by this run before anything depends on it.
+#
+# Unlike the lock, this one is written, and the operator and root take it in turns: a file either
+# leaves behind at the default mode is one the other cannot rewrite. `note_phase` tolerates a failed
+# write so a rollout is never lost to one, which is exactly why it has to be settled here instead —
+# a silent failure there leaves `status` and `abort` reading a phase that has moved on.
+prepare_run_state() {
+    [ -n "$RUN_STATE" ] || return 0
+
+    if [ -e "$RUN_STATE" ] && [ ! -w "$RUN_STATE" ]; then
+        # Naming the owner because they are the only one who can clear it: /tmp is sticky, so this
+        # account cannot remove a file it does not own however writable the directory looks.
+        die "${RUN_STATE} belongs to $(stat -c %U "$RUN_STATE" 2>/dev/null || echo someone), who has to remove it, or set LOCK_FILE in rollout.conf to a path $(id -un) owns"
+    fi
+    # 0666 on creation, because the next run is as likely to be the other account. The load balancer
+    # carries operator logins only, and /tmp is sticky, so nobody else can replace it.
+    if [ ! -e "$RUN_STATE" ]; then
+        (umask 0 && : > "$RUN_STATE") 2>/dev/null ||
+            die "cannot create ${RUN_STATE}; set LOCK_FILE in rollout.conf to a path this account can write"
+    fi
+}
+
 # Says what this run is doing, for `status` to read and `abort` to signal.
 #
 # Rewritten whole each time rather than appended to, so reading it never has to decide which of two
@@ -742,6 +778,10 @@ note_phase() {
 # lock cannot outlive the process that held it, so taking it is the test: if it can be taken, the
 # file is leftovers.
 a_run_is_in_progress() {
+    # No lock file, no run — and said without creating one. `flock` would make it, and a file this
+    # leaves behind as root is one the operator's next rollout has to work around.
+    [ -e "$LOCK_FILE" ] || return 1
+
     # `flock <file> <command>` opens the file itself, so this needs no descriptor of its own. An
     # `exec` to get one would redirect this shell for good rather than for the call: `exec 8> file
     # 2>/dev/null` sends stderr to /dev/null permanently, and every message after it disappears.
@@ -901,6 +941,7 @@ main() {
 
     TMP_DIR=$(mktemp -d)
 
+    prepare_run_state
     note_phase "fetching the release"
 
     # Phase 0: the release, once, for the whole fleet. No disk check here on purpose: a full disk

@@ -57,16 +57,16 @@ jobs:
           echo "version=${declared}" >> "$GITHUB_OUTPUT"
 
   build:
-    # In a ubuntu:22.04 container rather than on a 22.04 runner: production is 22.04, and that
-    # runner label is deprecated from 2026-09-17. The container pins glibc 2.35 either way.
+    # Pinned to 24.04, not ubuntu-latest: every server runs 24.04, and the binary links glibc, so the
+    # build host decides the oldest glibc the release can run on. ubuntu-latest moves to the next LTS
+    # on GitHub's schedule and would ship binaries the servers cannot start.
     #
     # The storage backend is compiled in, so a host cannot pick one at startup. Three variants are
     # built: everything mapped, everything resident, and the hybrid that maps only the suffix array.
     # ci.yml's backends job checks and tests all three.
     name: Build ${{ matrix.variant }}
     needs: guard
-    runs-on: ubuntu-latest
-    container: ubuntu:22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       RUSTUP_TOOLCHAIN: stable
@@ -82,14 +82,6 @@ jobs:
             features: mmap,preloaded-text,preloaded-proteins,preloaded-mapping
 
     steps:
-      # Before the checkout, which needs git in the container.
-      - name: Install build dependencies
-        run: |
-          set -euo pipefail
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            build-essential ca-certificates cmake curl git libssl-dev pkg-config
-
       - name: Checkout repository
         uses: actions/checkout@v7
 
@@ -100,10 +92,9 @@ jobs:
       - name: Build the release binary
         run: cargo build --release --locked -p unipept-api --features "${{ matrix.features }}"
 
-      # The whole point of the 22.04 container is that the binary runs on 22.04. Nothing else here
-      # executes it, and a deploy finding out instead means a drained production server rolling
-      # back to the release before the one it was running.
-      - name: Check the binary runs in the container
+      # Nothing else here executes what it builds. A deploy finding out instead means a drained
+      # production server rolling back to the release before the one it was running.
+      - name: Check the binary runs
         run: ./target/release/unipept-api --version
 
       # The name is what a server asks for: VARIANT in its environment file is the last field.

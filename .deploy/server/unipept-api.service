@@ -8,13 +8,14 @@
 #
 # Three directives a system unit would carry are absent, and each is deliberate:
 #   User=, Group=          a user unit already runs as the user that owns it
-#   AmbientCapabilities=   a user manager holds no capability to grant. Measured on systemd 249:
+#   AmbientCapabilities=   a user manager holds no capability to grant. Measured on systemd 255:
 #                          "Failed to apply ambient capabilities (before UID change): Operation not
 #                          permitted", and the service exits 218. This is why the port is redirected
 #                          rather than bound directly.
-#   PrivateDevices=        it implies dropping capabilities, which an unprivileged unit cannot do.
-#                          Measured the same way, also exit 218. Every other Protect* directive
-#                          below does work.
+#   PrivateDevices=        a user manager applies it through a user namespace, and 24.04 sets
+#                          kernel.apparmor_restrict_unprivileged_userns=1, so whether it starts is a
+#                          host setting. Left out until it is measured on a server. Every other
+#                          Protect* directive below does work.
 #
 # No After= for OpenSearch: the API only parses the address at startup and connects per request,
 # so it starts cleanly before OpenSearch is up.

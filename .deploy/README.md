@@ -17,7 +17,7 @@ That user owns `/opt/unipept-api`, so it replaces the binary and restarts its ow
 sudo or a polkit rule. Only the first install needs root.
 
 A user manager holds no capability to grant, so the service cannot bind port 80 itself — measured on
-systemd 249, `AmbientCapabilities=CAP_NET_BIND_SERVICE` fails with *"Failed to apply ambient
+systemd 255, `AmbientCapabilities=CAP_NET_BIND_SERVICE` fails with *"Failed to apply ambient
 capabilities (before UID change): Operation not permitted"* and the unit exits 218.
 
 So the service listens above 1024 and a netfilter rule sends what arrives on 80 to it.

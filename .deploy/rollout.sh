@@ -9,6 +9,25 @@
 #
 # The rollout never installs anything itself. It delivers a binary and calls deploy.sh on the
 # server, which is the same path a person takes there by hand.
+#
+# Flow:
+#   1. Load rollout.conf, parse the arguments, and take a lock, so only one rollout runs at a time.
+#   2. `status` prints the fleet and stops. It changes nothing, and needs no release to do it.
+#   3. Read and validate the inventory, and order the servers primaries first, backups last.
+#   4. --dry-run prints what each server holds and how the load balancer sees it, and stops.
+#   5. Phase 0: download the release on the load balancer, once per variant the fleet asks for.
+#   6. Phase 1: preflight. Every server has to be UP in each backend it names and answer /health
+#      and /health/database; its asset is delivered to it and `deploy.sh check --from` runs there;
+#      and the fleet has to agree on one index version. A problem here stops the run, with nothing
+#      drained and nothing installed.
+#   7. Phase 2: one server at a time, in that order. Check the backends can spare it, drain it,
+#      wait for its connections to end, put it in maintenance, install the staged binary through
+#      `deploy.sh deploy --no-rollback`, confirm /health and /health/database over the network, and
+#      return it to the pool only then. A failure asks the server what actually happened, acts on
+#      the answer, and stops the run, so the servers after it are never touched.
+#   8. Phase 3: on every exit, including a signal. Clear the staging directory on every server it
+#      reached, write one journal line per server, and email if an update failed or a server is out
+#      of the pool.
 
 set -euo pipefail
 

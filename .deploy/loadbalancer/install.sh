@@ -9,6 +9,22 @@
 # It never edits haproxy.cfg. That file holds the TLS certificates, the rate limiting and the ACLs,
 # and a script that rewrites it is a script that eventually takes the public API down at the wrong
 # moment. Where something is missing, the fragment is written out and the operator applies it.
+#
+# Flow:
+#   1. Check that every command it uses is installed, that this runs as root, and that the operator
+#      account exists.
+#   2. Install rollout.sh, loadbalancer/haproxy.sh and lib.sh in /opt/unipept-rollout, in the shape
+#      of the checkout, because rollout.sh resolves haproxy.sh relative to itself.
+#   3. Write /etc/unipept-rollout/rollout.conf and servers.conf from the examples, or keep the ones
+#      already there.
+#   4. Put the operator in the haproxy group, which is what reaches the admin socket.
+#   5. Read the socket path out of haproxy.cfg, and check that its mode lets that group use it.
+#   6. Ask the socket what HAProxy is running. Report every server the inventory expects in a
+#      backend that is not there, and write the configuration to add to /tmp.
+#   7. Read haproxy.cfg for the health route each of the two backends checks.
+#   8. Reach every server in the inventory the way a rollout reaches it: ssh as the operator,
+#      deploy.sh installed, and `deploy.sh check` passing there.
+#   9. Count what steps 4 to 8 reported. Nothing: say the host is ready. Otherwise exit non-zero.
 
 set -euo pipefail
 

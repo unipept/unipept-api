@@ -187,6 +187,11 @@ if [ -S "$socket" ] && backends=$(printf 'show stat\n' | socat "$socket" stdio 2
     done
 fi
 
+# Every server the inventory names, reached the way a rollout reaches it, on the options a rollout
+# uses. ConnectTimeout alone bounds only the handshake: a server that answers and then stops holds
+# the connection open, and this audit would wait on it for ever. The keepalives are what end it.
+readonly AUDIT_SSH=(-n -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+
 # Every server the inventory names, reached the way a rollout reaches it.
 ssh_user=$(sed -n 's/^SSH_USER=//p' "${CONFIG}/rollout.conf" | tr -d "\"'" | tail -1)
 remote=$(sed -n 's/^REMOTE_DEPLOY=//p' "${CONFIG}/rollout.conf" | tr -d "\"'" | tail -1)
@@ -196,11 +201,11 @@ while read -r name host _ _ _; do
     case ${name:-} in '' | \#*) continue ;; esac
     target=${ssh_user:+${ssh_user}@}${host}
 
-    if ! sudo -u "$OPERATOR" ssh -n -o BatchMode=yes -o ConnectTimeout=10 "$target" true 2>/dev/null; then
+    if ! sudo -u "$OPERATOR" ssh "${AUDIT_SSH[@]}" "$target" true 2>/dev/null; then
         note "${OPERATOR} cannot ssh to ${target}; install a key there"
-    elif ! sudo -u "$OPERATOR" ssh -n -o BatchMode=yes -o ConnectTimeout=10 "$target" "test -x ${remote}" 2>/dev/null; then
+    elif ! sudo -u "$OPERATOR" ssh "${AUDIT_SSH[@]}" "$target" "test -x ${remote}" 2>/dev/null; then
         note "${target} has no ${remote}; run the server install there first"
-    elif ! sudo -u "$OPERATOR" ssh -n -o BatchMode=yes -o ConnectTimeout=10 "$target" "${remote} check" >/dev/null 2>&1; then
+    elif ! sudo -u "$OPERATOR" ssh "${AUDIT_SSH[@]}" "$target" "${remote} check" >/dev/null 2>&1; then
         note "${target} is not ready; run '${remote} check' there to see why"
     else
         log "${name} is reachable and ready"

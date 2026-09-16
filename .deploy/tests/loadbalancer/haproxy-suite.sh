@@ -93,6 +93,27 @@ HAPROXY_SOCKET=/run/haproxy/absent.sock $H state all_handlers/patty >/tmp/e3 2>&
 check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
 check "names the socket" "$(grep -c 'no HAProxy socket' /tmp/e3)" "1"
 
+echo "== 7. a socket that accepts and never answers is reported, not waited on =="
+# Case 6 covers a socket that is not there. This is one that is there and says nothing: a wedged
+# HAProxy, or a stats socket whose backlog is never served. The call has to come back and say so,
+# because every poll in this script is built on it.
+#
+# It comes back because one command is written and stdin then reaches EOF, and `-T` bounds the read
+# whatever the caller does. An empty answer is not a state, so the command fails rather than
+# reporting a server that is somehow in no backend.
+socat UNIX-LISTEN:/run/haproxy/deaf.sock,fork SYSTEM:'sleep 300' >/dev/null 2>&1 &
+deaf=$!
+sleep 1
+start=$SECONDS
+HAPROXY_SOCKET=/run/haproxy/deaf.sock $H state all_handlers/patty >/tmp/e4 2>&1
+status=$?
+elapsed=$((SECONDS - start))
+check "it gave up"     "$([ "$status" -ne 0 ] && echo yes)" "yes"
+check "and said why"   "$(grep -c 'is not in every one of' /tmp/e4)" "1"
+check "well inside 30s" "$([ "$elapsed" -lt 30 ] && echo yes)" "yes"
+kill $deaf >/dev/null 2>&1
+rm -f /run/haproxy/deaf.sock
+
 # The fake backends hold stdout open; without this a pipe on the outside never sees EOF.
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1
 kill "$(jobs -p)" >/dev/null 2>&1

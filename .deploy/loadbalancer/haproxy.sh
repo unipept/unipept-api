@@ -49,11 +49,17 @@ EOF
 #
 # socat rather than nc: talking to a unix socket is what it is for, and it is what the load
 # balancer has.
+#
+# `-T` bounds the read explicitly. What already ends this call is the pipe: one command is written,
+# stdin reaches EOF, and socat closes. That is a property of how the call is written rather than of
+# the socket, so a socket that accepts and never answers is reported in about a second either way.
+# The bound is here so it does not rest on the shape of the caller. Ten seconds is far above what
+# answering `show stat` takes on a healthy HAProxy.
 runtime() {
     require_cmd socat
     [ -S "$HAPROXY_SOCKET" ] || die "no HAProxy socket at $HAPROXY_SOCKET"
 
-    printf '%s\n' "$1" | socat "$HAPROXY_SOCKET" stdio 2>/dev/null ||
+    printf '%s\n' "$1" | socat -T 10 "$HAPROXY_SOCKET" stdio 2>/dev/null ||
         die "cannot talk to $HAPROXY_SOCKET. Run as root, or join the haproxy group."
 }
 

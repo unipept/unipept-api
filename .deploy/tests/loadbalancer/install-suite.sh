@@ -31,6 +31,7 @@ cat > /usr/local/bin/ssh <<'EOF'
 # resets the environment, and that is correct — it is the operator's keys being tested, not root's.
 mode=$(cat /tmp/fake-ssh-mode 2>/dev/null || echo ok)
 cmd="$*"
+printf '%s\n' "$cmd" >> /tmp/audit-ssh.log
 case "$cmd" in
   *"test -x"*)         [ "$mode" = no-deploy ] && exit 1; [ "$mode" = no-ssh ] && exit 255; exit 0 ;;
   *"deploy.sh check"*) [ "$mode" = check-fails ] && exit 1; [ "$mode" = no-ssh ] && exit 255; exit 0 ;;
@@ -97,9 +98,19 @@ check "says the server is not ready" "$([ "$(grep -c 'is not ready' /tmp/i7.log)
 
 section "a clean host reports ready"
 echo ok > /tmp/fake-ssh-mode
+: > /tmp/audit-ssh.log
 /deploy/loadbalancer/install.sh >/tmp/i8.log 2>&1
 check "exit 0"       "$?" "0"
 check "says ready"   "$(grep -c 'this load balancer is ready' /tmp/i8.log)" "1"
+
+section "the audit cannot wait for ever on a server that goes quiet"
+# ConnectTimeout bounds the handshake only. A server that answers and then stops holds the
+# connection open, and without keepalives this audit waits on it with nothing to end it. Every one
+# of the three probes has to carry them, not just the first.
+probes=$(grep -c 'ConnectTimeout=10' /tmp/audit-ssh.log)
+check "every probe is bounded"  "$([ "$probes" -ge 3 ] && echo yes)" "yes"
+check "keepalives on each"      "$(grep -c 'ServerAliveInterval=15' /tmp/audit-ssh.log)" "$probes"
+check "and a count for them"    "$(grep -c 'ServerAliveCountMax=4' /tmp/audit-ssh.log)" "$probes"
 
 section "rollout.sh reads the installed configuration"
 check "prefers /etc" "$(grep -c 'CONFIG_DIR=/etc/unipept-rollout' /opt/unipept-rollout/rollout.sh)" "1"

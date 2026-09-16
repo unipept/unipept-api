@@ -250,7 +250,7 @@ fetch_release() {
     local directory=$1 lines=$2 name host variant asset report
 
     log "fetching ${VERSION}"
-    curl -fsSL --retry 3 -o "${directory}/SHA256SUMS" "$(release_url "$VERSION" SHA256SUMS)"
+    curl "${CURL_DOWNLOAD[@]}" -o "${directory}/SHA256SUMS" "$(release_url "$VERSION" SHA256SUMS)"
 
     while read -r name host _ _ _; do
         [ -n "$name" ] || continue
@@ -267,7 +267,7 @@ fetch_release() {
         asset=$(asset_name "$VERSION" "$variant")
         if [ ! -f "${directory}/${asset}" ]; then
             log "fetching ${asset} for ${name}"
-            curl -fsSL --retry 3 -o "${directory}/${asset}" "$(release_url "$VERSION" "$asset")"
+            curl "${CURL_DOWNLOAD[@]}" -o "${directory}/${asset}" "$(release_url "$VERSION" "$asset")"
             verify_sha256 "${directory}/${asset}" "${directory}/SHA256SUMS"
         fi
         ASSET_OF[$name]=$asset

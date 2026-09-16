@@ -60,6 +60,7 @@ chmod +x /usr/local/bin/scp
 # the sums first and verifies after.
 cat > /usr/local/bin/curl <<'EOF'
 #!/usr/bin/env bash
+printf '%s\n' "$*" >> /tmp/curl-args.log
 out=""; url=""; upload=""; args=("$@")
 for ((i=0; i<${#args[@]}; i++)); do
   case ${args[i]} in
@@ -97,6 +98,7 @@ exec /usr/bin/curl "$@"
 EOF
 chmod +x /usr/local/bin/curl
 : > /tmp/mail.txt
+: > /tmp/curl-args.log
 
 export PATH=/usr/local/bin:$PATH
 
@@ -427,7 +429,22 @@ check "left out of the pool" "$($H state all_handlers/selma)" "MAINT"
 cp /tmp/ssh.keep /usr/local/bin/ssh; rm -f /tmp/gone
 
 reset_fleet
-section "18. a run interrupted during an install reports the server it left out"
+section "18. the release download is bounded by throughput"
+# The same option set the server side uses, from lib.sh, because this downloads the same release the
+# same way. `--retry` alone does not cover a transfer that connects and then goes quiet, and phase 0
+# would wait on it for ever.
+: > /tmp/curl-args.log
+$R --version v2.6.0 --only patty --allow-downtime >/dev/null 2>&1
+check "the release was fetched"    "$(grep -c 'releases/download' /tmp/curl-args.log)" "2"
+check "a throughput floor on each" "$(grep 'releases/download' /tmp/curl-args.log | grep -c -- '--speed-limit 1024')" "2"
+check "and a window for it"        "$(grep 'releases/download' /tmp/curl-args.log | grep -c -- '--speed-time 30')" "2"
+# The health polls must keep their own short bound. A download's floor on one would mean a dead
+# server took 30 seconds to report instead of 5.
+check "the health polls still run"  "$([ "$(grep -c -- '--max-time 5' /tmp/curl-args.log)" -gt 0 ] && echo yes)" "yes"
+check "and kept their own bound"    "$(grep -- '--max-time 5' /tmp/curl-args.log | grep -c -- '--speed-limit')" "0"
+
+reset_fleet
+section "19. a run interrupted during an install reports the server it left out"
 # The one path that used to leave a server in maintenance and tell nobody: the traps hand back to the
 # global handler once the server is in maint, so a signal during the install reached `finish` with
 # nothing recorded. It has to be mailed and journalled like every other server left out of the pool.
@@ -471,7 +488,7 @@ check "journalled it"         "$(grep -c 'server=patty.*outcome=needs-attention'
 check "did not roll back"     "$(grep -c '^ROLLBACK' /tmp/ssh.log)" "0"
 
 reset_fleet
-section "19. a server is given time to answer, not one sample"
+section "20. a server is given time to answer, not one sample"
 # Both callers of `serving` reach it just after the server was restarted, and a process that has come
 # back can miss a first connection without anything being wrong. The database route the more easily:
 # it gives OpenSearch two seconds of its own. Sampled once, a server that is fine was left out of the
@@ -501,7 +518,7 @@ check "no urgent mail"         "$(grep -c 'needs attention' /tmp/mail.txt)" "0"
 rm -f /tmp/no-database-until
 
 reset_fleet
-section "20. each server is given the deadline it asks for"
+section "21. each server is given the deadline it asks for"
 # rick holds the preloaded build on a slow disk and reads its index before it answers, so it needs far
 # longer than the rest. One deadline for the fleet is wrong either way: too short for rick, or every
 # other server waiting rick's hour before a real failure is reported.

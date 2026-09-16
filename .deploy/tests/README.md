@@ -41,9 +41,10 @@ Every bug these suites caught was one a mock would have hidden:
 `lib.sh` holds the assertions:
 
 ```bash
+section "the case these assertions belong to"
 check "what it should do"  "$(what it did)"  "what it should have been"
 check_true "the file is there" test -f /some/path
-section "a group of cases"
+check_absent "it did not roll back" '^ROLLBACK' /tmp/ssh.log
 ```
 
 `check` never stops the suite, so one run reports everything that is wrong rather than the first
@@ -53,6 +54,12 @@ enough that the first one has scrolled away by the time it ends.
 **Head every group with `section`, not `echo`.** A failure prints the section it is in, which is
 what makes `FAIL exit non-zero` identify one case rather than one of twelve. A heading printed with
 `echo` records nothing, so its failures would name no case.
+
+**Use `check_absent` to assert something did not happen.** `grep -c` against `0` also passes when
+the pattern is mistyped, when the file was never written, and when the command under test produced
+no output at all — so it is the shape most likely to assert nothing. `check_absent` requires the
+evidence to exist first. The one place a plain `check` is still right is where an empty file *is*
+the assertion.
 
 Two rules worth keeping:
 

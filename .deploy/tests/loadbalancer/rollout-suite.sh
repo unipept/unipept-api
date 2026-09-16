@@ -191,19 +191,19 @@ section "7. --allow-downtime overrides it, and the sequence is drain then maint 
 $R --version v2.6.0 --only patty --allow-downtime > /tmp/allow.txt 2>&1
 check "exit 0" "$?" "0"
 check "deploy was called"   "$(grep -c 'deploy --from' /tmp/ssh.log)" "1"
-check "no sudo anywhere"    "$(grep -c 'sudo' /tmp/ssh.log)" "0"
+check_absent "no sudo anywhere" 'sudo' /tmp/ssh.log
 check "status was read"     "$([ "$(grep -c 'status' /tmp/ssh.log)" -ge 2 ] && echo yes)" "yes"
 check "binary was copied"   "$([ -s /tmp/scp.log ] && echo yes)" "yes"
 check "patty back UP"       "$(/work/loadbalancer/haproxy.sh state all_handlers/patty | cut -d' ' -f1)" "UP"
 check "patty back UP in db" "$(/work/loadbalancer/haproxy.sh state db_handlers/patty | cut -d' ' -f1)" "UP"
-check "no rollback ran"     "$(grep -c '^ROLLBACK' /tmp/ssh.log)" "0"
+check_absent "no rollback ran" '^ROLLBACK' /tmp/ssh.log
 
 section "8a. a deploy that installed nothing returns the server to the pool and stops"
 reset_fleet
 FAKE_DEPLOY_FAILS=1 FAKE_VERSION=2.5.3 $R --version v2.6.0 --only patty --allow-downtime >/tmp/r8a.txt 2>&1
 check "exit non-zero"        "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says nothing installed" "$(grep -c 'nothing was installed' /tmp/r8a.txt)" "1"
-check "no rollback attempted"  "$(grep -c '^ROLLBACK' /tmp/ssh.log)" "0"
+check_absent "no rollback attempted" '^ROLLBACK' /tmp/ssh.log
 check "back in the pool"       "$(printf '%s' "$($H state all_handlers/patty)" | cut -d' ' -f1)" "UP"
 check "stopped the run"        "$(grep -c 'stopped at patty' /tmp/r8a.txt)" "1"
 check "mailed a failed update" "$(grep -c 'was rolled back' /tmp/mail.txt)" "1"
@@ -239,8 +239,9 @@ reset_fleet
 FAKE_DEPLOY_FAILS=1 FAKE_VERSION=2.6.0 $R --version v2.6.0 --only rick --allow-downtime >/tmp/r8d.txt 2>&1
 check "exit 0"              "$?" "0"
 check "says after all"      "$(grep -c 'after all' /tmp/r8d.txt)" "1"
-check "no rollback"         "$(grep -c '^ROLLBACK' /tmp/ssh.log)" "0"
+check_absent "no rollback" '^ROLLBACK' /tmp/ssh.log
 check "back in the pool"    "$(printf '%s' "$($H state all_handlers/rick)" | cut -d' ' -f1)" "UP"
+# Not check_absent: an empty mailbox is the assertion here, not missing evidence.
 check "no mail"             "$(grep -c . /tmp/mail.txt)" "0"
 
 reset_fleet
@@ -465,7 +466,7 @@ chmod +x /usr/local/bin/ssh
 rm -f /tmp/gone; : > /tmp/ssh.log
 $R --version v2.6.0 --only selma --allow-downtime >/tmp/r21.txt 2>&1
 check "exit non-zero"        "$([ $? -ne 0 ] && echo yes)" "yes"
-check "did not roll back"    "$(grep -c '^ROLLBACK' /tmp/ssh.log)" "0"
+check_absent "did not roll back" '^ROLLBACK' /tmp/ssh.log
 check "says it cannot ask"   "$(grep -c 'cannot be reached to ask' /tmp/r21.txt)" "1"
 check "left out of the pool" "$($H state all_handlers/selma)" "MAINT"
 cp /tmp/ssh.keep /usr/local/bin/ssh; rm -f /tmp/gone
@@ -529,7 +530,7 @@ check "said so"               "$(grep -c 'left out of the pool by a run that did
 check "mailed about it"       "$(grep -c 'needs attention' /tmp/mail.txt)" "1"
 check "named the server"      "$(grep -c 'patty' /tmp/mail.txt)" "1"
 check "journalled it"         "$(grep -c 'server=patty.*outcome=needs-attention' /tmp/logged.txt)" "1"
-check "did not roll back"     "$(grep -c '^ROLLBACK' /tmp/ssh.log)" "0"
+check_absent "did not roll back" '^ROLLBACK' /tmp/ssh.log
 
 reset_fleet
 section "20. a server is given time to answer, not one sample"
@@ -557,8 +558,8 @@ $R --version v2.6.0 --only selma --allow-downtime >/tmp/r23.txt 2>&1
 check "stopped the run"        "$(grep -c 'stopped at selma' /tmp/r23.txt)" "1"
 check "waited for the route"   "$(printf '%s' "$($H state all_handlers/selma)" | cut -d' ' -f1)" "UP"
 check "and the db backend too" "$(printf '%s' "$($H state db_handlers/selma)" | cut -d' ' -f1)" "UP"
-check "not called down"        "$(grep -c 'does not answer both health routes' /tmp/r23.txt)" "0"
-check "no urgent mail"         "$(grep -c 'needs attention' /tmp/mail.txt)" "0"
+check_absent "not called down" 'does not answer both health routes' /tmp/r23.txt
+check_absent "no urgent mail" 'needs attention' /tmp/mail.txt
 rm -f /tmp/no-database-until
 
 reset_fleet
@@ -643,6 +644,7 @@ section "23. a run that changes nothing is not recorded as a rollout"
 # back as a rollout of nothing.
 : > /tmp/logged.txt
 $R status >/dev/null 2>&1
+# Not check_absent, as with "no mail": an empty journal is the assertion, not missing evidence.
 check "status journalled nothing" "$(grep -c . /tmp/logged.txt)" "0"
 : > /tmp/logged.txt
 $R ready >/dev/null 2>&1
@@ -824,7 +826,7 @@ cp /tmp/ssh.keep /usr/local/bin/ssh
 rm -f /tmp/unipept-rollout.state
 : > /tmp/unipept-rollout.lock; chmod 644 /tmp/unipept-rollout.lock; chown root:root /tmp/unipept-rollout.lock
 su op -c "PATH=/usr/local/bin:\$PATH /work/rollout.sh ready patty" >/tmp/r40.txt 2>&1
-check "no phantom holder"     "$(grep -c 'another rollout holds' /tmp/r40.txt)" "0"
+check_absent "no phantom holder" 'another rollout holds' /tmp/r40.txt
 check "it reached the fleet"  "$([ "$(grep -c 'already in the pool\|returned to the pool' /tmp/r40.txt)" -ge 1 ] && echo yes)" "yes"
 
 section "28. status does not leave a lock file behind"
@@ -843,7 +845,7 @@ chmod 600 /tmp/unipept-rollout.state; chown root:root /tmp/unipept-rollout.state
 su op -c "PATH=/usr/local/bin:\$PATH /work/rollout.sh --version v2.6.0 --only patty --allow-downtime" >/tmp/r41.txt 2>&1
 check "names the owner"        "$(grep -c 'unipept-rollout.state belongs to root' /tmp/r41.txt)" "1"
 check "and who can clear it"   "$(grep -c 'who has to remove it' /tmp/r41.txt)" "1"
-check "no raw rm error"        "$(grep -c 'Operation not permitted' /tmp/r41.txt)" "0"
+check_absent "no raw rm error" 'Operation not permitted' /tmp/r41.txt
 check "nothing was drained"    "$(printf '%s' "$($H state all_handlers/patty)" | cut -d' ' -f1)" "UP"
 rm -f /tmp/unipept-rollout.state
 

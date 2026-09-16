@@ -86,7 +86,7 @@ check "exit non-zero"      "$([ $? -ne 0 ] && echo yes)" "yes"
 check "names what is missing" "$(grep -c 'absent_backend' /tmp/i3.log)" "1"
 check "wrote the fragment"    "$([ -f /tmp/unipept-haproxy-fragment.cfg ] && echo yes)" "yes"
 check "fragment has the backend" "$(grep -c '^backend db_handlers' /tmp/unipept-haproxy-fragment.cfg)" "1"
-check "haproxy.cfg untouched" "$(grep -c 'absent_backend' /etc/haproxy/haproxy.cfg)" "0"
+check_absent "haproxy.cfg untouched" 'absent_backend' /etc/haproxy/haproxy.cfg
 sed -i 's#all_handlers,absent_backend#all_handlers,db_handlers#' /etc/unipept-rollout/servers.conf
 
 section "a wrong check uri is named"

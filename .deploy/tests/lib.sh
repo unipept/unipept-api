@@ -36,6 +36,24 @@ check_true() {
     if "$@"; then check "$what" yes yes; else check "$what" no yes; fi
 }
 
+# Asserts a pattern is absent from output that exists.
+#
+# `grep -c pattern file` compared with 0 is the obvious way to assert something did not happen, and
+# it passes three ways that assert nothing: the pattern is mistyped, the file was never written, or
+# the command under test produced no output at all. The last is the one that matters here, because a
+# run that died early writes nothing and every absence assertion about it then passes.
+#
+# So the evidence has to exist first, and a failure says which of the two was wrong.
+check_absent() {
+    local what=$1 pattern=$2 file=$3
+
+    if [ ! -s "$file" ]; then
+        check "$what" "nothing in $(basename "$file") to search" "output to search"
+        return
+    fi
+    check "$what" "$(grep -c -- "$pattern" "$file")" "0"
+}
+
 # Names the case that follows, and is what a failure inside it reports. Every case goes through
 # here: a heading printed with `echo` records nothing, so its failures would name no case.
 section() {

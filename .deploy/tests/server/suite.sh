@@ -255,7 +255,7 @@ d23=$(stage 4.3.0 no)
 as_user "/opt/unipept-api/lib/deploy.sh deploy --from $d23/unipept-api-4.3.0-x86_64-linux-gnu-hybrid --timeout 10 --no-rollback" >/tmp/c14.log 2>&1
 check "exit non-zero"        "$([ $? -ne 0 ] && echo yes)" "yes"
 check "new binary still on"  "$(/opt/unipept-api/bin/unipept-api --version)" "unipept-api 4.3.0"
-check "did not roll back"    "$(grep -c 'rolled back' /tmp/c14.log)" "0"
+check_absent "did not roll back" 'rolled back' /tmp/c14.log
 check "says caller decides"  "$(grep -c 'for the caller to decide' /tmp/c14.log)" "1"
 check "no orphan .new"       "$([ -e /opt/unipept-api/bin/unipept-api.new ] && echo present || echo absent)" "absent"
 # Put the host back for the cases after this.
@@ -332,7 +332,7 @@ sleep 1
 pkill -TERM -f 'deploy.sh deploy --version' >/dev/null 2>&1
 wait $runner 2>/dev/null
 check "binary untouched"  "$(/opt/unipept-api/bin/unipept-api --version)" "$running"
-check "did not roll back" "$(grep -c 'rolling back' /tmp/i3.log)" "0"
+check_absent "did not roll back" 'rolling back' /tmp/i3.log
 check "no orphan .new"    "$([ -e /opt/unipept-api/bin/unipept-api.new ] && echo present || echo absent)" "absent"
 
 section "the port 80 redirect"
@@ -498,7 +498,7 @@ as_user "/opt/unipept-api/lib/deploy.sh deploy --from $d43/unipept-api-8.3.0-x86
 elapsed=$((SECONDS - began))
 check "waited out the deadline" "$([ "$elapsed" -ge 20 ] && echo yes)" "yes"
 check "and said so"             "$(grep -c 'did not answer /health within 20s' /tmp/t6.log)" "1"
-check "never called it failing" "$(grep -c 'failing, not loading' /tmp/t6.log)" "0"
+check_absent "never called it failing" 'failing, not loading' /tmp/t6.log
 check "rolled back"             "$([ "$(grep -c 'rolled back' /tmp/t6.log)" -ge 1 ] && echo yes)" "yes"
 check "serving the old binary"  "$(/opt/unipept-api/bin/unipept-api --version)" "unipept-api 8.1.0"
 

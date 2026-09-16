@@ -6,7 +6,7 @@
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
-      systemd systemd-sysv dbus libpam-systemd curl netcat-openbsd sudo iptables \
+      systemd systemd-sysv dbus libpam-systemd curl socat sudo iptables \
  && rm -rf /var/lib/apt/lists/*
 # systemd-logind must stay enabled: lingering is what keeps the user manager alive between logins,
 # and the deploy depends on it.

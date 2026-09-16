@@ -41,8 +41,12 @@ stage() { # version healthy -> dir
 if [ "\${1:-}" = "--version" ]; then echo "unipept-api $1"; exit 0; fi
 [ "$2" = yes ] || { sleep 600; exit 1; }
 PORT=\$(sed -n 's/^PORT=//p' /opt/unipept-api/etc/unipept-api.env | tail -1)
-trap 'exit 0' TERM
-while true; do printf 'HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok' | timeout 5 nc -l -p "\$PORT" -q0 >/dev/null 2>&1 || sleep 0.05; done
+# socat forks per connection, so two probes in a row cannot land in a gap where nothing is
+# listening. A single-connection \`nc -l\` loop has exactly that gap between instances, and
+# \`check\` probes the service twice — on its own port and then on 80 — so the gap made it
+# intermittently report that port 80 does not reach the service.
+printf 'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok' > /tmp/response.http
+exec socat TCP-LISTEN:\$PORT,reuseaddr,fork SYSTEM:'cat /tmp/response.http'
 EOF
   sed -i "s/unipept-api \$1/unipept-api $1/" "$d/unipept-api-$1-x86_64-linux-gnu-hybrid"
   chmod 755 "$d/unipept-api-$1-x86_64-linux-gnu-hybrid"

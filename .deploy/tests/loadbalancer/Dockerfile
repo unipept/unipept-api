@@ -1,9 +1,9 @@
 # A real HAProxy, because the rollout reads `show stat` over the runtime socket and the field layout,
 # the transitional `UP 1/100` status and the `bck` flag are all things a mock would get wrong.
 #
-# 2.4 matches production. The tools are baked in rather than installed at run time, so a suite cannot
-# pass or fail depending on whether apt-get worked that day.
-FROM haproxy:2.4
+# 2.8 matches production: it is what Ubuntu 24.04 ships. The tools are baked in rather than installed
+# at run time, so a suite cannot pass or fail depending on whether apt-get worked that day.
+FROM haproxy:2.8
 USER root
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -qq \

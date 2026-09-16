@@ -19,8 +19,8 @@ boot; nothing else needs it.
 | Suite | Runs against | Covers |
 | --- | --- | --- |
 | `server/suite.sh` | systemd 255 on Ubuntu 24.04, with a user manager and lingering | the first install, a deploy with no privilege, `check` and each failure it reports, the memory arm per variant, the binary swap under signal, rollback, and the interrupt paths |
-| `loadbalancer/haproxy-suite.sh` | HAProxy 2.4 | reading `show stat` by field name, multi-backend targets, the drain cycle, a transitional `UP 1/100` status, backups |
-| `loadbalancer/rollout-suite.sh` | HAProxy 2.4 with two backends over three servers | the four phases, the lock, ordering, preflight, each failure-resolution path, cleanup, and the record |
+| `loadbalancer/haproxy-suite.sh` | HAProxy 2.8 | reading `show stat` by field name, multi-backend targets, the drain cycle, a transitional `UP 1/100` status, backups |
+| `loadbalancer/rollout-suite.sh` | HAProxy 2.8 with two backends over three servers | the four phases, the lock, ordering, preflight, each failure-resolution path, cleanup, and the record |
 
 ## Why containers rather than mocks
 

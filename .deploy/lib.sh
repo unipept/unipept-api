@@ -145,7 +145,7 @@ wait_for_http() {
 
 # Sends one message to the team, through the MTA this host already runs for HAProxy's email-alert.
 #
-# curl rather than mail or sendmail: neither is installed on a stock Ubuntu 22.04, and curl is
+# curl rather than mail or sendmail: neither is installed on a stock Ubuntu 24.04, and curl is
 # already required here. The hostname goes in the URL path so that EHLO does not announce a filename.
 #
 # Never fatal. A rollout that has just failed must not also fail at telling somebody.

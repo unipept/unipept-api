@@ -16,15 +16,15 @@ boot.
 
 | Suite | Runs against | Covers |
 | --- | --- | --- |
-| `server/suite.sh` | systemd 249 on Ubuntu 22.04, with a user manager and lingering | the first install, a deploy with no privilege, `check` and each failure it reports, the memory arm per variant, the binary swap under signal, rollback, and the interrupt paths |
+| `server/suite.sh` | systemd 255 on Ubuntu 24.04, with a user manager and lingering | the first install, a deploy with no privilege, `check` and each failure it reports, the memory arm per variant, the binary swap under signal, rollback, and the interrupt paths |
 
 ## Why containers rather than mocks
 
 Every bug these suites caught was one a mock would have hidden:
 
 * `systemctl --user` needs `XDG_RUNTIME_DIR`, which only exists when lingering is really enabled.
-* `PrivateDevices=yes` makes a *user* unit fail to start, with exit 218. Nothing in the documentation
-  says so.
+* `AmbientCapabilities=` makes a *user* unit fail to start, with exit 218. Nothing in the
+  documentation says so.
 * A hard link is refused when the caller does not own the file, because `fs.protected_hardlinks` is
   on by default.
 

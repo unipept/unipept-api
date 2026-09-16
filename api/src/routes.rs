@@ -32,7 +32,12 @@ use crate::{
     }
 };
 
-const REQUEST_TIMEOUT_DURATION: u64 = 150;
+/// How long a request may run before the timeout layer answers 408.
+///
+/// Public because the deploy has to outlast it: `TimeoutStopSec` in the systemd unit must be
+/// greater, or systemd kills the process mid-drain and the requests in flight are lost anyway.
+/// `api/tests/deploy.rs` holds that to be true.
+pub const REQUEST_TIMEOUT_DURATION: u64 = 150;
 
 /// The routes and their middleware, without the path normalisation `create_app` adds.
 ///

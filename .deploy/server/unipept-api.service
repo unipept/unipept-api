@@ -1,0 +1,58 @@
+# A systemd *user* unit, installed at ~unipept/.config/systemd/user/unipept-api.service and
+# started by lingering at boot. Nothing about a deploy then needs root: the service user owns the
+# binary it runs and restarts its own unit.
+#
+# The service listens on PORT, above 1024, and the load balancer still reaches it on 80: a netfilter
+# rule on this host sends what arrives on 80 to PORT. unipept-api-ports.service holds that rule, and
+# install.sh puts it there. The rewrite is local, so no port on the wire changes.
+#
+# Three directives a system unit would carry are absent, and each is deliberate:
+#   User=, Group=          a user unit already runs as the user that owns it
+#   AmbientCapabilities=   a user manager holds no capability to grant. Measured on systemd 255:
+#                          "Failed to apply ambient capabilities (before UID change): Operation not
+#                          permitted", and the service exits 218. This is why the port is redirected
+#                          rather than bound directly.
+#   PrivateDevices=        a user manager applies it through a user namespace, and 24.04 sets
+#                          kernel.apparmor_restrict_unprivileged_userns=1, so whether it starts is a
+#                          host setting. Left out until it is measured on a server. Every other
+#                          Protect* directive below does work.
+#
+# No After= for OpenSearch: the API only parses the address at startup and connects per request,
+# so it starts cleanly before OpenSearch is up.
+
+[Unit]
+Description=Unipept API Server
+Documentation=https://github.com/unipept/unipept-api/wiki/Deploying-the-Unipept-API
+
+[Service]
+# Type=exec reports a failed exec as a failed start.
+Type=exec
+EnvironmentFile=/opt/unipept-api/etc/unipept-api.env
+ExecStart=/opt/unipept-api/bin/unipept-api -i ${INDEX_LOCATION} -d ${DATABASE_ADDRESS} --port ${PORT}
+
+Restart=on-failure
+RestartSec=5
+# Above the 150-second request timeout, so systemd waits for a drain instead of cutting it off.
+# The drain itself is the graceful shutdown in #267; until that is released, a stop ends the
+# process at once and this only sets the ceiling. api/tests/deploy.rs holds the two to each other.
+TimeoutStopSec=180
+
+# Long requests hold more descriptors than the 1024 default allows.
+LimitNOFILE=65536
+
+# No StandardOutput or StandardError: both go to the journal. Read them with
+# `journalctl --user -u unipept-api` as the service user, or
+# `journalctl _SYSTEMD_USER_UNIT=unipept-api.service` as root.
+
+NoNewPrivileges=yes
+# Read-only view of the whole hierarchy, the index directory included. The API writes nothing.
+ProtectSystem=strict
+# The index must therefore not live under /home.
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=default.target

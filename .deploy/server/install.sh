@@ -23,7 +23,7 @@ readonly USER=unipept
 readonly ROOT=/opt/unipept-api
 readonly ENV_FILE="${ROOT}/etc/unipept-api.env"
 
-require_cmd getent install loginctl setpriv systemctl useradd usermod
+require_cmd getent install iptables loginctl setpriv systemctl useradd usermod
 [ "$(id -u)" -eq 0 ] || die "run this as root. It is the only step that needs it."
 
 # A home directory, because a user unit lives in it. A real shell, because the rollout runs
@@ -66,9 +66,20 @@ install -m 0755 -o "$USER" -g "$USER" "${HERE}/deploy.sh" "${ROOT}/lib/deploy.sh
 install -m 0644 -o "$USER" -g "$USER" "${HERE}/../lib.sh" "${ROOT}/lib/lib.sh"
 log "installed ${ROOT}/lib/deploy.sh"
 
+# The service cannot bind port 80 itself, so a netfilter rule sends 80 to the port it does bind.
+# Root-owned, because only root can change netfilter and nothing about a deploy should be able to.
+install -m 0755 "${HERE}/unipept-api-ports.sh" "${ROOT}/lib/unipept-api-ports.sh"
+install -m 0644 "${HERE}/unipept-api-ports.service" /etc/systemd/system/unipept-api-ports.service
+log "installed the port redirect"
+
 install -d -m 0755 -o "$USER" -g "$USER" "$unit_directory"
 install -m 0644 -o "$USER" -g "$USER" "${HERE}/unipept-api.service" "${unit_directory}/${SERVICE}.service"
 log "installed ${unit_directory}/${SERVICE}.service"
+
+systemctl daemon-reload
+# Enabled so it returns after a reboot, and started now so the port works before the first deploy.
+systemctl enable --now unipept-api-ports
+log "port 80 reaches $(env_value PORT "$ENV_FILE")"
 
 # Without lingering, the user manager stops when the last session ends, and starts no unit at boot.
 loginctl enable-linger "$USER"
@@ -95,5 +106,7 @@ Still to do on this host:
   2. Make the index directory readable by ${USER}, and keep it out of /home.
   3. Give ${USER} an authorized_keys for the load balancer, if this host is rolled out to.
   4. As ${USER}: ${ROOT}/lib/deploy.sh deploy --version <tag>
-  5. Point HAProxy's server lines at PORT.
+
+HAProxy keeps its server lines on port 80: the redirect installed here sends 80 to PORT inside this
+host, so nothing on the network changes. Changing PORT later means re-running this script.
 EOF

@@ -27,6 +27,8 @@ chmod -R a+rX /srv/index
 
 # Point the env file at a test port, the fake index, and a variant.
 sed -i 's#^PORT=.*#PORT=8099#; s#^VARIANT=.*#VARIANT=hybrid#; s#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/index#' /opt/unipept-api/etc/unipept-api.env
+# install.sh applied the redirect against the example PORT; the suite just changed it.
+systemctl restart unipept-api-ports >/dev/null 2>&1
 
 UID_N=$(id -u unipept)
 as_user() { setpriv --reuid unipept --regid unipept --init-groups env XDG_RUNTIME_DIR=/run/user/"$UID_N" HOME=/home/unipept bash -c "$1"; }
@@ -328,6 +330,30 @@ wait $runner 2>/dev/null
 check "binary untouched"  "$(/opt/unipept-api/bin/unipept-api --version)" "$running"
 check "did not roll back" "$(grep -c 'rolling back' /tmp/i3.log)" "0"
 check "no orphan .new"    "$([ -e /opt/unipept-api/bin/unipept-api.new ] && echo present || echo absent)" "absent"
+
+section "the port 80 redirect"
+check "unit enabled"    "$(systemctl is-enabled unipept-api-ports 2>/dev/null)" "enabled"
+check "unit active"     "$(systemctl is-active unipept-api-ports 2>/dev/null)" "active"
+check "80 reaches the service" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:80/health)" "200"
+check "the service's own port still answers" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:8099/health)" "200"
+
+section "check notices when the redirect is gone"
+systemctl stop unipept-api-ports >/dev/null 2>&1
+iptables -t nat -F UNIPEPT_API 2>/dev/null
+as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/p1.log 2>&1
+check "exit non-zero"      "$([ $? -ne 0 ] && echo yes)" "yes"
+check "says it is inactive" "$(grep -c 'unipept-api-ports is not active' /tmp/p1.log)" "1"
+check "deploy refuses too"  "$(as_user "/opt/unipept-api/lib/deploy.sh deploy --from $d1/unipept-api-2.6.0-x86_64-linux-gnu-hybrid --timeout 10" >/dev/null 2>&1; [ $? -ne 0 ] && echo yes)" "yes"
+systemctl start unipept-api-ports >/dev/null 2>&1
+sleep 1
+check "and passes once it is back" "$(as_user "/opt/unipept-api/lib/deploy.sh check" >/dev/null 2>&1; echo $?)" "0"
+
+section "the rules are idempotent and survive a restart"
+before=$(iptables -t nat -S UNIPEPT_API | grep -c REDIRECT)
+systemctl restart unipept-api-ports >/dev/null 2>&1
+systemctl restart unipept-api-ports >/dev/null 2>&1
+check "still one redirect rule" "$(iptables -t nat -S UNIPEPT_API | grep -c REDIRECT)" "$before"
+check "80 still reaches it"     "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:80/health)" "200"
 
 echo "== install.sh is idempotent and keeps an edited env file =="
 $R/server/install.sh >/dev/null 2>&1; check "exit 0" "$?" "0"

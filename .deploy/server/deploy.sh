@@ -254,6 +254,29 @@ do_check() {
         fi
     fi
 
+    # The service listens above 1024 and the load balancer reaches it on 80, so the redirect is as
+    # necessary as the binary. A host that lost it serves perfectly and is unreachable, which is
+    # exactly the failure this whole check exists to find before a server is drained.
+    case $(systemctl is-enabled unipept-api-ports 2>/dev/null) in
+        enabled) ;;
+        *) fail "unipept-api-ports is not enabled, so port 80 will not reach this service after a reboot" ;;
+    esac
+    case $(systemctl is-active unipept-api-ports 2>/dev/null) in
+        active) ;;
+        *) fail "unipept-api-ports is not active; run it as root to restore the port 80 redirect" ;;
+    esac
+
+    # And that it works, rather than only that systemd thinks it ran.
+    #
+    # Only meaningful while the service is answering on its own port: if it is not, nothing can be
+    # concluded about the redirect, and a deploy is exactly what someone runs to fix a service that
+    # is down. Refusing here would block the recovery.
+    if [ -n "$port" ] && [ "$(http_code "http://127.0.0.1:${port}/health")" = "200" ]; then
+        if [ "$(http_code "http://127.0.0.1:80/health")" != "200" ]; then
+            fail "the service answers on ${port} but port 80 does not reach it; check unipept-api-ports"
+        fi
+    fi
+
     [ -w "${ROOT}/bin" ] || fail "${ROOT}/bin is not writable"
 
     # Room for a second copy beside the one running, since both exist during a swap. Measured from

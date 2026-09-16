@@ -5,7 +5,7 @@ a mock gets wrong too. So these suites run against a real systemd and a real HAP
 versions production runs.
 
 ```bash
-.deploy/tests/run-tests.sh            # every suite, about four minutes
+.deploy/tests/run-tests.sh            # every suite, about seven minutes
 .deploy/tests/run-tests.sh server     # install.sh and deploy.sh
 .deploy/tests/run-tests.sh haproxy    # haproxy.sh
 .deploy/tests/run-tests.sh rollout    # rollout.sh

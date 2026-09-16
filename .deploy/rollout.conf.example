@@ -1,19 +1,25 @@
-# Load balancer settings for rollout.sh. Copy to rollout.conf beside it; rollout.conf is not in
-# this repository.
+# Load balancer settings for rollout.sh. Copy to rollout.conf beside it; rollout.conf is not in this
+# repository.
 #
-# Only what this host needs is listed. Every setting rollout.sh already defaults to sensibly is
-# left out, so this file does not go stale and an operator can see what actually needs deciding.
+# Only what this host has to decide is listed. Everything rollout.sh already defaults to sensibly is
+# left out, so this file cannot go stale.
 
-# HAProxy runtime socket. The socket ships as srw------- root:haproxy, so either run the rollout as
-# root, or set `mode 660` on the stats socket line in haproxy.cfg and put the operator in the
-# haproxy group. Only the load balancer side needs any privilege; the servers need none.
+# HAProxy runtime socket. It ships as srw------- root:haproxy, so either run the rollout as root, or
+# set `mode 660` on the stats socket line in haproxy.cfg and put the operator in the haproxy group.
+# Only the load balancer side needs privilege; the servers need none.
 HAPROXY_SOCKET=/run/haproxy/haproxy.sock
 
-# SSH user on every API server. It is the service user: it owns the binary directory and restarts
-# its own user unit, so no sudo is involved. Leave empty to let ~/.ssh/config decide.
+# SSH user on every API server. It is the service user: it owns the binary directory and restarts its
+# own user unit, so no sudo is involved. Leave empty to let ~/.ssh/config decide.
 SSH_USER=unipept
 
-# Uncomment to depart from the defaults in lib.sh.
+# Where a failed rollout writes to. Left empty, nobody is emailed and the failure is only in the
+# terminal and the journal. The same address HAProxy's own email-alert uses is the obvious choice.
+NOTIFY_TO=unipept@ugent.be
+
+# Uncomment to depart from the defaults.
+#NOTIFY_SMTP=127.0.0.1:25
+#LOCK_FILE=/tmp/unipept-rollout.lock
 #DRAIN_TIMEOUT=240
 #READY_TIMEOUT=900
 #REMOTE_DEPLOY=/opt/unipept-api/lib/deploy.sh

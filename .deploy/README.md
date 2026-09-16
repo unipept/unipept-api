@@ -22,6 +22,7 @@ holding copies.
 One server, on that server, as the `unipept` user:
 
 ```bash
+/opt/unipept-api/lib/deploy.sh check                 # is this host ready?
 /opt/unipept-api/lib/deploy.sh deploy --version v2.6.0
 /opt/unipept-api/lib/deploy.sh rollback
 ```
@@ -31,22 +32,42 @@ Every server, from the load balancer:
 ```bash
 ./rollout.sh --version v2.6.0 --dry-run
 ./rollout.sh --version v2.6.0
+./rollout.sh status                                  # after a run that stopped part way
 ```
 
-Each server drains, finishes what it was answering, takes the binary, and returns only after it
-answers `/health` itself. HAProxy's own view is never the readiness signal: with `fall 100` at a
-two-second interval it needs about 200 seconds to notice a server that stopped working.
+A rollout runs in four phases, and the order is the point:
 
-A server that does not come back is rolled back and left out of rotation, and the servers after it
-are not touched.
+1. **Claim** — one rollout at a time, and download the release once for the whole fleet.
+2. **Check** — every server, before any of them is touched: HAProxy state, both health routes, and
+   `deploy.sh check` with the real binary staged, so a build that cannot run on a host is found
+   before another host is drained. Every problem in the fleet is reported together.
+3. **Update** — one server at a time. It leaves the pool, takes the binary, and returns to the pool
+   before the next one starts.
+4. **Finish** — always: staging cleared on every server, one journal line per server, and an email if
+   a server needs attention.
 
-A server is drained from every backend its inventory line names, so routing the database endpoints
-to a backend of their own costs nothing here beyond that list.
+**At most one server is ever outside the pool.** A failure stops the run, so the servers after it are
+never attempted. The capacity guard refuses to drain the last server that is UP — a backup counts as
+capacity — and `--allow-downtime` is how an operator overrides that deliberately.
 
-Draining and restoring changes a server's HAProxy state, and that backend has `email-alert`, so
-each transition sends mail.
+A server whose deploy failed is rolled back and, if it comes back healthy, returned to the pool: it is
+serving a version that was known good, so holding it out would cost capacity for nothing. Only a
+server that cannot be routed to is left out, and that is the case that sends mail.
 
-## A user unit, so a deploy needs no privilege
+## Reading what happened
+
+```bash
+journalctl -t unipept-rollout            # who deployed what, when
+./rollout.sh status                       # the fleet as it is now
+```
+
+## One caution
+
+`set server ... state` is a runtime change and this HAProxy has no `server-state-file`, so **reloading
+or restarting HAProxy during a rollout returns a draining server to rotation** mid-restart. The lock
+file is the signal that a run is in progress.
+
+## A user unit, so a deploy needs no privilege## A user unit, so a deploy needs no privilege
 
 The service runs as a systemd user unit owned by the `unipept` user, started at boot by lingering.
 That user owns `/opt/unipept-api`, so it replaces the binary and restarts its own unit without root,

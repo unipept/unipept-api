@@ -34,6 +34,7 @@ usage: haproxy.sh <command> <backend[,backend...]>/<server> [arguments]
   wait-up <target> <secs>      wait until every backend reports UP
   up-count <backend>           print how many servers in one backend are UP
   least-up <backend[,...]>     print the smallest UP count across the backends
+  is-backup <target>           exit 0 when the server is a backup in any of its backends
 
 Every command but state, sessions, up-count and least-up takes several backends at once. The
 socket path comes from HAPROXY_SOCKET.
@@ -196,6 +197,33 @@ least_up() {
     printf '%s\n' "${least:-0}"
 }
 
+# Whether HAProxy considers this server a backup, in any of the backends it sits in.
+#
+# Read from the `bck` field rather than from the inventory, so there is one source of truth for what a
+# backup is: the configuration HAProxy actually loaded. A backup takes no traffic while the primaries
+# are up, which is why the rollout updates it last.
+is_backup() {
+    local backends server backup
+    { read -r backends; read -r server; } < <(split_target "$1")
+
+    backup=$(runtime "show stat" | awk -F, -v wanted="$backends" -v sv="$server" '
+        BEGIN { split(wanted, list, " "); for (i in list) want[list[i]] = 1 }
+        /^#/ {
+            for (i = 1; i <= NF; i++) {
+                name = $i
+                sub(/^# */, "", name)
+                if (name == "bck") bck = i
+            }
+            if (!bck) exit 2
+            next
+        }
+        ($1 in want) && $2 == sv && $bck == 1 { found = 1 }
+        END { print found + 0 }
+    ')
+
+    [ "$backup" = "1" ]
+}
+
 # "backend=status" per backend, for a caller that wants to report rather than wait.
 states() {
     local backends server
@@ -235,5 +263,6 @@ case $command in
     wait-up) [ $# -eq 2 ] || usage; wait_up "$1" "$2" ;;
     up-count) up_count "$1" ;;
     least-up) least_up "$1" ;;
+    is-backup) is_backup "$1" ;;
     *) usage ;;
 esac

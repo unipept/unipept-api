@@ -44,8 +44,18 @@ Every server, from the load balancer:
 ```bash
 ./rollout.sh --version v2.6.0 --dry-run
 ./rollout.sh --version v2.6.0
-./rollout.sh status                                  # after a run that stopped part way
+./rollout.sh status                                  # the fleet, and what a run in progress is doing
+./rollout.sh abort                                   # stop a run, and wait for it to put its server back
+./rollout.sh ready                                   # return to the pool whatever can serve again
+./rollout.sh ready rick                              # or just the one
 ```
+
+`status` and `abort` take no lock, so both work while a rollout is running — which is the only time
+either is worth anything.
+
+**Use `ready` rather than `haproxy.sh` by hand.** It is the one path back into the pool that holds a
+server to answering `/health` *and* `/health/database` first. Calling `haproxy.sh ready` directly
+skips that, and can return a server for database traffic it cannot serve.
 
 A rollout runs in four phases, and the order is the point:
 

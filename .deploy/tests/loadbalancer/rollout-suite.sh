@@ -603,8 +603,94 @@ section "23. a run that changes nothing is not recorded as a rollout"
 $R status >/dev/null 2>&1
 check "status journalled nothing" "$(grep -c . /tmp/logged.txt)" "0"
 : > /tmp/logged.txt
+$R ready >/dev/null 2>&1
+check "ready journalled nothing"  "$(grep -c . /tmp/logged.txt)" "0"
+: > /tmp/logged.txt
 $R --version v2.6.0 --only patty --allow-downtime >/dev/null 2>&1
 check "a rollout still is"        "$([ "$(grep -c 'version=v2.6.0' /tmp/logged.txt)" -ge 1 ] && echo yes)" "yes"
+
+reset_fleet
+section "24. status and abort work while a rollout is running"
+# Both exist to be run during one. Taking the lock meant status failed exactly then — and the lock's
+# own message told the reader to run it.
+cat > /usr/local/bin/ssh <<'EOF'
+#!/usr/bin/env bash
+args=("$@"); cmd=""
+for a in "${args[@]}"; do case $a in -o|BatchMode=yes|ConnectTimeout=10|ServerAliveInterval=15|ServerAliveCountMax=4|-n) ;; *) cmd="$cmd $a" ;; esac; done
+echo "SSH:$cmd" >> /tmp/ssh.log
+case "$cmd" in
+  *"deploy.sh check"*) printf 'variant=hybrid\nport=80\nindex_version=2026.09-test\nproblems=0\n'; exit 0 ;;
+  # exec, so the stand-in is the sleep rather than a shell waiting on one: a real ssh is a binary
+  # that dies on TERM, and a shell would defer the signal until its own child returned.
+  *"deploy --from"*)   exec sleep 971 ;;
+  *status*)            printf 'version=2.5.3\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n'; exit 0 ;;
+esac
+exit 0
+EOF
+chmod +x /usr/local/bin/ssh
+: > /tmp/ssh.log; : > /tmp/mail.txt
+$R --version v2.6.0 --only patty --allow-downtime >/tmp/r28.txt 2>&1 &
+runner=$!
+waited=0
+until grep -q 'deploy --from' /tmp/ssh.log 2>/dev/null; do
+  sleep 1; waited=$((waited + 1)); [ "$waited" -lt 60 ] || break
+done
+
+$R status >/tmp/r29.txt 2>&1
+check "status ran during a rollout" "$?" "0"
+check "and said one is running"     "$(grep -c 'a rollout of v2.6.0 is' /tmp/r29.txt)" "1"
+check "naming the server"           "$(grep -c 'updating patty' /tmp/r29.txt)" "1"
+check "and who started it"          "$(grep -c "by $(id -un)" /tmp/r29.txt)" "1"
+# A second rollout is still refused, which is what the lock is for.
+$R --version v2.7.0 --allow-downtime >/tmp/r30.txt 2>&1
+check "a second rollout refused"    "$(grep -c 'holds /tmp/unipept-rollout.lock' /tmp/r30.txt)" "1"
+
+# No pkill first, unlike case 19: reaching the run's children is abort's own job, because a shell
+# runs a trap only when the command it is waiting on returns.
+began=$SECONDS
+$R abort >/tmp/r31.txt 2>&1
+check "abort exited 0"          "$?" "0"
+check "said what it stopped"    "$(grep -c 'stopping the rollout of v2.6.0' /tmp/r31.txt)" "1"
+check "waited for it to finish" "$(grep -c 'the rollout stopped' /tmp/r31.txt)" "1"
+check "and did not sit on it"   "$([ $((SECONDS - began)) -lt 60 ] && echo yes)" "yes"
+wait $runner 2>/dev/null
+pkill -f 'sleep 971' >/dev/null 2>&1
+check "the server was put back" "$(grep -c 'left out of the pool by a run that did not finish' /tmp/r28.txt)" "1"
+check "the state file is gone"  "$([ -f /tmp/unipept-rollout.state ] && echo present || echo absent)" "absent"
+check "abort with nothing to do" "$($R abort >/tmp/r32.txt 2>&1; [ $? -ne 0 ] && echo yes)" "yes"
+check "and says so"              "$(grep -c 'no rollout is running' /tmp/r32.txt)" "1"
+
+reset_fleet
+section "25. ready puts a server back, but only one that serves both routes"
+# What the failure mail asks for. Doing it with haproxy.sh by hand goes round the both-routes rule,
+# and can return a server for database traffic it cannot serve.
+cp /tmp/ssh.keep /usr/local/bin/ssh
+$H maint all_handlers,db_handlers/selma >/dev/null 2>&1
+check "selma is out"        "$($H state all_handlers/selma)" "MAINT"
+echo selma > /tmp/no-database
+$R ready selma >/tmp/r33.txt 2>&1
+check "refused while the db route is down" "$(grep -c 'does not answer both health routes' /tmp/r33.txt)" "1"
+check "still out of the pool"              "$($H state all_handlers/selma)" "MAINT"
+rm -f /tmp/no-database
+$R ready selma >/tmp/r34.txt 2>&1
+check "ready exited 0"      "$?" "0"
+check "back in the pool"    "$(printf '%s' "$($H state all_handlers/selma)" | cut -d' ' -f1)" "UP"
+check "and in the db pool"  "$(printf '%s' "$($H state db_handlers/selma)" | cut -d' ' -f1)" "UP"
+check "says one was put back" "$(grep -c '1 server(s) returned to the pool' /tmp/r34.txt)" "1"
+$R ready selma >/tmp/r35.txt 2>&1
+check "a server already in is left alone" "$(grep -c 'selma is already in the pool' /tmp/r35.txt)" "1"
+$R ready nosuchserver >/tmp/r36.txt 2>&1
+check "an unknown name is refused" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "and named"                  "$(grep -c 'does not name every one of: nosuchserver' /tmp/r36.txt)" "1"
+
+reset_fleet
+section "26. ready with no name returns every server that can serve"
+$H maint all_handlers,db_handlers/patty >/dev/null 2>&1
+$H maint all_handlers,db_handlers/rick >/dev/null 2>&1
+$R ready >/tmp/r37.txt 2>&1
+check "both came back"   "$(grep -c '2 server(s) returned to the pool' /tmp/r37.txt)" "1"
+check "patty is up"      "$(printf '%s' "$($H state all_handlers/patty)" | cut -d' ' -f1)" "UP"
+check "rick is up"       "$(printf '%s' "$($H state all_handlers/rick)" | cut -d' ' -f1)" "UP"
 
 # The fake backends hold stdout open; without this a pipe on the outside never sees EOF.
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1

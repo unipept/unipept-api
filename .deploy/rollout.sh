@@ -12,10 +12,15 @@
 #
 # Flow:
 #   1. Load rollout.conf, parse the arguments, and take a lock, so only one rollout runs at a time.
-#   2. `status` prints the fleet and stops. It changes nothing, and needs no release to do it.
+#   2. A subcommand instead of a rollout: `status` prints what a run in progress is doing and then
+#      the fleet; `abort` stops a run and waits for it to put its server back; `ready` returns
+#      servers to the pool. None needs a release. `status` and `abort` take no lock, because both
+#      are for running while a rollout is.
 #   3. Read and validate the inventory, and order the servers primaries first, backups last.
 #   4. --dry-run prints what each server holds and how the load balancer sees it, and stops.
-#   5. Phase 0: download the release on the load balancer, once per variant the fleet asks for.
+#   5. Phase 0: download the release on the load balancer, once per variant the fleet asks for, and
+#      say what the fleet is running now — a split fleet is reported, never refused, because
+#      rolling out again is how it is put right.
 #   6. Phase 1: preflight. Every server has to be UP in each backend it names and answer /health
 #      and /health/database; its asset is delivered to it and `deploy.sh check --from` runs there;
 #      and the fleet has to agree on one index version. A problem here stops the run, with nothing
@@ -63,6 +68,10 @@ READY_TIMEOUT=$DEFAULT_READY_TIMEOUT
 # it is already answering, and this is only the time to confirm it.
 HEALTH_TIMEOUT=60
 LOCK_FILE=/tmp/unipept-rollout.lock
+# What the run in progress is doing, for `status` to read and `abort` to signal. Beside the lock
+# rather than in it: the lock is opened with `exec 9>`, which truncates, and rewriting through a
+# held descriptor needs seeking this has no reason to do.
+RUN_STATE=
 # Empty means nobody is emailed; rollout.conf sets it.
 NOTIFY_TO=''
 NOTIFY_SMTP=127.0.0.1:25
@@ -71,6 +80,9 @@ if [ -f "${CONFIG_DIR}/rollout.conf" ]; then
     # shellcheck source=/dev/null  # written on the load balancer, not in this repository.
     source "${CONFIG_DIR}/rollout.conf"
 fi
+
+# After the configuration, so a LOCK_FILE set there takes its state file with it.
+[ -n "$RUN_STATE" ] || RUN_STATE="${LOCK_FILE%.lock}.state"
 
 # What `die` raises when it is called from inside a subshell.
 trap 'exit 1' USR1
@@ -81,6 +93,8 @@ usage() {
     cat >&2 <<'EOF'
 usage: rollout.sh --version <tag> [options]
        rollout.sh status
+       rollout.sh abort
+       rollout.sh ready [<name> ...]
 
   --version <tag>          release to install, for example v2.6.0
   --only <name>            one server from the inventory, rather than all of them
@@ -90,7 +104,12 @@ usage: rollout.sh --version <tag> [options]
   --inventory <path>       inventory file, default servers.conf beside this script
 
   status                   read the fleet and change nothing: HAProxy state, version, variant and
-                           index version per server. What to run after a rollout stopped part way.
+                           index version per server, and what a rollout in progress is doing. What
+                           to run after a rollout stopped part way.
+  abort                    stop the rollout that is running and wait for it to put its server back.
+  ready [<name> ...]       return servers to the pool, named ones or every one that is out. Each
+                           has to answer both health routes first, which is what makes this
+                           different from calling haproxy.sh by hand.
 
 A server is drained from every backend its inventory line names, so routing the database
 endpoints to their own backend needs no change here beyond that list.
@@ -101,12 +120,13 @@ EOF
     exit 2
 }
 
+# The subcommand, if one was given. Empty means a rollout.
+COMMAND=''
 VERSION=''
 ONLY=''
 DRY_RUN=false
 ALLOW_DOWNTIME=false
 ALLOW_INDEX_MISMATCH=false
-STATUS_ONLY=false
 
 # name -> the status line that server reported after its deploy, for the closing summary.
 declare -A STATUS=()
@@ -127,6 +147,8 @@ FAILED_NAMES=''
 DOWN_NAMES=''
 # Who to name in the record and the mail. SUDO_USER first, so a run through sudo names the person.
 readonly RUN_BY="${SUDO_USER:-$(id -un)}"
+STARTED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+readonly STARTED_AT
 # Everyone logs in as the same account, so the name alone cannot say who ran this. The address they
 # came from is not attribution, but it is the difference between "someone" and "someone at that
 # machine" when a record is read back months later.
@@ -145,7 +167,7 @@ while [ $# -gt 0 ]; do
     # Two arguments or usage: `shift 2` with one left fails, and set -e would exit before the
     # check below, saying nothing at all.
     case $1 in
-        status) STATUS_ONLY=true; shift ;;
+        status | abort | ready) COMMAND=$1; shift; break ;;
         --version) [ $# -ge 2 ] || usage; VERSION=$2; shift 2 ;;
         --only) [ $# -ge 2 ] || usage; ONLY=$2; shift 2 ;;
         --inventory) [ $# -ge 2 ] || usage; INVENTORY=$2; shift 2 ;;
@@ -156,18 +178,29 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# `status` reads the fleet and needs no release to do it.
-[ "$STATUS_ONLY" = true ] || [ -n "$VERSION" ] || usage
+# Only a rollout needs a release. The subcommands read the fleet, or act on what a run left.
+[ -n "$COMMAND" ] || [ -n "$VERSION" ] || usage
 [ -f "$INVENTORY" ] || die "no inventory at $INVENTORY"
 require_cmd curl sha256sum socat ssh scp flock logger
 
 # One rollout at a time. Two runs would each read capacity before the other drained, so both would
-# believe the backend could spare a server and between them empty it.
+# believe the backend could spare a server and between them empty it. `ready` takes it too, because
+# it moves servers in and out of the pool and a rollout is counting them.
 #
 # flock releases when this process dies, however it dies, so an uncatchable death leaves no stale
 # lock to clear by hand.
-exec 9> "$LOCK_FILE"
-flock -n 9 || die "another rollout holds ${LOCK_FILE}; wait for it, or check 'rollout.sh status'"
+#
+# `status` and `abort` take nothing. Both exist to be run while a rollout is going: one reads, and
+# the other has to find the lock held to have anything to do. Taking it here meant `status` failed
+# during a rollout, which is the one time it is worth running — and the message below said to run
+# it.
+case $COMMAND in
+    status | abort) ;;
+    *)
+        exec 9> "$LOCK_FILE"
+        flock -n 9 || die "another rollout holds ${LOCK_FILE}; wait for it, or run 'rollout.sh status'"
+        ;;
+esac
 
 # One server per line: name host port haproxy_backends haproxy_server
 #
@@ -311,7 +344,6 @@ report_fleet_versions() {
     # it, and re-installing the same binary is what the rest of this run does anyway.
     [ -z "$already" ] || log "already on ${target}: ${already}"
 }
-
 
 # Refuses to start from a fleet that cannot take the change, before anything is drained.
 #
@@ -628,6 +660,9 @@ finish() {
             log "could not clear ${REMOTE_STAGING} on ${host}"
     done
     [ -n "$TMP_DIR" ] && rm -rf "$TMP_DIR"
+    # Only a run that wrote one clears it, so a recovery command cannot delete the state of a
+    # rollout that is still going.
+    [ -n "$VERSION" ] && [ -n "$RUN_STATE" ] && rm -f "$RUN_STATE"
 
     record_run "$status"
 
@@ -663,8 +698,8 @@ Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
 
 # One journal line per server, so "who deployed what, when" has an answer that outlives a terminal.
 #
-# Only for a run that set out to change something. `trap finish EXIT` covers every invocation, so
-# `status` recorded `version= ... exit=0` and read back as a rollout of nothing.
+# Only for a run that set out to change something. `status` and the recovery commands take no
+# --version, so recording them wrote `version= ... exit=0` and read back as a rollout of nothing.
 record_run() {
     local status=$1 name
 
@@ -683,10 +718,63 @@ record_run() {
     logger -t unipept-rollout -- "version=${VERSION} by=${RUN_BY} from=${RUN_FROM:-local} exit=${status}"
 }
 
+# Says what this run is doing, for `status` to read and `abort` to signal.
+#
+# Rewritten whole each time rather than appended to, so reading it never has to decide which of two
+# phases is the current one.
+note_phase() {
+    local phase=$1 server=${2:-}
+
+    [ -n "$RUN_STATE" ] || return 0
+    {
+        printf 'pid=%s\n' "$$"
+        printf 'version=%s\n' "$VERSION"
+        printf 'phase=%s\n' "$phase"
+        printf 'server=%s\n' "$server"
+        printf 'started=%s\n' "$STARTED_AT"
+        printf 'by=%s\n' "$RUN_BY"
+    } > "$RUN_STATE" 2>/dev/null || true
+}
+
+# Whether a rollout is running, decided by the lock rather than by the state file.
+#
+# A run killed uncatchably leaves its state file behind, and nothing in the file can say so. The
+# lock cannot outlive the process that held it, so taking it is the test: if it can be taken, the
+# file is leftovers.
+a_run_is_in_progress() {
+    # `flock <file> <command>` opens the file itself, so this needs no descriptor of its own. An
+    # `exec` to get one would redirect this shell for good rather than for the call: `exec 8> file
+    # 2>/dev/null` sends stderr to /dev/null permanently, and every message after it disappears.
+    #
+    # Taking the lock and letting go is the whole test. A failure for any other reason reads as a
+    # run in progress, which is the answer that refuses to act.
+    ! flock -n "$LOCK_FILE" true
+}
+
 # Reads the fleet without changing any of it. What to reach for after a run stopped part way, or
 # when "which server is still out of the pool" needs an answer.
 do_status() {
     local name host port backends server report inventory
+
+    # Before the fleet, because it changes what the fleet below means: a server out of the pool is
+    # expected while a rollout is working on it, and needs attention once nothing is.
+    if a_run_is_in_progress; then
+        if [ -f "$RUN_STATE" ]; then
+            log "a rollout of $(env_value version "$RUN_STATE") is $(env_value phase "$RUN_STATE")$(
+                s=$(env_value server "$RUN_STATE"); [ -n "$s" ] && printf ' %s' "$s")"
+            log "started $(env_value started "$RUN_STATE") by $(env_value by "$RUN_STATE"), pid $(env_value pid "$RUN_STATE")"
+            log "to stop it: ${HERE}/rollout.sh abort"
+        else
+            log "a rollout holds ${LOCK_FILE} but wrote no state file"
+        fi
+    else
+        # Leftovers from a run that was killed uncatchably. Said rather than deleted: it names what
+        # was going on when the machine stopped, and the fleet below is what it left.
+        [ -f "$RUN_STATE" ] && log "no rollout is running; ${RUN_STATE} is from one that did not finish"
+        log "no rollout is running"
+    fi
+    printf '\n' >&2
+
     inventory=$(read_inventory) || exit 1
 
     printf '%-10s %-22s %-28s %-10s %-10s %s\n' SERVER ADDRESS HAPROXY VERSION VARIANT INDEX
@@ -700,6 +788,88 @@ do_status() {
             "$(printf '%s\n' "$report" | env_value variant)" \
             "$(on_server "$host" check 2>/dev/null | env_value index_version || echo '-')"
     done <<<"$inventory"
+}
+
+# Stops a rollout that is running, from anywhere.
+#
+# The run restores the server it drained through its own handlers, so this only has to reach them.
+# Ctrl-C cannot, from another terminal: the signal has to go to that process, and until the state
+# file existed there was nothing that said which one it is.
+do_abort() {
+    local pid
+
+    a_run_is_in_progress || die "no rollout is running; ${LOCK_FILE} is free"
+    [ -f "$RUN_STATE" ] || die "a rollout holds ${LOCK_FILE} but wrote no ${RUN_STATE}; find it with 'ps'"
+
+    pid=$(env_value pid "$RUN_STATE")
+    case ${pid:-} in
+        '' | *[!0-9]*) die "${RUN_STATE} names no pid to stop" ;;
+    esac
+    kill -0 "$pid" 2>/dev/null || die "pid ${pid} is not running, but the lock is held; find it with 'ps'"
+
+    log "stopping the rollout of $(env_value version "$RUN_STATE") started by $(env_value by "$RUN_STATE")"
+    kill -TERM "$pid" 2>/dev/null || die "could not signal ${pid}"
+
+    # Its children too, and this is the part that makes the signal land. A shell runs a trap when
+    # the command it is waiting on returns, and that command is an ssh running a deploy, which can
+    # be an hour on a host that reads its index. Ending the connection is what Ctrl-C does by
+    # signalling the whole foreground group: deploy.sh takes the HUP it is written for and rolls the
+    # server back, ssh returns, and the run's own handler puts the server in the pool.
+    local child
+    for child in $(ps -o pid= --ppid "$pid" 2>/dev/null); do
+        kill -TERM "$child" 2>/dev/null || true
+    done
+
+    # Until the lock is free, because that is when the run's own cleanup has finished. A server it
+    # had drained is put back by its handlers, not by this.
+    local waited=0
+    while a_run_is_in_progress; do
+        sleep 1
+        waited=$((waited + 1))
+        if [ "$waited" -ge 120 ]; then
+            die "the rollout has not stopped after ${waited}s; check 'rollout.sh status'"
+        fi
+    done
+    log "the rollout stopped. What it left is in 'rollout.sh status'"
+}
+
+# Returns named servers to the pool, or every server that can be.
+#
+# What the mail after a failure asks for. It names `haproxy.sh ready <backends>/<server>`, which
+# means reading the backend list out of the inventory by hand and, worse, going round
+# `return_to_pool`: that is the only thing holding a server to answering both routes, and a server
+# put back without it can take database traffic it cannot serve.
+do_ready() {
+    local wanted=("$@") inventory name host port backends server chosen=0 restored=0 refused=0
+
+    inventory=$(read_inventory) || exit 1
+    while read -r name host port backends server; do
+        [ -n "$name" ] || continue
+
+        if [ "${#wanted[@]}" -gt 0 ]; then
+            case " ${wanted[*]} " in *" ${name} "*) ;; *) continue ;; esac
+        fi
+        chosen=$((chosen + 1))
+
+        # Already serving traffic, so there is nothing to put back.
+        case $("$HAPROXY" states "${backends}/${server}") in
+            *MAINT* | *DRAIN*) ;;
+            *) log "${name} is already in the pool"; continue ;;
+        esac
+
+        if return_to_pool "$name" "$host" "$port" "${backends}/${server}"; then
+            restored=$((restored + 1))
+        else
+            refused=$((refused + 1))
+        fi
+    done <<<"$inventory"
+
+    if [ "${#wanted[@]}" -gt 0 ] && [ "$chosen" -ne "${#wanted[@]}" ]; then
+        die "the inventory does not name every one of: ${wanted[*]}"
+    fi
+
+    log "${restored} server(s) returned to the pool, ${refused} still out"
+    [ "$refused" -eq 0 ]
 }
 
 main() {
@@ -731,17 +901,21 @@ main() {
 
     TMP_DIR=$(mktemp -d)
 
+    note_phase "fetching the release"
+
     # Phase 0: the release, once, for the whole fleet. No disk check here on purpose: a full disk
     # makes curl fail before anything is touched, and a truncated download fails its checksum. The
     # server side does check, because there a failed write lands in the middle of a swap.
     fetch_release "$TMP_DIR" "$inventory"
 
     # Phase 1: every server checked, and the binary staged, before one is drained.
+    note_phase "checking the fleet"
     preflight "$inventory"
 
     # Phase 2: one at a time, the next only after this one is back in the pool.
     for line in "${servers[@]}"; do
         read -r name host port backends server <<<"$line"
+        note_phase "updating" "$name"
         update_server "$name" "$host" "$port" "$backends" "$server" "${ASSET_OF[$name]}"
     done
 
@@ -756,8 +930,9 @@ main() {
 trap finish EXIT
 trap 'exit 130' INT TERM HUP
 
-if [ "$STATUS_ONLY" = true ]; then
-    do_status
-else
-    main
-fi
+case $COMMAND in
+    status) do_status ;;
+    abort) do_abort ;;
+    ready) do_ready "$@" ;;
+    *) main ;;
+esac

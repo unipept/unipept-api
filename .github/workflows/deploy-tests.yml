@@ -1,0 +1,73 @@
+# The suites in .deploy/tests, which run the deploy scripts against a real systemd and a real
+# HAProxy in containers. Separate from ci.yml because of the path filter: these read nothing outside
+# .deploy, so running them on a pull request that changes only Rust is several minutes spent proving
+# nothing.
+#
+# Path-filtered, so it does not run on every PR — do not add it to the ruleset as a required check,
+# or PRs that touch no deploy script would wait forever for a check that never starts. Same reason
+# as audit.yml.
+#
+# Two jobs rather than one, because only the server suite needs a privileged container: a failure
+# there says something different from a failure in the load balancer suites, and they are worth
+# having even on a runner where systemd in a container turns out not to work.
+name: Deploy tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.deploy/**'
+      - '.github/workflows/deploy-tests.yml'
+  pull_request:
+    paths:
+      - '.deploy/**'
+      - '.github/workflows/deploy-tests.yml'
+  workflow_dispatch:
+
+# A force-push replaces its predecessor rather than racing it. Not on main: runs there are the
+# record of what the branch did.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    # install.sh and deploy.sh against systemd 255 on Ubuntu 24.04, with a real user manager and
+    # lingering. The container runs --privileged with the host's cgroups mounted, which is what
+    # systemd needs as pid 1.
+    name: Server suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Run the server suite
+        run: .deploy/tests/run-tests.sh server
+
+  loadbalancer:
+    # haproxy.sh, rollout.sh and the load balancer install, against HAProxy 2.8 with two backends
+    # over three servers. No privilege needed.
+    #
+    # One step per suite, so the job's own log says which of the three failed before anything is
+    # opened.
+    name: Load balancer suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Run the HAProxy suite
+        run: .deploy/tests/run-tests.sh haproxy
+
+      - name: Run the rollout suite
+        run: .deploy/tests/run-tests.sh rollout
+
+      - name: Run the load balancer install suite
+        run: .deploy/tests/run-tests.sh lb-install

@@ -70,9 +70,15 @@ Two rules worth keeping:
    before a case starts. Without it one case's leftovers fail the next, and the failure points at
    the wrong thing.
 
-## Not in CI
+## In CI
 
-These do not run in GitHub Actions yet. The server suite needs a privileged container with the
-host's cgroups mounted, and whether that works on a hosted runner is untested — so it is a
-deliberate gap rather than an oversight. `ci.yml` runs `shellcheck` over every script here, which
-catches the class of mistake that does not need a container.
+`.github/workflows/deploy-tests.yml` runs them, in two jobs: the server suite, and the three load
+balancer suites. It is path-filtered on `.deploy/**`, so a pull request that changes only Rust does
+not spend several minutes proving nothing.
+
+**Do not make it a required check in the ruleset.** A path-filtered workflow never starts on a pull
+request that does not match, and a required check that never starts waits forever. `audit.yml` is
+filtered the same way and carries the same warning.
+
+`ci.yml` still runs `shellcheck` over every script here, on every pull request, because that needs
+no container and catches the class of mistake that does not need one.

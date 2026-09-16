@@ -11,6 +11,10 @@ Documentation=https://github.com/unipept/unipept-api/wiki/Deploying-the-Unipept-
 # the redirect is not in place yet — HAProxy would see a refusal and mark the server down.
 Wants=network-pre.target
 Before=network-pre.target
+# No start rate limit. install.sh restarts this unit on every run, and systemd refuses the sixth
+# start within ten seconds. The refusal leaves the host with no redirect and nothing answering on
+# 80, which is worse than any loop the limit protects against: this unit sets rules and exits.
+StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot

@@ -355,6 +355,13 @@ systemctl restart unipept-api-ports >/dev/null 2>&1
 check "still one redirect rule" "$(iptables -t nat -S UNIPEPT_API | grep -c REDIRECT)" "$before"
 check "80 still reaches it"     "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:80/health)" "200"
 
+section "the redirect survives being restarted faster than systemd's start limit"
+# install.sh restarts this unit on every run, and the default limit refuses the sixth start within
+# ten seconds. The refusal is silent in the unit's own output and leaves nothing answering on 80.
+for _ in 1 2 3 4 5 6 7; do systemctl restart unipept-api-ports >/dev/null 2>&1; done
+check "the unit is still active" "$(systemctl is-active unipept-api-ports)" "active"
+check "80 still reaches it"      "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:80/health)" "200"
+
 section "install.sh says what is still wrong"
 # A first install, before anybody has edited the environment file: the check has to report the
 # placeholder index rather than let the operator find out at the first deploy.

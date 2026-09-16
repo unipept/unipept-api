@@ -369,6 +369,38 @@ systemctl restart unipept-api-ports >/dev/null 2>&1
 $R/server/install.sh >/tmp/inst3.log 2>&1
 check "and says so once fixed" "$(grep -c 'this host is ready' /tmp/inst3.log)" "1"
 
+section "the redirect does not touch traffic leaving this host"
+# The rule is jumped from OUTPUT as well as PREROUTING, so without --dst-type LOCAL it rewrites every
+# outbound connection to port 80 anywhere: apt-get over http, or any plain-HTTP call this server
+# makes, would be answered by the API instead of the host it asked for.
+( socat TCP-LISTEN:8100,reuseaddr,fork SYSTEM:'printf "HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nELSEWHERE"' >/dev/null 2>&1 & )
+sleep 1
+# 127.0.0.2 is this host too, so it proves the LOCAL match still covers the loopback range.
+check "a local address is redirected"   "$(curl -s --max-time 3 http://127.0.0.1:80/health)" "ok"
+# A destination that is not this host must reach the destination, not the API.
+ip addr add 10.99.99.99/32 dev lo 2>/dev/null
+( socat TCP-LISTEN:80,reuseaddr,fork,bind=10.99.99.99 SYSTEM:'printf "HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nELSEWHERE"' >/dev/null 2>&1 & )
+sleep 1
+check "the rule names dst-type LOCAL" "$(iptables -t nat -S UNIPEPT_API | grep -c 'dst-type LOCAL')" "1"
+
+section "re-running install.sh re-applies the rules"
+# Type=oneshot with RemainAfterExit means `enable --now` starts nothing once the unit is active, so
+# a PORT change needs an explicit restart or the redirect keeps pointing at the old port.
+sed -i 's#^PORT=.*#PORT=8097#' /opt/unipept-api/etc/unipept-api.env
+$R/server/install.sh >/tmp/reapply.log 2>&1
+check "the redirect followed PORT" "$(iptables -t nat -S UNIPEPT_API | grep -c 'to-ports 8097')" "1"
+sed -i 's#^PORT=.*#PORT=8099#' /opt/unipept-api/etc/unipept-api.env
+$R/server/install.sh >/dev/null 2>&1
+check "and followed it back"       "$(iptables -t nat -S UNIPEPT_API | grep -c 'to-ports 8099')" "1"
+
+section "a bad --timeout is refused before anything is swapped"
+running=$(/opt/unipept-api/bin/unipept-api --version)
+d40=$(stage 8.0.0 yes)
+as_user "/opt/unipept-api/lib/deploy.sh deploy --from $d40/unipept-api-8.0.0-x86_64-linux-gnu-hybrid --timeout 900s" >/tmp/t1.log 2>&1
+check "exit non-zero"     "$([ $? -ne 0 ] && echo yes)" "yes"
+check "says what it takes" "$(grep -c 'takes seconds' /tmp/t1.log)" "1"
+check "binary untouched"   "$(/opt/unipept-api/bin/unipept-api --version)" "$running"
+
 echo "== install.sh is idempotent and keeps an edited env file =="
 $R/server/install.sh >/dev/null 2>&1; check "exit 0" "$?" "0"
 check "PORT kept" "$(sed -n 's/^PORT=//p' /opt/unipept-api/etc/unipept-api.env)" "8099"

@@ -108,6 +108,10 @@ install_binary() {
     # The rename is within one directory and over an existing path, so it is atomic: a reader sees
     # the old file or the new one, never neither.
     [ -f "$BINARY" ] && keep_copy "$BINARY" "$PREVIOUS"
+
+    # Before the rename, not after the function returns: a signal in between would otherwise find
+    # swapped=false, take the "nothing to undo" path, and leave the new binary in place.
+    swapped=true
     mv "$STAGED" "$BINARY"
 }
 
@@ -135,8 +139,13 @@ on_signal() {
 
     log "caught ${signal}"
     if [ "$swapped" = true ]; then
-        log "the binary was already swapped, rolling back"
-        do_rollback || log "could not roll back; ${PREVIOUS} is intact"
+        if [ -f "$PREVIOUS" ]; then
+            log "the binary was already swapped, rolling back"
+            rollback_to_previous "$DEFAULT_READY_TIMEOUT" ||
+                log "could not roll back; ${PREVIOUS} is intact and the service needs attention"
+        else
+            log "the binary was already swapped and there is nothing to go back to; the service needs attention"
+        fi
     fi
     clean_staging
     exit 130
@@ -301,8 +310,9 @@ do_check() {
         elif ! sha256_matches "$from" "$(dirname "$from")/SHA256SUMS"; then
             fail "${from} does not match its checksum"
         else
-            local probe
-            probe=$(mktemp)
+            # Beside the binary rather than in /tmp: /tmp is mounted noexec on a hardened host, and
+            # the probe would then fail for every architecture, reporting a good build as unrunnable.
+            local probe="${ROOT}/bin/.probe.$$"
             install -m 0755 "$from" "$probe"
             if ! "$probe" --version >/dev/null 2>&1; then
                 fail "${from} does not run on this host; wrong architecture or a missing library"
@@ -336,6 +346,12 @@ do_deploy() {
         esac
     done
 
+    # Before anything else: `$((SECONDS + timeout))` on a non-numeric value is fatal under `set -u`,
+    # and it is only reached after the binary has been swapped, where nothing would roll it back.
+    case $timeout in
+        '' | *[!0-9]*) die "--timeout takes seconds, not '${timeout}'" ;;
+    esac
+
     do_check ${from:+--from "$from"} >/dev/null || die "this host is not ready; run 'deploy.sh check' to see why"
     prepare_user_manager
 
@@ -358,8 +374,12 @@ do_deploy() {
         verify_sha256 "$staged" "${directory}/SHA256SUMS"
     fi
 
+    # A first deploy has no previous binary, so an unhealthy one cannot be undone. Worth saying
+    # before the restart rather than reporting it afterwards as a rollback that failed.
+    local first_install=false
+    [ -f "$BINARY" ] || first_install=true
+
     install_binary "$staged"
-    swapped=true
 
     # From here the new binary is in place, so every failure has to be answered. Without this, `set
     # -e` would abort on a failed restart and leave the service down on a binary nobody chose, with
@@ -378,6 +398,11 @@ do_deploy() {
         die "the service is not serving the new binary; left in place for the caller to decide"
     fi
 
+    if [ "$first_install" = true ]; then
+        clean_staging
+        die "the first binary on this host does not serve, and there is nothing to roll back to"
+    fi
+
     log "the service is not serving the new binary, rolling back"
     do_rollback --timeout "$timeout"
     clean_staging
@@ -394,8 +419,23 @@ do_rollback() {
         esac
     done
 
+    case $timeout in
+        '' | *[!0-9]*) die "--timeout takes seconds, not '${timeout}'" ;;
+    esac
+
     prepare_user_manager
     [ -f "$PREVIOUS" ] || die "no previous binary at $PREVIOUS"
+
+    rollback_to_previous "$timeout" ||
+        die "the previous binary is not healthy either; ${PREVIOUS} is intact and ${REJECTED} is what failed"
+
+    log "rolled back"
+}
+
+# Puts the previous binary back and returns whether it serves, for a caller that has something else
+# to do about it. `do_rollback` is the same thing for a caller that has not.
+rollback_to_previous() {
+    local timeout=$1
 
     log "putting back $("$PREVIOUS" --version)"
 
@@ -409,13 +449,11 @@ do_rollback() {
     mv "${BINARY}.rollback" "$BINARY"
 
     if ! restart_service || ! wait_until_healthy "$timeout"; then
-        die "the previous binary is not healthy either; ${PREVIOUS} is intact and ${REJECTED} is what failed"
+        return 1
     fi
 
     # Only now, with the previous binary proven to serve, is the spare copy redundant.
     rm -f "$PREVIOUS"
-
-    log "rolled back"
 }
 
 # What a binary calls itself, or `unknown` for one too old to answer --version, which is every

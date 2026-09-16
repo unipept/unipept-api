@@ -77,8 +77,11 @@ install -m 0644 -o "$USER" -g "$USER" "${HERE}/unipept-api.service" "${unit_dire
 log "installed ${unit_directory}/${SERVICE}.service"
 
 systemctl daemon-reload
-# Enabled so it returns after a reboot, and started now so the port works before the first deploy.
-systemctl enable --now unipept-api-ports
+# enable for the next boot, restart for now. `enable --now` would be a no-op on a re-run: the unit
+# is Type=oneshot with RemainAfterExit, so systemd already considers it active and starts nothing —
+# leaving the old rules in place after a PORT change or an update to the script.
+systemctl enable unipept-api-ports
+systemctl restart unipept-api-ports
 log "port 80 reaches $(env_value PORT "$ENV_FILE")"
 
 # Without lingering, the user manager stops when the last session ends, and starts no unit at boot.

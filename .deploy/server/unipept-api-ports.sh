@@ -36,7 +36,11 @@ iptables -C INPUT -j "$CHAIN" >/dev/null 2>&1 || iptables -A INPUT -j "$CHAIN"
 
 # PREROUTING catches what arrives from the load balancer. OUTPUT catches what this host sends to
 # itself, which is what lets `deploy.sh check` prove the redirect works without being root.
-iptables -t nat -A "$CHAIN" -p tcp --dport 80 -j REDIRECT --to-port "$port"
+#
+# --dst-type LOCAL is what keeps OUTPUT to *this host*. Without it the same rule rewrites every
+# outbound connection to port 80 anywhere, so `apt-get update` over http, or any other plain-HTTP
+# call this server makes, is answered by the API instead of the host it asked for.
+iptables -t nat -A "$CHAIN" -p tcp --dport 80 -m addrtype --dst-type LOCAL -j REDIRECT --to-port "$port"
 
 # The host talking to its own service, which is how deploy.sh checks health and how anything else
 # here would reach it. Without this the rule below refuses it: a loopback connection is not DNATed,

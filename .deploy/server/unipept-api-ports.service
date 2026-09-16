@@ -7,9 +7,10 @@
 [Unit]
 Description=Send port 80 to the Unipept API
 Documentation=https://github.com/unipept/unipept-api/wiki/Deploying-the-Unipept-API
-# Before anything can be routed, and before the API is worth reaching.
-After=network-pre.target
+# Before the interfaces are configured, so there is no window where this host is reachable on 80 and
+# the redirect is not in place yet — HAProxy would see a refusal and mark the server down.
 Wants=network-pre.target
+Before=network-pre.target
 
 [Service]
 Type=oneshot

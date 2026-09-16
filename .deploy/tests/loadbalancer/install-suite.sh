@@ -45,7 +45,7 @@ section "a first install"
 # something to say, so the exit status is not asserted here. What matters is what it installed.
 /deploy/loadbalancer/install.sh >/tmp/i.log 2>&1 || true
 check "installed the scripts"   "$([ -x /opt/unipept-rollout/rollout.sh ] && echo yes)" "yes"
-check "installed haproxy.sh"    "$([ -x /opt/unipept-rollout/haproxy.sh ] && echo yes)" "yes"
+check "installed haproxy.sh"    "$([ -x /opt/unipept-rollout/loadbalancer/haproxy.sh ] && echo yes)" "yes"
 check "wrote rollout.conf"      "$([ -f /etc/unipept-rollout/rollout.conf ] && echo yes)" "yes"
 check "wrote servers.conf"      "$([ -f /etc/unipept-rollout/servers.conf ] && echo yes)" "yes"
 check "config owned by unipept" "$(stat -c %U /etc/unipept-rollout/servers.conf)" "unipept"
@@ -103,6 +103,22 @@ check "says ready"   "$(grep -c 'this load balancer is ready' /tmp/i8.log)" "1"
 
 section "rollout.sh reads the installed configuration"
 check "prefers /etc" "$(grep -c 'CONFIG_DIR=/etc/unipept-rollout' /opt/unipept-rollout/rollout.sh)" "1"
+
+section "the installed rollout can find haproxy.sh"
+# rollout.sh resolves it as loadbalancer/haproxy.sh relative to itself, so a flat install leaves the
+# installed copy unable to reach HAProxy at all — and ordered_servers would swallow the failure and
+# sort the backup as a primary.
+check "installed in place"   "$([ -x /opt/unipept-rollout/loadbalancer/haproxy.sh ] && echo yes)" "yes"
+echo ok > /tmp/fake-ssh-mode
+cat > /etc/unipept-rollout/servers.conf <<EOF
+patty  patty 9101 all_handlers,db_handlers patty
+selma  selma 9102 all_handlers,db_handlers selma
+rick   rick  9103 all_handlers,db_handlers rick
+EOF
+/opt/unipept-rollout/rollout.sh --version v2.6.0 --dry-run >/tmp/installed.txt 2>&1
+check "the installed copy runs"  "$?" "0"
+check "and reached HAProxy"      "$(grep -c 'all_handlers=UP' /tmp/installed.txt)" "3"
+check "backup still sorted last" "$(grep -oE '^(patty|selma|rick)' /tmp/installed.txt | tail -1)" "rick"
 
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1
 kill "$(jobs -p)" >/dev/null 2>&1

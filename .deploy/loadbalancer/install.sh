@@ -71,9 +71,11 @@ FRAGMENT
 problems=0
 note() { log "$*"; problems=$((problems + 1)); }
 
-install -d -m 0755 "$ROOT" "$CONFIG"
+# The same shape as the checkout, because rollout.sh resolves haproxy.sh as loadbalancer/haproxy.sh
+# relative to itself. Flattening it here left the installed rollout unable to find it at all.
+install -d -m 0755 "$ROOT" "${ROOT}/loadbalancer" "$CONFIG"
 install -m 0755 "${SOURCE}/rollout.sh" "${ROOT}/rollout.sh"
-install -m 0755 "${HERE}/haproxy.sh" "${ROOT}/haproxy.sh"
+install -m 0755 "${HERE}/haproxy.sh" "${ROOT}/loadbalancer/haproxy.sh"
 install -m 0644 "${SOURCE}/lib.sh" "${ROOT}/lib.sh"
 log "installed the scripts in ${ROOT}"
 
@@ -101,8 +103,11 @@ else
     note "there is no haproxy group on this host; ${OPERATOR} cannot reach the admin socket"
 fi
 
-socket=$(sed -n 's/.*stats socket \([^ ]*\).*/\1/p' "$HAPROXY_CONFIG" 2>/dev/null | head -1)
+# `|| true` because pipefail turns a missing haproxy.cfg into a fatal exit here, which would skip
+# the note below that exists to report exactly that.
+socket=$(sed -n 's/.*stats socket \([^ ]*\).*/\1/p' "$HAPROXY_CONFIG" 2>/dev/null | head -1 || true)
 socket=${socket:-/run/haproxy/haproxy.sock}
+[ -r "$HAPROXY_CONFIG" ] || note "no ${HAPROXY_CONFIG} to read; assuming ${socket}"
 
 if [ ! -S "$socket" ]; then
     note "no HAProxy admin socket at ${socket}"

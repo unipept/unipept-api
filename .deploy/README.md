@@ -79,7 +79,7 @@ journalctl -t unipept-rollout            # who deployed what, when
 or restarting HAProxy during a rollout returns a draining server to rotation** mid-restart. The lock
 file is the signal that a run is in progress.
 
-## A user unit, so a deploy needs no privilege## A user unit, so a deploy needs no privilege
+## A user unit, so a deploy needs no privilege
 
 The service runs as a systemd user unit owned by the `unipept` user, started at boot by lingering.
 That user owns `/opt/unipept-api`, so it replaces the binary and restarts its own unit without root,

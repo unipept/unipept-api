@@ -90,6 +90,9 @@ STAGED_ON=''
 # Servers this run left out of the pool or down, which is what the team is told about.
 FAILED_UPDATE=''
 NEEDS_ATTENTION=''
+# The same servers, names only, for the record to iterate over.
+FAILED_NAMES=''
+DOWN_NAMES=''
 # Who to name in the record and the mail. SUDO_USER first, so a run through sudo names the person.
 readonly RUN_BY="${SUDO_USER:-$(id -un)}"
 # Everyone logs in as the same account, so the name alone cannot say who ran this. The address they
@@ -330,14 +333,28 @@ update_server() {
 
     # Until the binary is touched nothing has changed on the server, so a failure here — or an
     # interrupt — puts it back rather than leaving it out for a deploy that never happened.
-    restore_on_failure() { "$HAPROXY" ready "$target" || log "could not restore ${target}; do it by hand"; }
-    trap restore_on_failure ERR INT TERM
+    #
+    # The handler exits. Restoring and then carrying on would drain, put the server back, and go on
+    # to install anyway, which is the opposite of what an interrupt asks for. 130 is what the global
+    # handler uses, so the two agree.
+    restore_on_failure() {
+        "$HAPROXY" ready "$target" || log "could not restore ${target}; do it by hand"
+        exit 130
+    }
+    trap restore_on_failure INT TERM
+    trap '"$HAPROXY" ready "$target" || log "could not restore ${target}; do it by hand"' ERR
+
     "$HAPROXY" drain "$target"
     "$HAPROXY" wait-empty "$target" "$DRAIN_TIMEOUT"
     # Out of rotation entirely while it restarts, so the checks that must fail during startup do not
     # count towards `fall` and do not email twice.
     "$HAPROXY" maint "$target"
-    trap - ERR INT TERM
+
+    # Back to the global handlers rather than to none: `trap -` would leave the rest of the run with
+    # no INT or TERM handler at all, so a signal would reach `finish` with a zero status and the
+    # journal would record an aborted rollout as a clean one.
+    trap - ERR
+    trap 'exit 130' INT TERM
 
     if install_on "$name" "$host" "$port" "$asset"; then
         "$HAPROXY" ready "$target"
@@ -353,27 +370,57 @@ update_server() {
 }
 
 # Decides what a failed deploy left behind, and acts once.
+# Whether a server answers on both routes. A server is only worth returning to the pool when it does:
+# db_handlers routes to it as well, so serving /health alone is not enough.
+serving() {
+    local host=$1 port=$2
+    [ "$(http_code "http://${host}:${port}/health")" = "200" ] &&
+        [ "$(http_code "http://${host}:${port}/health/database")" = "200" ]
+}
+
+# Puts a server back, or says why it is being left out. Every path back into the pool goes through
+# here, so none of them can forget to look first.
+return_to_pool() {
+    local name=$1 host=$2 port=$3 target=$4
+
+    if ! serving "$host" "$port"; then
+        log "${name} does not answer both health routes; leaving it out of the pool"
+        note_down "$name" "$target"
+        return 1
+    fi
+
+    "$HAPROXY" ready "$target"
+    "$HAPROXY" wait-up "$target" 60
+    log "${name} is back in rotation"
+}
+
 resolve_failure() {
     local name=$1 host=$2 port=$3 target=$4
     local report installed
 
-    report=$(on_server "$host" status 2>/dev/null || true)
+    # An unreachable server reports nothing, and nothing is not evidence: rolling back over the same
+    # dead connection would be guessing, and could undo a deploy that worked.
+    if ! report=$(on_server "$host" status 2>/dev/null); then
+        log "${name} cannot be reached to ask what happened; leaving it out of the pool"
+        note_down "$name" "$target"
+        die "stopped at ${name}; the servers after it were not touched"
+    fi
     installed=$(printf '%s\n' "$report" | env_value version)
 
-    if [ "$installed" = "${VERSION#v}" ] && [ "$(http_code "http://${host}:${port}/health")" = "200" ]; then
+    if [ "$installed" = "${VERSION#v}" ] && serving "$host" "$port"; then
         # The deploy worked; only the connection to it failed.
         log "${name} is serving ${installed} after all, so only the connection failed"
         STATUS[$name]=$report
-        "$HAPROXY" ready "$target"
-        "$HAPROXY" wait-up "$target" 60
-        log "${name} is back in rotation"
+        return_to_pool "$name" "$host" "$port" "$target" ||
+            die "stopped at ${name}; the servers after it were not touched"
         return 0
     fi
 
     if [ -n "$installed" ] && [ "$installed" != "${VERSION#v}" ]; then
-        # Nothing was installed, so there is nothing to undo.
+        # Nothing was installed, so there is nothing to undo — but it still has to be serving before
+        # it goes back into the pool.
         log "${name} is still on ${installed}; nothing was installed"
-        "$HAPROXY" ready "$target"
+        return_to_pool "$name" "$host" "$port" "$target" || true
         note_failed_update "$name" "$installed"
         die "stopped at ${name}; the servers after it were not touched"
     fi
@@ -382,15 +429,11 @@ resolve_failure() {
     if on_server "$host" rollback --timeout "$READY_TIMEOUT"; then
         # It is serving a binary that was known good, and the load balancer has just watched it come
         # up, so keeping it out of the pool would cost capacity for nothing.
-        if [ "$(http_code "http://${host}:${port}/health")" = "200" ] &&
-           [ "$(http_code "http://${host}:${port}/health/database")" = "200" ]; then
-            "$HAPROXY" ready "$target"
-            "$HAPROXY" wait-up "$target" 60
+        if return_to_pool "$name" "$host" "$port" "$target"; then
             log "${name} was rolled back and is serving again"
-            note_failed_update "$name" "$(on_server "$host" status 2>/dev/null | env_value version)"
+            note_failed_update "$name" "$(on_server "$host" status 2>/dev/null | env_value version || true)"
             die "stopped at ${name}; the servers after it were not touched"
         fi
-        log "${name} rolled back but does not answer; leaving it out of the pool"
     else
         log "${name} could not be rolled back"
     fi
@@ -400,13 +443,18 @@ resolve_failure() {
 }
 
 # An update that failed but left the fleet serving. Worth an email, not an alarm.
+#
+# Two lists: one to read, one to iterate. Splitting "patty (serving 2.5.3)" on whitespace was logging
+# a journal line that claimed the server was called "2.5.3)".
 note_failed_update() {
     FAILED_UPDATE="${FAILED_UPDATE}${1} (serving ${2:-unknown}) "
+    FAILED_NAMES="${FAILED_NAMES}${1} "
 }
 
 # A server nobody can route to. This is the case that has to reach a person.
 note_down() {
     NEEDS_ATTENTION="${NEEDS_ATTENTION}${1} [${2}] "
+    DOWN_NAMES="${DOWN_NAMES}${1} "
 }
 
 # Installs the already-staged binary and verifies the result from here, rather than trusting what the
@@ -492,13 +540,11 @@ record_run() {
         logger -t unipept-rollout -- \
             "version=${VERSION} server=${name} by=${RUN_BY} from=${RUN_FROM:-local} outcome=deployed $(printf '%s' "${STATUS[$name]}" | tr '\n' ' ')"
     done
-    for name in $FAILED_UPDATE; do
-        case $name in \(*) continue ;; esac
-        logger -t unipept-rollout -- "version=${VERSION} server=${name} by=${RUN_BY} outcome=rolled-back"
+    for name in $FAILED_NAMES; do
+        logger -t unipept-rollout -- "version=${VERSION} server=${name} by=${RUN_BY} from=${RUN_FROM:-local} outcome=rolled-back"
     done
-    for name in $NEEDS_ATTENTION; do
-        case $name in \[*) continue ;; esac
-        logger -t unipept-rollout -- "version=${VERSION} server=${name} by=${RUN_BY} outcome=needs-attention"
+    for name in $DOWN_NAMES; do
+        logger -t unipept-rollout -- "version=${VERSION} server=${name} by=${RUN_BY} from=${RUN_FROM:-local} outcome=needs-attention"
     done
     logger -t unipept-rollout -- "version=${VERSION} by=${RUN_BY} from=${RUN_FROM:-local} exit=${status}"
 }

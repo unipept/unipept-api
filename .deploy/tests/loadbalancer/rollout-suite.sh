@@ -70,6 +70,12 @@ for ((i=0; i<${#args[@]}; i++)); do
 done
 if [ -n "$upload" ]; then cat "$upload" >> /tmp/mail.txt; exit 0; fi
 # A server the deploy broke: healthy during preflight, not afterwards.
+for a in "$@"; do
+  case $a in
+    *"/health/database"*)
+      if [ -f /tmp/no-database ] && [[ $a == *"$(cat /tmp/no-database)"* ]]; then echo -n 503; exit 0; fi ;;
+  esac
+done
 for a in "$@"; do case $a in *"/health"*) [ -f /tmp/unhealthy ] && { echo -n 503; exit 0; } ;; esac; done
 if [ -n "$url" ] && [ -n "$out" ]; then
   directory=$(dirname "$out"); name=$(basename "$out")
@@ -354,6 +360,65 @@ check "has a header"      "$(grep -c '^SERVER' /tmp/r16.txt)" "1"
 check "lists all three"   "$(grep -cE '^(patty|selma|rick) ' /tmp/r16.txt)" "3"
 check "shows haproxy"     "$(grep -c 'all_handlers=UP' /tmp/r16.txt)" "3"
 check "changed nothing"   "$(printf '%s' "$($H state all_handlers/patty)" | cut -d' ' -f1)" "UP"
+
+reset_fleet
+section "16. a server is only returned to the pool when both routes answer"
+# The deploy fails and leaves the database route down. The server is still on its old version, so
+# there is nothing to undo — but db_handlers routes to it too, so putting it back on the strength of
+# /health alone would return it for requests it cannot serve.
+#
+# The marker is set by the deploy, not before the run: set up front it would fail preflight instead,
+# and the branch under test would never be reached.
+cp /usr/local/bin/ssh /tmp/ssh.keep
+cat > /usr/local/bin/ssh <<'EOF'
+#!/usr/bin/env bash
+args=("$@"); cmd=""
+for a in "${args[@]}"; do case $a in -o|BatchMode=yes|ConnectTimeout=10|ServerAliveInterval=15|ServerAliveCountMax=4|-n) ;; *) cmd="$cmd $a" ;; esac; done
+echo "SSH:$cmd" >> /tmp/ssh.log
+case "$cmd" in
+  *"deploy.sh rollback"*) echo "ROLLBACK" >> /tmp/ssh.log; exit 0 ;;
+  *"deploy.sh check"*)    printf 'variant=hybrid\nport=80\nindex_version=2026.09-test\nproblems=0\n'; exit 0 ;;
+  *"deploy --from"*)      echo patty > /tmp/no-database; exit 1 ;;
+  *status*)            printf 'version=2.5.3\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n'; exit 0 ;;
+esac
+exit 0
+EOF
+chmod +x /usr/local/bin/ssh
+rm -f /tmp/no-database; : > /tmp/ssh.log
+$R --version v2.6.0 --only patty --allow-downtime >/tmp/r20.txt 2>&1
+check "exit non-zero"                 "$([ $? -ne 0 ] && echo yes)" "yes"
+check "says nothing was installed"    "$(grep -c 'nothing was installed' /tmp/r20.txt)" "1"
+check "not put back on /health alone" "$($H state all_handlers/patty)" "MAINT"
+check "says which routes"             "$(grep -c 'both health routes' /tmp/r20.txt)" "1"
+rm -f /tmp/no-database
+$H ready all_handlers,db_handlers/patty >/dev/null 2>&1
+sleep 5
+
+reset_fleet
+section "17. an unreachable server is not rolled back on a guess"
+# The deploy fails and the host then cannot be asked what happened. Rolling back over the same dead
+# connection would be guessing, and could undo a deploy that actually worked.
+cat > /usr/local/bin/ssh <<'EOF'
+#!/usr/bin/env bash
+args=("$@"); cmd=""
+for a in "${args[@]}"; do case $a in -o|BatchMode=yes|ConnectTimeout=10|ServerAliveInterval=15|ServerAliveCountMax=4|-n) ;; *) cmd="$cmd $a" ;; esac; done
+echo "SSH:$cmd" >> /tmp/ssh.log
+case "$cmd" in
+  *"deploy.sh rollback"*) echo "ROLLBACK" >> /tmp/ssh.log; exit 0 ;;
+  *"deploy.sh check"*)    printf 'variant=hybrid\nport=80\nindex_version=2026.09-test\nproblems=0\n'; exit 0 ;;
+  *"deploy --from"*)      touch /tmp/gone; exit 1 ;;
+  *status*)            [ -f /tmp/gone ] && exit 255; printf 'version=2.5.3\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n'; exit 0 ;;
+esac
+exit 0
+EOF
+chmod +x /usr/local/bin/ssh
+rm -f /tmp/gone; : > /tmp/ssh.log
+$R --version v2.6.0 --only selma --allow-downtime >/tmp/r21.txt 2>&1
+check "exit non-zero"        "$([ $? -ne 0 ] && echo yes)" "yes"
+check "did not roll back"    "$(grep -c '^ROLLBACK' /tmp/ssh.log)" "0"
+check "says it cannot ask"   "$(grep -c 'cannot be reached to ask' /tmp/r21.txt)" "1"
+check "left out of the pool" "$($H state all_handlers/selma)" "MAINT"
+cp /tmp/ssh.keep /usr/local/bin/ssh; rm -f /tmp/gone
 
 # The fake backends hold stdout open; without this a pipe on the outside never sees EOF.
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1

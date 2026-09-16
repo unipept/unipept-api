@@ -4,8 +4,7 @@
 #
 # The service listens on PORT, above 1024, and the load balancer still reaches it on 80: a netfilter
 # rule on this host sends what arrives on 80 to PORT. unipept-api-ports.service holds that rule, and
-# install.sh puts it there. The rewrite is local, so no port on the wire changes and the campus
-# firewall needs nothing.
+# install.sh puts it there. The rewrite is local, so no port on the wire changes.
 #
 # Three directives a system unit would carry are absent, and each is deliberate:
 #   User=, Group=          a user unit already runs as the user that owns it

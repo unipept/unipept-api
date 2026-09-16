@@ -23,7 +23,7 @@ capabilities (before UID change): Operation not permitted"* and the unit exits 2
 So the service listens above 1024 and a netfilter rule sends what arrives on 80 to it.
 `unipept-api-ports.service` holds that rule and install.sh puts it there. **Nothing on the network
 changes**: the packet is addressed to port 80 on the wire and is rewritten inside the host, so
-HAProxy keeps its `server ...:80` lines and the campus firewall needs nothing.
+HAProxy keeps its `server ...:80` lines.
 
 The alternative, lowering `net.ipv4.ip_unprivileged_port_start`, was rejected: it would let any
 unprivileged account on the host bind anything from 80 upwards, and 443 is open on these servers

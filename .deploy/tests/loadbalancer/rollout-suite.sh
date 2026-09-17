@@ -740,6 +740,32 @@ check "patty is up"      "$(printf '%s' "$($H state all_handlers/patty)" | cut -
 check "rick is up"       "$(printf '%s' "$($H state all_handlers/rick)" | cut -d' ' -f1)" "UP"
 
 reset_fleet
+section "26b. a server the load balancer will not take back is reported, not counted as returned"
+# `set -e` is off inside a function bash called as a condition, and every caller of return_to_pool
+# calls it that way. A failing `ready` therefore fell through to "is back in rotation" and returned
+# 0: the server stayed in MAINT, `ready` counted it as restored and exited 0, and `finish` mailed
+# nobody — the one failure that left a server unroutable with no signal at all.
+$H maint all_handlers,db_handlers/selma >/dev/null 2>&1
+check "selma is out" "$($H state all_handlers/selma)" "MAINT"
+# The real one stays in its own directory: haproxy.sh sources ../lib.sh relative to itself, so a
+# copy under /tmp fails every subcommand rather than just the one this case is about.
+cp /work/loadbalancer/haproxy.sh /work/loadbalancer/haproxy-real.sh
+cat > /work/loadbalancer/haproxy.sh <<'EOF'
+#!/usr/bin/env bash
+# Everything except `ready`, which fails the way a lost admin socket does.
+if [ "${1:-}" = ready ]; then echo "haproxy.sh: cannot reach the admin socket" >&2; exit 1; fi
+exec "$(dirname "${BASH_SOURCE[0]}")/haproxy-real.sh" "$@"
+EOF
+chmod +x /work/loadbalancer/haproxy.sh
+$R ready selma >/tmp/r38.txt 2>&1
+check "ready exited non-zero"   "$([ $? -ne 0 ] && echo yes)" "yes"
+mv /work/loadbalancer/haproxy-real.sh /work/loadbalancer/haproxy.sh
+check "says the pool refused it" "$(grep -c 'did not take it back' /tmp/r38.txt)" "1"
+check "counted as still out"     "$(grep -c '0 server(s) returned to the pool, 1 still out' /tmp/r38.txt)" "1"
+check "still out of the pool"    "$($H state all_handlers/selma)" "MAINT"
+check "and somebody was told"    "$(grep -c 'needs attention' /tmp/mail.txt)" "1"
+
+reset_fleet
 section "27. the lock is shared between the operator and root"
 # Both run rollouts: the operator directly, and root through sudo, which is why RUN_BY reads
 # SUDO_USER first. A file one leaves behind has to be usable by the other.

@@ -552,8 +552,17 @@ return_to_pool() {
         return 1
     fi
 
-    "$HAPROXY" ready "$target"
-    "$HAPROXY" wait-up "$target" "$HEALTH_TIMEOUT"
+    # Checked rather than left to `set -e`, which is not in force here: bash turns it off for the
+    # whole body of a function called as a condition, and three of the four callers do exactly that
+    # (`|| die`, `|| true`, `if return_to_pool`). A failing `ready` used to carry on to the log line
+    # below and return 0, so a server the load balancer never took back was reported as in rotation
+    # — the one path that ended with a server out of the pool and nobody told.
+    if ! "$HAPROXY" ready "$target" || ! "$HAPROXY" wait-up "$target" "$HEALTH_TIMEOUT"; then
+        log "${name} answers both health routes, but the load balancer did not take it back"
+        note_down "$name" "$target"
+        return 1
+    fi
+
     CURRENT_TARGET=''
     log "${name} is back in rotation"
 }

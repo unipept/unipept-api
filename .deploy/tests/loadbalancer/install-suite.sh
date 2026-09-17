@@ -143,6 +143,7 @@ before=$(wc -l < /tmp/audit-ssh.log)
 check "exit 0"                   "$?" "0"
 tail -n +$((before + 1)) /tmp/audit-ssh.log > /tmp/audit-ssh.new
 check "reaches the plain target" "$([ "$(grep -c 'unipept@patty' /tmp/audit-ssh.new)" -ge 1 ] && echo yes)" "yes"
+check_absent "the comment is not part of the user" 'deploy account@' /tmp/audit-ssh.new
 cp /tmp/rollout.conf.keep /etc/unipept-rollout/rollout.conf
 
 section "rollout.sh reads the installed configuration"

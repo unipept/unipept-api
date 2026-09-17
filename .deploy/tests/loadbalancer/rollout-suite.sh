@@ -720,6 +720,7 @@ check "still out of the pool"              "$($H state all_handlers/selma)" "MAI
 # after it that were never part of the run.
 check "mailed about it"                    "$(grep -c 'needs attention' /tmp/mail.txt)" "1"
 check "named as the command it was"        "$(grep -c "rollout.sh ready' could not return" /tmp/mail.txt)" "1"
+check_absent "not worded as a rollout"     'A rollout of ' /tmp/mail.txt
 rm -f /tmp/no-database
 $R ready selma >/tmp/r34.txt 2>&1
 check "ready exited 0"      "$?" "0"

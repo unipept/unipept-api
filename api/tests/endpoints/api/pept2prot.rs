@@ -132,7 +132,7 @@ async fn an_absent_peptide_asks_the_cluster_nothing() {
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, json!([]));
-    mock.assert_hits_async(0).await;
+    mock.assert_calls_async(0).await;
 }
 
 /// A cluster that fails is a 500, not a partial answer.

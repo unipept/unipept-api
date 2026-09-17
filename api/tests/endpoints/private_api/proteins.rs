@@ -91,7 +91,7 @@ async fn asking_for_no_accessions_makes_no_request() {
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, json!([]));
-    mock.assert_hits_async(0).await;
+    mock.assert_calls_async(0).await;
 }
 
 /// Every accession the corpus declares can be asked for at once.

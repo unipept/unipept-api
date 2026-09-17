@@ -788,6 +788,29 @@ check "counted as still out"   "$(grep -c '0 server(s) returned to the pool, 1 s
 check "and somebody was told"  "$(grep -c 'needs attention' /tmp/mail.txt)" "1"
 
 reset_fleet
+section "26d. a pool that refuses a server after its deploy is not reported as an interrupt"
+# The success path called `ready` and `wait-up` in the open rather than through return_to_pool, so a
+# refused `ready` reached `finish` with CURRENT_TARGET still set and was mailed as a server "left out
+# of the pool by a run that did not finish" — the wording for an interrupt, for a run nobody
+# interrupted. `set -e` did stop the run, so this was a wrong answer rather than a silent one.
+cp /work/loadbalancer/haproxy.sh /work/loadbalancer/haproxy-real.sh
+cat > /work/loadbalancer/haproxy.sh <<'EOF'
+#!/usr/bin/env bash
+# Everything except `ready`, which fails the way a lost admin socket does. drain and maint still
+# work, so the run gets as far as putting the server back.
+if [ "${1:-}" = ready ]; then echo "haproxy.sh: cannot reach the admin socket" >&2; exit 1; fi
+exec "$(dirname "${BASH_SOURCE[0]}")/haproxy-real.sh" "$@"
+EOF
+chmod +x /work/loadbalancer/haproxy.sh
+$R --version v2.6.0 >/tmp/r39b.txt 2>&1
+mv /work/loadbalancer/haproxy-real.sh /work/loadbalancer/haproxy.sh
+check "says the pool refused it"   "$(grep -c 'did not take it back' /tmp/r39b.txt)" "1"
+check "not called an interrupt"    "$(grep -c 'left out of the pool by a run that did not finish' /tmp/r39b.txt)" "0"
+check "stopped the run"            "$(grep -c 'the servers after it were not touched' /tmp/r39b.txt)" "1"
+check "and somebody was told"      "$(grep -c 'needs attention' /tmp/mail.txt)" "1"
+check "named the server once"      "$(grep -c 'patty \[' /tmp/mail.txt)" "1"
+
+reset_fleet
 section "27. the lock is shared between the operator and root"
 # Both run rollouts: the operator directly, and root through sudo, which is why RUN_BY reads
 # SUDO_USER first. A file one leaves behind has to be usable by the other.

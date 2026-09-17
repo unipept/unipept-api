@@ -511,10 +511,11 @@ update_server() {
     trap 'exit 130' INT TERM
 
     if install_on "$name" "$host" "$port" "$asset"; then
-        "$HAPROXY" ready "$target"
-        "$HAPROXY" wait-up "$target" "$HEALTH_TIMEOUT"
-        CURRENT_TARGET=''
-        log "${name} is back in rotation"
+        # Through return_to_pool like every other way back in. Called here in the open, a `ready`
+        # the load balancer refused was reported by `finish` as a server "left out of the pool by a
+        # run that did not finish" — the wording for an interrupt, for a case nobody interrupted.
+        return_to_pool "$name" "$host" "$port" "$target" ||
+            die "stopped at ${name}; the servers after it were not touched"
         return 0
     fi
 

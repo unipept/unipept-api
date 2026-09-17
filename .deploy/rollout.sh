@@ -693,13 +693,31 @@ finish() {
 
     record_run "$status"
 
-    if [ -n "$NEEDS_ATTENTION" ]; then
+    # Two texts for the one state, because a subcommand reaches it too. `ready` takes no --version
+    # and attempts no fleet, so the rollout wording mailed "A rollout of  left a server" and sent
+    # the operator looking for servers after it that were never part of the run. Keyed the way
+    # record_run is keyed: a run that set out to change something has a VERSION, and nothing else
+    # does.
+    if [ -n "$NEEDS_ATTENTION" ] && [ -n "$VERSION" ]; then
         notify "[unipept-rollout] a server needs attention on $(hostname -s)" \
 "A rollout of ${VERSION} left a server that cannot be routed to.
 
   ${NEEDS_ATTENTION}
 
 The servers after it were not attempted, so the rest of the fleet is untouched.
+
+To see the fleet:      ${HERE}/rollout.sh status
+To return a server:    ${HERE}/loadbalancer/haproxy.sh ready <backends>/<server>
+On the server itself:  ${REMOTE_DEPLOY} status
+
+Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
+    elif [ -n "$NEEDS_ATTENTION" ]; then
+        notify "[unipept-rollout] a server needs attention on $(hostname -s)" \
+"'rollout.sh ${COMMAND}' could not return a server to the pool.
+
+  ${NEEDS_ATTENTION}
+
+No rollout was running, so nothing else on the fleet was touched.
 
 To see the fleet:      ${HERE}/rollout.sh status
 To return a server:    ${HERE}/loadbalancer/haproxy.sh ready <backends>/<server>

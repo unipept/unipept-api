@@ -56,7 +56,7 @@ release_url() {
     printf 'https://github.com/%s/releases/download/%s/%s\n' "$REPOSITORY" "$tag" "$file"
 }
 
-# Every path `start` in api/src/lib.rs opens, relative to INDEX_LOCATION. The service cannot come up
+# Every path `start` in api/src/lib.rs needs, relative to INDEX_LOCATION. The service cannot come up
 # without all of them, so a deploy that does not check them first trades a clear message for a
 # timeout.
 # shellcheck disable=SC2034  # read by the scripts that source this file.
@@ -65,7 +65,6 @@ readonly INDEX_FILES="
 sa.bin
 proteins.bin
 mapping.bin
-kmer_table.bin
 datastore/sampledata.json
 datastore/ec_numbers.tsv
 datastore/go_terms.tsv
@@ -73,6 +72,12 @@ datastore/interpro_entries.tsv
 datastore/proteomes.tsv
 datastore/lineages.tsv
 datastore/taxons.tsv
+"
+
+# Index files the service opens when they exist and runs without. Searches without them are slower.
+# shellcheck disable=SC2034  # read by the scripts that source this file.
+readonly OPTIONAL_INDEX_FILES="
+kmer_table.bin
 "
 
 # The index files each storage backend reads into memory, by variant. The choice is compiled in, so

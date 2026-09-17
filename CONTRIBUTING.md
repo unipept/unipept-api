@@ -33,13 +33,13 @@ same checks locally:
 
 The MSRV check needs the toolchain installed first: `rustup toolchain install 1.88.0`.
 
-A change to `.deploy/` also has container tests. CI does not run them. See
-[`.deploy/tests/README.md`](.deploy/tests/README.md).
+A change to `.deploy/` also has container tests. CI runs them on PRs that change `.deploy/`. They
+are not a required check. See [`.deploy/tests/README.md`](.deploy/tests/README.md).
 
 ## Storage backends
 The storage features select a type for each index structure when the crate compiles. The README
-section [Choosing a storage backend](README.md#choosing-a-storage-backend) describes them.
-Production builds with `--features mmap`.
+section [Choosing a storage backend](README.md#choosing-a-storage-backend) describes them and the
+three builds a release publishes.
 
 `cargo clippy --all-features` checks only one of the nine combinations. To check one
 combination:
@@ -49,7 +49,7 @@ RUSTUP_TOOLCHAIN=stable cargo check --all-targets --locked -p unipept-api --feat
 RUSTUP_TOOLCHAIN=stable cargo test --locked -p index --features mmap,preloaded-text
 ```
 
-The `backends` job in `ci.yml` runs all nine, then the endpoint tests on the production build:
+The `backends` job in `ci.yml` runs all nine. It runs the endpoint tests only on the `mmap` build:
 
 ```
 RUSTUP_TOOLCHAIN=stable cargo test --locked -p unipept-api --features mmap

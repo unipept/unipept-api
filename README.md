@@ -29,7 +29,7 @@ in the search path branches on them.
 | build | what it does |
 | --- | --- |
 | *(no features)* | everything preloaded into owned memory. This is the default. |
-| `--features mmap` | everything memory-mapped. **This is the production build.** |
+| `--features mmap` | everything memory-mapped |
 | `--features mmap,preloaded-text` | mapped, except the protein text |
 | `--features mmap,preloaded-proteins` | mapped, except the protein metadata |
 | `--features mmap,preloaded-mapping` | mapped, except the suffix-to-protein mapping |
@@ -37,6 +37,10 @@ in the search path branches on them.
 The three `preloaded-*` features combine freely, giving nine configurations in all. Each is a
 no-op without `mmap`, where everything is preloaded already. There is no `preloaded-sa`: the
 suffix array follows `mmap` and is roughly 72% of the index, so it dominates residency either way.
+
+A release publishes three of these builds: `preloaded` (no features), `mmap`, and `hybrid` (`mmap`
+with all three `preloaded-*` features). Each host selects one with `VARIANT` in its environment
+file.
 
 ```
 cargo build --release --features mmap
@@ -77,6 +81,8 @@ With the index fully resident the same setting *costs* about 10%. A deployment k
 default.
 
 ## Developing the Unipept API
+[`CONTRIBUTING.md`](CONTRIBUTING.md) lists the toolchains and the checks a PR must pass.
+
 The steps below start a development instance. A production host is deployed from
 [`.deploy/`](.deploy/), described on the wiki page
 [Deploying the Unipept API](https://github.com/unipept/unipept-api/wiki/Deploying-the-Unipept-API).

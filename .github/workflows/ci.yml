@@ -176,6 +176,20 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all --check
 
+  shell:
+    # .deploy/ holds the scripts a production host runs, and nothing else reads them until a
+    # deploy does. -x follows the sourced lib.sh.
+    name: Check the deploy scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Run shellcheck
+        run: shellcheck -x .deploy/lib.sh .deploy/rollout.sh .deploy/loadbalancer/*.sh .deploy/server/*.sh .deploy/tests/*.sh .deploy/tests/*/*.sh
+
   docs:
     # `-D warnings` turns a broken intra-doc link — which nothing else here notices — into a
     # failure. `--no-deps` keeps it to this workspace's own documentation.

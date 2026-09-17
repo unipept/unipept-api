@@ -1,0 +1,27 @@
+# Applies the netfilter rule that lets port 80 reach the API, at every boot.
+#
+# A system unit, because only root can change netfilter. It is the one part of running this service
+# that a deploy never touches: the rules follow PORT in the environment file, so they change when a
+# person changes that, not when a release is installed.
+
+[Unit]
+Description=Send port 80 to the Unipept API
+Documentation=https://github.com/unipept/unipept-api/wiki/Deploying-the-Unipept-API
+# Before the interfaces are configured, so there is no window where this host is reachable on 80 and
+# the redirect is not in place yet — HAProxy would see a refusal and mark the server down.
+Wants=network-pre.target
+Before=network-pre.target
+# No start rate limit. install.sh restarts this unit on every run, and systemd refuses the sixth
+# start within ten seconds. The refusal leaves the host with no redirect and nothing answering on
+# 80, which is worse than any loop the limit protects against: this unit sets rules and exits.
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+# The rules outlive the process that set them, so systemd should report the unit as active rather
+# than as finished-and-gone.
+RemainAfterExit=yes
+ExecStart=/opt/unipept-api/lib/unipept-api-ports.sh
+
+[Install]
+WantedBy=multi-user.target

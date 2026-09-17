@@ -1,55 +1,18 @@
 # Unipept API
-![codecov](https://img.shields.io/codecov/c/github/unipept/unipept-api/develop)
 
 This package is an implementation of the Unipept API that's being used by the Unipept Web Application and Desktop application to succesfully perform analysis of metaproteomics samples.
 
-## Overview of existing endpoints
-This is an exhaustive list of all endpoints that are exposed by this API
+## Endpoints
+The public API is documented at https://unipept.ugent.be/apidocs. The routes under
+`/private_api`, `/mpa` and `/datasets` serve the Unipept web application and have no public
+documentation. [`api/src/routes.rs`](api/src/routes.rs) is the full list of routes. Each route declared
+through `define_routes!` also answers with a `.json` suffix.
 
-### Public endpoints
+### API versions
 `/api/v1` is deprecated. It stays available because many tools still call it, but it now serves
 the same routes and the same content as `/api/v2`. Note that v1 taxonomy differed slightly from
-v2 in the past; that difference is gone, so a v1 caller gets v2 semantics today. The two lists
-below are identical, and a change to one applies to both. New clients should use `/api/v2`.
-
-#### API v1 (deprecated)
-* `/api/v1/pept2taxa`
-* `/api/v1/pept2lca`
-* `/api/v1/taxa2lca`
-* `/api/v1/pept2prot`
-* `/api/v1/pept2funct`
-* `/api/v1/pept2ec`
-* `/api/v1/pept2go`
-* `/api/v1/pept2interpro`
-* `/api/v1/taxa2tree`
-* `/api/v1/peptinfo`
-* `/api/v1/taxonomy`
-* `/api/v1/messages`
-
-#### API v2
-* `/api/v2/pept2taxa`
-* `/api/v2/pept2lca`
-* `/api/v2/taxa2lca`
-* `/api/v2/pept2prot`
-* `/api/v2/pept2funct`
-* `/api/v2/pept2ec`
-* `/api/v2/pept2go`
-* `/api/v2/pept2interpro`
-* `/api/v2/taxa2tree`
-* `/api/v2/peptinfo`
-* `/api/v2/taxonomy`
-* `/api/v2/messages`
-
-### Private endpoints
-* `/private_api/goterms`
-* `/private_api/ecnumbers`
-* `/private_api/interpros`
-* `/private_api/taxa`
-* `/private_api/taxa2rank`
-* `/private_api/proteins`
-* `/private_api/metadata`
-* `/mpa/pept2data`
-* `/datasets/sampledata`
+v2 in the past; that difference is gone, so a v1 caller gets v2 semantics today. New clients
+should use `/api/v2`.
 
 ### Service endpoints
 * `/health` answers 200 whenever the process is serving, for a load balancer to poll.

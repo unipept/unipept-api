@@ -57,16 +57,44 @@ async fn a_timed_out_request_is_logged() {
 
 /// A served request is logged at INFO, with the route it matched.
 ///
-/// `/health` rather than a search endpoint: the search handlers call `block_in_place`, which needs
-/// the multi-threaded runtime that [`common::log_of`] cannot use.
+/// `/` rather than a search endpoint: the search handlers call `block_in_place`, which needs the
+/// multi-threaded runtime that [`common::log_of`] cannot use. It was `/health`, until a passing
+/// probe stopped being logged.
 #[tokio::test]
 async fn a_served_request_is_logged() {
-    let request = Request::get("/health").body(Body::empty()).unwrap();
+    let request = Request::get("/").body(Body::empty()).unwrap();
 
     let logged = common::log_of(create_app, request).await;
 
     assert!(logged.contains("status=200"), "the request was not logged: {logged}");
-    assert!(logged.contains(r#"route="/health""#), "the route is missing: {logged}");
+    assert!(logged.contains(r#"route="/""#), "the route is missing: {logged}");
+}
+
+/// A health check that passes is not logged.
+///
+/// Also what catches `RequestSpan` and `LogResponse` disagreeing about a probe span's name, which
+/// the compiler cannot check.
+#[tokio::test]
+async fn a_passing_health_check_is_not_logged() {
+    let request = Request::get("/health").body(Body::empty()).unwrap();
+
+    let logged = common::log_of(create_app, request).await;
+
+    assert!(!logged.contains("status=200"), "the passing probe was logged: {logged}");
+}
+
+/// A health check that fails is logged, which is the half worth keeping.
+///
+/// `offline_state` points the database at a dead port, so `/health/database` answers 503 — what a
+/// server with OpenSearch down reports.
+#[tokio::test]
+async fn a_failing_health_check_is_logged() {
+    let request = Request::get("/health/database").body(Body::empty()).unwrap();
+
+    let logged = common::log_of(create_app, request).await;
+
+    assert!(logged.contains("status=503"), "the failing probe was not logged: {logged}");
+    assert!(logged.contains(r#"route="/health/database""#), "the route is missing: {logged}");
 }
 
 /// An unparseable query string is logged with what the parser actually objected to.

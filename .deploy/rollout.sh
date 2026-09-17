@@ -326,6 +326,16 @@ fetch_release() {
     report_fleet_versions
 }
 
+# How many different values a run of `name=value ` entries holds.
+#
+# Two callers ask it of two different things — the version each server is serving, and the index
+# each one reads — and both only ever compare the answer against 1. Counted here rather than in each
+# of them, so a change to how those entries are built cannot leave one caller reading them the old
+# way and quietly agreeing that a split fleet is on one version.
+distinct_values() {
+    printf '%s' "$1" | tr ' ' '\n' | sed 's/^[^=]*=//' | grep -v '^$' | sort -u | wc -l
+}
+
 # What the fleet is running before anything is installed.
 #
 # Reported, never refused. A fleet that disagrees is what a run which stopped part way leaves
@@ -343,7 +353,7 @@ report_fleet_versions() {
         [ "${VERSION_BEFORE[$name]}" = "$target" ] && already="${already}${name} "
     done
 
-    distinct=$(printf '%s' "$versions" | tr ' ' '\n' | sed 's/^[^=]*=//' | grep -v '^$' | sort -u | wc -l)
+    distinct=$(distinct_values "$versions")
     if [ "$distinct" -gt 1 ]; then
         log "the fleet is not on one version: ${versions}"
         log "rolling out ${VERSION} to all of it is what puts that right"
@@ -420,7 +430,7 @@ preflight() {
     # differently depending on which one the load balancer picked, and every health check still
     # passes, so nothing else would ever notice.
     local distinct
-    distinct=$(printf '%s' "$versions" | tr ' ' '\n' | sed 's/^[^=]*=//' | grep -v '^$' | sort -u | wc -l)
+    distinct=$(distinct_values "$versions")
     if [ "$distinct" -gt 1 ]; then
         if [ "$ALLOW_INDEX_MISMATCH" != true ]; then
             die "the fleet does not agree on an index: ${versions}; pass --allow-index-mismatch to accept that"

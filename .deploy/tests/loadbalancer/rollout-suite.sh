@@ -766,6 +766,28 @@ check "still out of the pool"    "$($H state all_handlers/selma)" "MAINT"
 check "and somebody was told"    "$(grep -c 'needs attention' /tmp/mail.txt)" "1"
 
 reset_fleet
+section "26c. a server that is enabled but has not come UP is not called unroutable"
+# `ready` and `wait-up` shared one condition, so a wait that ran out was reported as a load balancer
+# that refused the server. It refused nothing: `ready` was accepted, the server is enabled in every
+# backend it belongs to, and it routes as soon as `rise` is met. The mail then named a remedy — run
+# `ready` again — that had just been done, and sent the operator after the wrong thing.
+$H maint all_handlers,db_handlers/selma >/dev/null 2>&1
+cp /work/loadbalancer/haproxy.sh /work/loadbalancer/haproxy-real.sh
+cat > /work/loadbalancer/haproxy.sh <<'EOF'
+#!/usr/bin/env bash
+# Everything except `wait-up`, which runs out the way a server still failing its checks does.
+if [ "${1:-}" = wait-up ]; then exit 1; fi
+exec "$(dirname "${BASH_SOURCE[0]}")/haproxy-real.sh" "$@"
+EOF
+chmod +x /work/loadbalancer/haproxy.sh
+$R ready selma >/tmp/r39.txt 2>&1
+mv /work/loadbalancer/haproxy-real.sh /work/loadbalancer/haproxy.sh
+check "says what ran out"      "$(grep -c 'has not come UP within' /tmp/r39.txt)" "1"
+check "not called refused"     "$(grep -c 'did not take it back' /tmp/r39.txt)" "0"
+check "counted as still out"   "$(grep -c '0 server(s) returned to the pool, 1 still out' /tmp/r39.txt)" "1"
+check "and somebody was told"  "$(grep -c 'needs attention' /tmp/mail.txt)" "1"
+
+reset_fleet
 section "27. the lock is shared between the operator and root"
 # Both run rollouts: the operator directly, and root through sudo, which is why RUN_BY reads
 # SUDO_USER first. A file one leaves behind has to be usable by the other.

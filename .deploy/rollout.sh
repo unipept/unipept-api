@@ -553,12 +553,22 @@ return_to_pool() {
     fi
 
     # Checked rather than left to `set -e`, which is not in force here: bash turns it off for the
-    # whole body of a function called as a condition, and three of the four callers do exactly that
-    # (`|| die`, `|| true`, `if return_to_pool`). A failing `ready` used to carry on to the log line
-    # below and return 0, so a server the load balancer never took back was reported as in rotation
-    # — the one path that ended with a server out of the pool and nobody told.
-    if ! "$HAPROXY" ready "$target" || ! "$HAPROXY" wait-up "$target" "$HEALTH_TIMEOUT"; then
+    # whole body of a function called as a condition, and every caller does exactly that (`|| die`,
+    # `|| true`, `if return_to_pool`). A failing `ready` used to carry on to the log line below and
+    # return 0, so a server the load balancer never took back was reported as in rotation — the one
+    # path that ended with a server out of the pool and nobody told.
+    if ! "$HAPROXY" ready "$target"; then
         log "${name} answers both health routes, but the load balancer did not take it back"
+        note_down "$name" "$target"
+        return 1
+    fi
+
+    # Not the same failure, and it was reported as one. `ready` has been accepted, so the server is
+    # enabled in every backend it belongs to and routes as soon as `rise` is met; what ran out is the
+    # wait. Calling that "cannot be routed to" sent the operator after a server that was already on
+    # its way back, with a remedy — run `ready` again — that had just been done.
+    if ! "$HAPROXY" wait-up "$target" "$HEALTH_TIMEOUT"; then
+        log "${name} is enabled but has not come UP within ${HEALTH_TIMEOUT}s"
         note_down "$name" "$target"
         return 1
     fi

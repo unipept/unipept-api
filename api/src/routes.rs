@@ -135,9 +135,8 @@ macro_rules! define_routes {
 
 /// The routes both `/api/v1` and `/api/v2` answer.
 ///
-/// v1 is a deprecated alias, mounted because many tools still call it. The two therefore change
-/// together, and `the_two_api_versions_answer_identically` in `tests/endpoints/routing.rs` fails if
-/// one is given routes the other does not have.
+/// v1 is a deprecated alias, mounted because many tools still call it. Both versions are built by
+/// this function, so a route added here is added to both.
 fn create_api_routes() -> Router<AppState> {
     define_routes!(
         "/pept2ec",

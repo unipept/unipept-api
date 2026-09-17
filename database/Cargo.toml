@@ -16,6 +16,6 @@ serde_json = "~1"
 
 [dev-dependencies]
 fixtures = { path = "../fixtures" }
-httpmock = "0.7"
+httpmock = "0.8"
 # Test-only: the crate itself never names tokio, and the tests need only #[tokio::test].
 tokio = { version = "1.44.2", features = ["macros", "rt"] }

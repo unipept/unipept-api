@@ -193,13 +193,13 @@ async fn get_and_post_answer_alike_against_a_cluster() {
     // Both search mocks match on the filter, so a request that lost it reaches no mock at all.
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0").body_contains("8501");
+            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0").body_includes("8501");
             then.status(200).json_body(json!({ "hits": { "total": { "value": 2 } } }));
         })
         .await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_search").query_param("from", "0").body_contains("8501");
+            when.method(POST).path("/uniprot_entries/_search").query_param("from", "0").body_includes("8501");
             then.status(200).json_body(json!({ "hits": { "hits": [
                 { "_source": { "uniprot_accession_number": "P00001" } },
                 { "_source": { "uniprot_accession_number": "P00003" } }

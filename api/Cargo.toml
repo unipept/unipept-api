@@ -46,7 +46,7 @@ tempfile = "3"
 # Named for the tests that use it; hyper and tokio-util already enable it in the release graph.
 tokio = { version = "1.44.2", features = ["sync"] }
 tower = { version = "0.5.3", features = ["util"] }
-httpmock = "0.7"
+httpmock = "0.8"
 
 [[bench]]
 opt-level = 0

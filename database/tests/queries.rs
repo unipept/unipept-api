@@ -55,7 +55,7 @@ async fn an_empty_accession_set_makes_no_request() {
     let result = get_accessions(database.get_conn(), &[]).await.expect("an empty set should succeed");
 
     assert!(result.is_empty());
-    mock.assert_hits_async(0).await;
+    mock.assert_calls_async(0).await;
 }
 
 #[tokio::test]
@@ -65,7 +65,7 @@ async fn accessions_are_fetched_by_mget_and_parsed() {
         .mock_async(|when, then| {
             when.method(POST)
                 .path("/uniprot_entries/_mget")
-                .json_body_partial(r#"{ "docs": [ { "_id": "P00001" } ] }"#);
+                .json_body_includes(r#"{ "docs": [ { "_id": "P00001" } ] }"#);
             then.status(200).json_body(json!({
                 "docs": [ { "_source": source("P00001", 8501) } ]
             }));
@@ -181,7 +181,7 @@ async fn an_empty_filter_counts_everything_with_match_all() {
             when.method(POST)
                 .path("/uniprot_entries/_search")
                 .query_param("size", "0")
-                .json_body_partial(r#"{ "track_total_hits": true, "query": { "match_all": {} } }"#);
+                .json_body_includes(r#"{ "track_total_hits": true, "query": { "match_all": {} } }"#);
             then.status(200).json_body(json!({ "hits": { "total": { "value": 4321 } } }));
         })
         .await;
@@ -198,7 +198,7 @@ async fn a_text_filter_matches_on_name_and_accession() {
     let server = MockServer::start_async().await;
     let mock = server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0").json_body_partial(
+            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0").json_body_includes(
                 r#"{ "track_total_hits": true, "query": { "bool": { "minimum_should_match": 1, "should": [
                    { "wildcard": { "name": { "value": "*croc*", "case_insensitive": true } } },
                    { "prefix": { "uniprot_accession_number": { "value": "croc", "case_insensitive": true } } }
@@ -226,7 +226,7 @@ async fn a_numeric_filter_also_matches_the_taxon_id() {
             // The whole `should` array is spelled out: a partial match compares arrays as a unit, and
             // the point of this test is that the numeric clause is *added* to the two text clauses
             // rather than replacing them.
-            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0").json_body_partial(
+            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0").json_body_includes(
                 r#"{ "track_total_hits": true, "query": { "bool": { "minimum_should_match": 1, "should": [
                    { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
                    { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
@@ -310,7 +310,7 @@ async fn a_numeric_filter_lists_by_a_term_clause() {
                 .path("/uniprot_entries/_search")
                 .query_param("from", "0")
                 .query_param("size", "2")
-                .json_body_partial(
+                .json_body_includes(
                     r#"{ "query": { "bool": { "minimum_should_match": 1, "should": [
                            { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
                            { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
@@ -341,7 +341,7 @@ async fn a_text_filter_lists_without_a_taxon_clause() {
     let server = MockServer::start_async().await;
     let mock = server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_search").json_body_partial(
+            when.method(POST).path("/uniprot_entries/_search").json_body_includes(
                 r#"{ "query": { "bool": { "minimum_should_match": 1, "should": [
                        { "wildcard": { "name": { "value": "*croc*", "case_insensitive": true } } },
                        { "prefix": { "uniprot_accession_number": { "value": "croc", "case_insensitive": true } } }
@@ -431,7 +431,7 @@ async fn the_count_and_the_listing_select_the_same_set() {
     let server = MockServer::start_async().await;
     let shared = server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_search").json_body_partial(
+            when.method(POST).path("/uniprot_entries/_search").json_body_includes(
                 r#"{ "query": { "bool": { "minimum_should_match": 1, "should": [
                        { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
                        { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
@@ -446,7 +446,7 @@ async fn the_count_and_the_listing_select_the_same_set() {
     get_accessions_count_by_filter(database.get_conn(), "8501".to_string()).await.expect("counts");
     get_accessions_by_filter(database.get_conn(), "8501".to_string(), 0, 10).await.expect("lists");
 
-    shared.assert_hits_async(2).await;
+    shared.assert_calls_async(2).await;
 }
 
 /// The last page is reached by reversing the order, not by paging to it.
@@ -474,7 +474,7 @@ async fn the_last_page_is_reached_from_the_other_end() {
                 // The window starts at the very end, and the order runs the other way.
                 .query_param("from", "0")
                 .query_param("size", "5")
-                .json_body_partial(r#"{ "sort": [ { "uniprot_accession_number": { "order": "desc" } } ] }"#);
+                .json_body_includes(r#"{ "sort": [ { "uniprot_accession_number": { "order": "desc" } } ] }"#);
             then.status(200).json_body(json!({ "hits": { "hits": [
                 { "_source": { "uniprot_accession_number": "Z00005" } },
                 { "_source": { "uniprot_accession_number": "Z00004" } },
@@ -521,7 +521,7 @@ async fn a_page_in_the_middle_is_refused() {
         .expect_err("the middle cannot be reached");
 
     assert!(matches!(error, database::DatabaseError::WindowUnreachable { .. }), "got: {error}");
-    list.assert_hits_async(0).await;
+    list.assert_calls_async(0).await;
 }
 
 /// A shallow page never asks for the count.
@@ -547,5 +547,5 @@ async fn a_shallow_page_does_not_count_first() {
     let database = database(&server);
     get_accessions_by_filter(database.get_conn(), String::new(), 0, 5).await.expect("the page parses");
 
-    count.assert_hits_async(0).await;
+    count.assert_calls_async(0).await;
 }

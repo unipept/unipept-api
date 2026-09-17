@@ -42,7 +42,7 @@ async fn the_filtered_count_and_listing_both_reach_the_cluster() {
     let server = MockServer::start_async().await;
     let count = server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0").json_body_partial(
+            when.method(POST).path("/uniprot_entries/_search").query_param("size", "0").json_body_includes(
                 r#"{ "track_total_hits": true, "query": { "bool": { "minimum_should_match": 1, "should": [
                            { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
                            { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
@@ -58,7 +58,7 @@ async fn the_filtered_count_and_listing_both_reach_the_cluster() {
                 .path("/uniprot_entries/_search")
                 .query_param("from", "0")
                 .query_param("size", "2")
-                .json_body_partial(
+                .json_body_includes(
                     r#"{ "query": { "bool": { "minimum_should_match": 1, "should": [
                            { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
                            { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
@@ -108,7 +108,7 @@ async fn an_end_below_start_is_rejected() {
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(body.contains("end"), "the message should name the parameter, got: {body}");
-    mock.assert_hits_async(0).await;
+    mock.assert_calls_async(0).await;
 }
 
 /// The last page of the browser is served.
@@ -131,7 +131,7 @@ async fn the_last_page_of_the_browser_is_served() {
                 .path("/uniprot_entries/_search")
                 .query_param("from", "0")
                 .query_param("size", "5")
-                .json_body_partial(r#"{ "sort": [ { "uniprot_accession_number": { "order": "desc" } } ] }"#);
+                .json_body_includes(r#"{ "sort": [ { "uniprot_accession_number": { "order": "desc" } } ] }"#);
             then.status(200).json_body(json!({ "hits": { "hits": [
                 { "_source": { "uniprot_accession_number": "Z00002" } },
                 { "_source": { "uniprot_accession_number": "Z00001" } }
@@ -216,7 +216,7 @@ async fn the_listing_is_ordered_on_the_accession() {
         .mock_async(|when, then| {
             when.method(POST)
                 .path("/uniprot_entries/_search")
-                .json_body_partial(r#"{ "sort": [ { "uniprot_accession_number": { "order": "asc" } } ] }"#);
+                .json_body_includes(r#"{ "sort": [ { "uniprot_accession_number": { "order": "asc" } } ] }"#);
             then.status(200).json_body(json!({ "hits": { "hits": [] } }));
         })
         .await;

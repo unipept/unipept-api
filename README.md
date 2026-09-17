@@ -114,6 +114,8 @@ With the index fully resident the same setting *costs* about 10%. A deployment k
 default.
 
 ## Developing the Unipept API
+[`CONTRIBUTING.md`](CONTRIBUTING.md) lists the toolchains and the checks a PR must pass.
+
 The steps below start a development instance. A production host is deployed from
 [`.deploy/`](.deploy/), described on the wiki page
 [Deploying the Unipept API](https://github.com/unipept/unipept-api/wiki/Deploying-the-Unipept-API).

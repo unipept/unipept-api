@@ -49,7 +49,10 @@ check "installed the scripts"   "$([ -x /opt/unipept-rollout/rollout.sh ] && ech
 check "installed haproxy.sh"    "$([ -x /opt/unipept-rollout/loadbalancer/haproxy.sh ] && echo yes)" "yes"
 check "wrote rollout.conf"      "$([ -f /etc/unipept-rollout/rollout.conf ] && echo yes)" "yes"
 check "wrote servers.conf"      "$([ -f /etc/unipept-rollout/servers.conf ] && echo yes)" "yes"
-check "config owned by unipept" "$(stat -c %U /etc/unipept-rollout/servers.conf)" "unipept"
+check "inventory owned by unipept" "$(stat -c %U /etc/unipept-rollout/servers.conf)" "unipept"
+# Sourced by root in the audit, so a line in it is a command root runs. The operator has an ssh key
+# on every API server; being able to write this file as well would make that account root here.
+check "settings owned by root"     "$(stat -c %U /etc/unipept-rollout/rollout.conf)" "root"
 check "added to the group"      "$(id -nG unipept | grep -c haproxy)" "1"
 
 section "existing configuration is never overwritten"
@@ -57,6 +60,16 @@ echo "# edited by hand" >> /etc/unipept-rollout/servers.conf
 /deploy/loadbalancer/install.sh >/tmp/i2.log 2>&1
 check "kept the edit"  "$(grep -c 'edited by hand' /etc/unipept-rollout/servers.conf)" "1"
 check "said it kept it" "$(grep -c 'keeping /etc/unipept-rollout/servers.conf' /tmp/i2.log)" "1"
+
+section "a rollout.conf from before is taken back"
+# A load balancer installed earlier has an operator-owned rollout.conf, and the audit sources it.
+# Re-running the install is what corrects that, so the file has to keep its contents and change
+# hands.
+chown unipept:unipept /etc/unipept-rollout/rollout.conf
+echo "# edited by hand" >> /etc/unipept-rollout/rollout.conf
+/deploy/loadbalancer/install.sh >/tmp/i2b.log 2>&1
+check "now owned by root" "$(stat -c %U /etc/unipept-rollout/rollout.conf)" "root"
+check "kept the edit"     "$(grep -c 'edited by hand' /etc/unipept-rollout/rollout.conf)" "1"
 
 section "the audit reads HAProxy, not just the file"
 # The test config has both backends and all three servers.

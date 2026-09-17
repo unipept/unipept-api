@@ -44,7 +44,7 @@ readonly OPERATOR=${OPERATOR:-unipept}
 readonly HAPROXY_CONFIG=/etc/haproxy/haproxy.cfg
 readonly FRAGMENT=/tmp/unipept-haproxy-fragment.cfg
 
-require_cmd curl getent install sha256sum socat ssh scp flock logger usermod
+require_cmd chown curl getent install sha256sum socat ssh scp flock logger usermod
 [ "$(id -u)" -eq 0 ] || die "run this as root. Rollouts themselves run as ${OPERATOR}."
 id "$OPERATOR" >/dev/null 2>&1 || die "there is no ${OPERATOR} account on this host"
 
@@ -97,19 +97,27 @@ log "installed the scripts in ${ROOT}"
 
 # This host's own settings, kept out of the checkout: the inventory names the fleet and the
 # configuration names where failures are emailed, neither of which belongs in a repository.
+#
+# The owner differs because the two files are read differently. rollout.conf is sourced — by
+# rollout.sh, and by the audit below, which runs as root — so a line in it is a command root runs,
+# and the operator edits it with sudoedit. servers.conf is data, read field by field, and stays the
+# operator's to change.
 install_config() {
-    local example=$1 target=$2
+    local example=$1 target=$2 owner=$3
 
     if [ -f "$target" ]; then
+        # Its contents are this host's, but the owner is ours to correct on a file written before
+        # rollout.conf became root's.
+        chown "${owner}:${owner}" "$target"
         log "keeping ${target}"
         return 0
     fi
-    install -m 0644 -o "$OPERATOR" -g "$OPERATOR" "$example" "$target"
+    install -m 0644 -o "$owner" -g "$owner" "$example" "$target"
     log "wrote ${target} from the example. Edit it before rolling out."
 }
 
-install_config "${SOURCE}/rollout.conf.example" "${CONFIG}/rollout.conf"
-install_config "${SOURCE}/servers.example.conf" "${CONFIG}/servers.conf"
+install_config "${SOURCE}/rollout.conf.example" "${CONFIG}/rollout.conf" root
+install_config "${SOURCE}/servers.example.conf" "${CONFIG}/servers.conf" "$OPERATOR"
 
 # The socket is the one thing a rollout cannot do without, and the only privilege it needs.
 if getent group haproxy >/dev/null 2>&1; then
@@ -197,7 +205,8 @@ readonly AUDIT_SSH=(-n "${SSH_CONNECTION_BOUNDS[@]}")
 # operator to write, and the audit then tried to reach `unipept  # deploy account@patty` and called
 # every server unreachable — while the rollout it is auditing read the same file and worked.
 #
-# In a subshell, so a setting here cannot land in this script's own variables.
+# In a subshell, so a setting here cannot land in this script's own variables. It is still root
+# running what the file says, which is why install_config keeps rollout.conf root-owned.
 conf_value() {
     (
         # The file names only what this host decides; the rest is unset, and reading one must not

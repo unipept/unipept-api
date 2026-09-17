@@ -188,9 +188,8 @@ if [ -S "$socket" ] && backends=$(printf 'show stat\n' | socat "$socket" stdio 2
 fi
 
 # Every server the inventory names, reached the way a rollout reaches it, on the options a rollout
-# uses. ConnectTimeout alone bounds only the handshake: a server that answers and then stops holds
-# the connection open, and this audit would wait on it for ever. The keepalives are what end it.
-readonly AUDIT_SSH=(-n -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+# uses — the same array rollout.sh builds SSH_OPTIONS from, so tuning a timeout there tunes it here.
+readonly AUDIT_SSH=(-n "${SSH_CONNECTION_BOUNDS[@]}")
 
 # Every server the inventory names, reached the way a rollout reaches it.
 ssh_user=$(sed -n 's/^SSH_USER=//p' "${CONFIG}/rollout.conf" | tr -d "\"'" | tail -1)

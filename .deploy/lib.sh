@@ -31,6 +31,19 @@ readonly DEFAULT_DRAIN_TIMEOUT=240
 # shellcheck disable=SC2034  # read by the scripts that source this file.
 readonly CURL_DOWNLOAD=(-fsSL --retry 3 --connect-timeout 20 --speed-limit 1024 --speed-time 30)
 
+# What a connection to a server may not do: block for ever.
+#
+# ConnectTimeout alone bounds only the handshake. A server that answers and then stops holds the
+# connection open, and the caller waits on it indefinitely with that server out of the pool. The
+# keepalives are what end it.
+#
+# Here rather than in each caller, because the audit exists to reach servers "the way a rollout
+# reaches them": written out twice, the two drift the first time a timeout is tuned, and the audit
+# then passes on bounds no rollout ever uses. The flags that belong to the invocation rather than to
+# the connection — ssh's -n, scp's -q — stay with their caller.
+# shellcheck disable=SC2034  # read by the scripts that source this file.
+readonly SSH_CONNECTION_BOUNDS=(-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+
 # The asset names release.yml publishes. Both the server and the load balancer ask for them, so the
 # format lives here rather than being spelled out on each side.
 asset_name() {

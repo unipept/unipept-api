@@ -271,9 +271,10 @@ ordered_servers() {
 }
 
 # A dead connection has to fail rather than block: without these, a partitioned server holds the run
-# open indefinitely with that server out of the pool.
-readonly SSH_OPTIONS=(-n -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
-readonly SCP_OPTIONS=(-q -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+# open indefinitely with that server out of the pool. The bounds are in lib.sh, so the load
+# balancer's install audit reaches a server on the same ones.
+readonly SSH_OPTIONS=(-n "${SSH_CONNECTION_BOUNDS[@]}")
+readonly SCP_OPTIONS=(-q "${SSH_CONNECTION_BOUNDS[@]}")
 
 ssh_target() {
     if [ -n "$SSH_USER" ]; then printf '%s@%s\n' "$SSH_USER" "$1"; else printf '%s\n' "$1"; fi

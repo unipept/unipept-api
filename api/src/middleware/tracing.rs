@@ -13,6 +13,19 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 // level. `axum::rejection=trace` enables showing those events.
 const DEFAULT_FILTER: &str = "warn,unipept_api=info,datastore=info,index=info,tower_http=info,axum::rejection=trace";
 
+/// The routes a load balancer polls rather than a caller asks for.
+///
+/// Whole paths, not a prefix, so a route added under `/health` later has to be listed here
+/// deliberately rather than fall silent by inheriting it.
+const PROBE_ROUTES: [&str; 2] = ["/health", "/health/database"];
+
+/// The span name [`RequestSpan`] gives a probe, and all [`LogResponse`] has left to recognise one
+/// by: the route is out of scope by then, and a span's fields cannot be read back out.
+///
+/// `info_span!` needs a literal, so the name is spelled out there too;
+/// `a_passing_health_check_is_not_logged` catches the two drifting apart.
+const PROBE_SPAN: &str = "probe";
+
 /// Installs the global tracing subscriber, once.
 ///
 /// `try_init` rather than `init`: a subscriber can only be set once per process, and `init`
@@ -43,12 +56,15 @@ impl<B> MakeSpan<B> for RequestSpan {
         // No route in this API takes a path parameter, so the two are the same string for every
         // request that matches one. Add a route that does, and this field becomes as many values
         // as that parameter has, and wants recording from inside the router instead.
-        let span = tracing::info_span!(
-            "request",
-            method = %request.method(),
-            route = request.uri().path(),
-            request_id = tracing::field::Empty
-        );
+        let route = request.uri().path();
+
+        // Two spans, because what tells them apart has to survive into `on_response`, which sees
+        // neither the request nor this span's fields. They are otherwise identical.
+        let span = if PROBE_ROUTES.contains(&route) {
+            tracing::info_span!("probe", method = %request.method(), route, request_id = tracing::field::Empty)
+        } else {
+            tracing::info_span!("request", method = %request.method(), route, request_id = tracing::field::Empty)
+        };
 
         // Honours an id HAProxy already set rather than inventing a competing one; absent or
         // non-UTF-8 is left unrecorded rather than treated as an error.
@@ -70,8 +86,15 @@ impl<B> MakeSpan<B> for RequestSpan {
 pub struct LogResponse;
 
 impl<B> OnResponse<B> for LogResponse {
-    fn on_response(self, response: &Response<B>, latency: Duration, _span: &Span) {
+    fn on_response(self, response: &Response<B>, latency: Duration, span: &Span) {
         let status = response.status();
+
+        // A probe that passed is the fleet checking itself: two backends poll every server every
+        // two seconds, some 86,000 lines a day per host, crowding out what anybody reads the
+        // journal for. One that failed is the first thing they look for, so it is logged.
+        if status.is_success() && span.metadata().is_some_and(|metadata| metadata.name() == PROBE_SPAN) {
+            return;
+        }
         // Milliseconds to three places. Whole milliseconds round every request this API answers
         // from memory down to the same `0`, and a bare `as_secs_f64` prints the binary remainder.
         let latency_ms = (latency.as_secs_f64() * 1_000_000.0).round() / 1000.0;

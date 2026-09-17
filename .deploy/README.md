@@ -48,3 +48,7 @@ journalctl -f _SYSTEMD_USER_UNIT=unipept-api.service
 ```
 
 `RUST_LOG` in the environment file sets the filter.
+
+One request is one line, except a health check that passes. A load balancer polling `/health` and
+`/health/database` on every server every couple of seconds is tens of thousands of lines a day that
+nobody reads, so a probe is logged only when it fails.

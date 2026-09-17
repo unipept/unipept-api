@@ -168,6 +168,16 @@ check "exit 0"            "$?" "0"
 check "index_version"     "$(sed -n 's/^index_version=//p' /tmp/c0.log)" "2026.09-test"
 check "no problems"       "$(sed -n 's/^problems=//p' /tmp/c0.log)" "0"
 
+section "a missing k-mer table is a warning"
+mv /srv/index/kmer_table.bin /srv/kmer_table.bin.away
+as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/c1k.log 2>&1
+check "exit 0"          "$?" "0"
+check "no problems"     "$(sed -n 's/^problems=//p' /tmp/c1k.log)" "0"
+check "one more warning" "$(sed -n 's/^warnings=//p' /tmp/c1k.log)" "$(( $(sed -n 's/^warnings=//p' /tmp/c0.log) + 1 ))"
+check "names the file"  "$(grep -c 'kmer_table.bin is missing' /tmp/c1k.log)" "1"
+check "index_version"   "$(sed -n 's/^index_version=//p' /tmp/c1k.log)" "2026.09-test"
+mv /srv/kmer_table.bin.away /srv/index/kmer_table.bin
+
 section "each failure on its own"
 # A missing index file.
 mv /srv/index/mapping.bin /srv/mapping.bin.away

@@ -352,6 +352,9 @@ do_check() {
             for relative in $INDEX_FILES; do
                 [ -r "${index}/${relative}" ] || { fail "${index}/${relative} is missing or unreadable"; missing=1; }
             done
+            for relative in $OPTIONAL_INDEX_FILES; do
+                [ -r "${index}/${relative}" ] || warn "${index}/${relative} is missing or unreadable; the service runs without it, but searches are slower"
+            done
             [ "$missing" -eq 0 ] && index_version=$(tr -d '[:space:]' < "${index}/.version")
         else
             fail "${index} is not a readable directory"

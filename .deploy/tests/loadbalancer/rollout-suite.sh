@@ -403,6 +403,48 @@ $H ready all_handlers,db_handlers/patty >/dev/null 2>&1
 sleep 5
 
 reset_fleet
+section "16b. a rollback that comes up but cannot be returned is named once"
+# The deploy installs the version and breaks /health, so it is rolled back. The rollback works and
+# /health answers again, but the database route stays down, so return_to_pool still refuses to put
+# the server back. return_to_pool notes down every server it leaves out, and resolve_failure noted
+# the same one again on the way past: one server was named twice in the same mail, and two
+# needs-attention lines were written for it.
+#
+# As in 16, the database marker is set by the deploy rather than before the run, or preflight would
+# refuse the server and this branch would never be reached.
+cat > /usr/local/bin/ssh <<'EOF'
+#!/usr/bin/env bash
+args=("$@"); cmd=""
+for a in "${args[@]}"; do case $a in -o|BatchMode=yes|ConnectTimeout=10|ServerAliveInterval=15|ServerAliveCountMax=4|-n) ;; *) cmd="$cmd $a" ;; esac; done
+echo "SSH:$cmd" >> /tmp/ssh.log
+case "$cmd" in
+  *"deploy.sh rollback"*) echo "ROLLBACK" >> /tmp/ssh.log; rm -f /tmp/unhealthy; exit 0 ;;
+  *"deploy.sh check"*)    printf 'variant=hybrid\nport=80\nindex_version=2026.09-test\nproblems=0\n'; exit 0 ;;
+  *"deploy --from"*)      touch /tmp/unhealthy; echo patty > /tmp/no-database; exit 0 ;;
+  *status*)            printf 'version=2.6.0\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n'; exit 0 ;;
+esac
+exit 0
+EOF
+chmod +x /usr/local/bin/ssh
+# The journal is read here too, because the duplicate reached it as well as the mail.
+printf '#!/usr/bin/env bash\necho "$*" >> /tmp/logged.txt\n' > /usr/local/bin/logger
+chmod +x /usr/local/bin/logger
+rm -f /tmp/no-database /tmp/unhealthy; : > /tmp/ssh.log; : > /tmp/mail.txt; : > /tmp/logged.txt
+$R --version v2.6.0 --only patty --allow-downtime >/tmp/r20b.txt 2>&1
+check "exit non-zero"           "$([ $? -ne 0 ] && echo yes)" "yes"
+check "it was rolled back"      "$(grep -c '^ROLLBACK' /tmp/ssh.log)" "1"
+check "and still refused"       "$(grep -c 'both health routes' /tmp/r20b.txt)" "1"
+check "left out of the pool"    "$($H state all_handlers/patty)" "MAINT"
+check "mailed once"             "$(grep -c 'needs attention' /tmp/mail.txt)" "1"
+# Counted as occurrences, not matching lines: both names land on the one NEEDS_ATTENTION line, so
+# `grep -c` would read 1 whether it was reported once or twice.
+check "naming the server once"  "$(grep -o 'patty \[' /tmp/mail.txt | wc -l | tr -d ' ')" "1"
+check "one journal line for it" "$(grep -c 'outcome=needs-attention' /tmp/logged.txt)" "1"
+rm -f /tmp/no-database /tmp/unhealthy
+$H ready all_handlers,db_handlers/patty >/dev/null 2>&1
+sleep 5
+
+reset_fleet
 section "17. an unreachable server is not rolled back on a guess"
 # The deploy fails and the host then cannot be asked what happened. Rolling back over the same dead
 # connection would be guessing, and could undo a deploy that actually worked.

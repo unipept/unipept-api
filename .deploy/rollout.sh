@@ -600,13 +600,15 @@ resolve_failure() {
         if return_to_pool "$name" "$host" "$port" "$target"; then
             log "${name} was rolled back and is serving again"
             note_failed_update "$name" "$(on_server "$host" status 2>/dev/null | env_value version || true)"
-            die "stopped at ${name}; the servers after it were not touched"
         fi
+        # A rollback that came up but could not be returned has already been reported: every path
+        # return_to_pool refuses goes through note_down first. Saying it again here named the server
+        # twice in the same mail and wrote two needs-attention lines for the one host.
     else
         log "${name} could not be rolled back"
+        note_down "$name" "$target"
     fi
 
-    note_down "$name" "$target"
     die "stopped at ${name}; the servers after it were not touched"
 }
 

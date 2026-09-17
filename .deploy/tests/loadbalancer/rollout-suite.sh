@@ -786,7 +786,7 @@ chmod +x /work/loadbalancer/haproxy.sh
 $R ready selma >/tmp/r39.txt 2>&1
 mv /work/loadbalancer/haproxy-real.sh /work/loadbalancer/haproxy.sh
 check "says what ran out"      "$(grep -c 'has not come UP within' /tmp/r39.txt)" "1"
-check "not called refused"     "$(grep -c 'did not take it back' /tmp/r39.txt)" "0"
+check_absent "not called refused" 'did not take it back' /tmp/r39.txt
 check "counted as still out"   "$(grep -c '0 server(s) returned to the pool, 1 still out' /tmp/r39.txt)" "1"
 check "and somebody was told"  "$(grep -c 'needs attention' /tmp/mail.txt)" "1"
 
@@ -808,7 +808,7 @@ chmod +x /work/loadbalancer/haproxy.sh
 $R --version v2.6.0 >/tmp/r39b.txt 2>&1
 mv /work/loadbalancer/haproxy-real.sh /work/loadbalancer/haproxy.sh
 check "says the pool refused it"   "$(grep -c 'did not take it back' /tmp/r39b.txt)" "1"
-check "not called an interrupt"    "$(grep -c 'left out of the pool by a run that did not finish' /tmp/r39b.txt)" "0"
+check_absent "not called an interrupt" 'left out of the pool by a run that did not finish' /tmp/r39b.txt
 check "stopped the run"            "$(grep -c 'the servers after it were not touched' /tmp/r39b.txt)" "1"
 check "and somebody was told"      "$(grep -c 'needs attention' /tmp/mail.txt)" "1"
 check "named the server once"      "$(grep -c 'patty \[' /tmp/mail.txt)" "1"

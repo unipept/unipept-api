@@ -191,9 +191,27 @@ fi
 # uses — the same array rollout.sh builds SSH_OPTIONS from, so tuning a timeout there tunes it here.
 readonly AUDIT_SSH=(-n "${SSH_CONNECTION_BOUNDS[@]}")
 
+# Read the way rollout.sh reads it, which is `source`. Matching the lines with sed instead meant
+# anything shell understands and a line-matcher does not became part of the value: the example file
+# comments half its settings, so `SSH_USER=unipept  # deploy account` is the natural thing for an
+# operator to write, and the audit then tried to reach `unipept  # deploy account@patty` and called
+# every server unreachable — while the rollout it is auditing read the same file and worked.
+#
+# In a subshell, so a setting here cannot land in this script's own variables.
+conf_value() {
+    (
+        # The file names only what this host decides; the rest is unset, and reading one must not
+        # end the audit.
+        set +u
+        # shellcheck source=/dev/null  # written on this host, not in this repository.
+        source "${CONFIG}/rollout.conf" >/dev/null 2>&1 || exit 0
+        printf '%s' "${!1}"
+    )
+}
+
 # Every server the inventory names, reached the way a rollout reaches it.
-ssh_user=$(sed -n 's/^SSH_USER=//p' "${CONFIG}/rollout.conf" | tr -d "\"'" | tail -1)
-remote=$(sed -n 's/^REMOTE_DEPLOY=//p' "${CONFIG}/rollout.conf" | tr -d "\"'" | tail -1)
+ssh_user=$(conf_value SSH_USER)
+remote=$(conf_value REMOTE_DEPLOY)
 remote=${remote:-/opt/unipept-api/lib/deploy.sh}
 
 while read -r name host _ _ _; do

@@ -112,6 +112,26 @@ check "every probe is bounded"  "$([ "$probes" -ge 3 ] && echo yes)" "yes"
 check "keepalives on each"      "$(grep -c 'ServerAliveInterval=15' /tmp/audit-ssh.log)" "$probes"
 check "and a count for them"    "$(grep -c 'ServerAliveCountMax=4' /tmp/audit-ssh.log)" "$probes"
 
+section "rollout.conf is read the way rollout.sh reads it"
+# Matching the lines with sed rather than sourcing made anything shell understands and a
+# line-matcher does not part of the value. The example file comments half its settings, so an inline
+# comment is the natural thing for an operator to add — and the audit then tried to reach
+# `unipept  # the deploy account@patty` and called every server unreachable, while the rollout it
+# audits read the same file and worked.
+#
+# The log belongs to the operator the audit runs as, so this reads the lines this run added rather
+# than truncating it. Asked of the whole file, "reaches the plain target" would pass on the earlier
+# runs' lines whatever this one did.
+echo ok > /tmp/fake-ssh-mode
+cp /etc/unipept-rollout/rollout.conf /tmp/rollout.conf.keep
+sed -i 's/^SSH_USER=.*/SSH_USER=unipept  # the deploy account/' /etc/unipept-rollout/rollout.conf
+before=$(wc -l < /tmp/audit-ssh.log)
+/deploy/loadbalancer/install.sh >/tmp/i9.log 2>&1
+check "exit 0"                   "$?" "0"
+tail -n +$((before + 1)) /tmp/audit-ssh.log > /tmp/audit-ssh.new
+check "reaches the plain target" "$([ "$(grep -c 'unipept@patty' /tmp/audit-ssh.new)" -ge 1 ] && echo yes)" "yes"
+cp /tmp/rollout.conf.keep /etc/unipept-rollout/rollout.conf
+
 section "rollout.sh reads the installed configuration"
 check "prefers /etc" "$(grep -c 'CONFIG_DIR=/etc/unipept-rollout' /opt/unipept-rollout/rollout.sh)" "1"
 

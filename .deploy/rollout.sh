@@ -114,8 +114,9 @@ usage: rollout.sh --version <tag> [options]
 A server is drained from every backend its inventory line names, so routing the database
 endpoints to their own backend needs no change here beyond that list.
 
-Draining and restoring a server changes its HAProxy state, and this backend has email-alert
-enabled, so each transition sends mail.
+One mail per server as it comes back, and one when the run is done. HAProxy mails on state changes
+too, unless `email-alert level` is alert, which is what the fragment loadbalancer/install.sh writes
+asks for.
 EOF
     exit 2
 }
@@ -142,6 +143,8 @@ STAGED_ON=''
 # Servers this run left out of the pool or down, which is what the team is told about.
 FAILED_UPDATE=''
 NEEDS_ATTENTION=''
+# Servers this run updated and put back, for the mail that closes it.
+UPDATED=''
 # The same servers, names only, for the record to iterate over.
 FAILED_NAMES=''
 DOWN_NAMES=''
@@ -632,6 +635,22 @@ resolve_failure() {
     die "stopped at ${name}; the servers after it were not touched"
 }
 
+# A server that took the release and went back into the pool.
+#
+# Mailed from here rather than left to HAProxy's email-alert, which fires on every state change in
+# every backend: eighteen messages for a fleet of three, none of them about the release.
+note_updated() {
+    local name=$1
+
+    UPDATED="${UPDATED}${name} "
+    notify "[unipept-rollout] ${name} is on ${VERSION}" \
+"${name} took ${VERSION#v} and is back in every backend it belongs to.
+
+  $(printf '%s' "${STATUS[$name]:-unknown}" | tr '\n' ' ')
+
+Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
+}
+
 # An update that failed but left the fleet serving. Worth an email, not an alarm.
 #
 # Two lists: one to read, one to iterate. Splitting "patty (serving 2.5.3)" on whitespace was logging
@@ -754,6 +773,14 @@ Every server is in the pool. The servers after the failure were not attempted, s
 consistent only if this was the first one. Check with:
 
   ${HERE}/rollout.sh status
+
+Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
+    elif [ -n "$UPDATED" ] && [ "$status" -eq 0 ]; then
+        # Keyed on a server having been updated, not on VERSION: --dry-run sets that too.
+        notify "[unipept-rollout] ${VERSION} deployed on $(hostname -s)" \
+"Every server this run set out to update is serving ${VERSION#v} and is back in rotation.
+
+  ${UPDATED}
 
 Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
     fi
@@ -1009,6 +1036,9 @@ main() {
         read -r name host port backends server <<<"$line"
         note_phase "updating" "$name"
         update_server "$name" "$host" "$port" "$backends" "$server" "${ASSET_OF[$name]}"
+        # Here rather than in update_server, so resolve_failure's one success — a deploy that
+        # worked while the connection to it died — is reported too.
+        note_updated "$name"
     done
 
     log "rollout of ${VERSION} finished"

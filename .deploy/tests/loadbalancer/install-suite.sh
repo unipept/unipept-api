@@ -86,6 +86,9 @@ check "exit non-zero"      "$([ $? -ne 0 ] && echo yes)" "yes"
 check "names what is missing" "$(grep -c 'absent_backend' /tmp/i3.log)" "1"
 check "wrote the fragment"    "$([ -f /tmp/unipept-haproxy-fragment.cfg ] && echo yes)" "yes"
 check "fragment has the backend" "$(grep -c '^backend db_handlers' /tmp/unipept-haproxy-fragment.cfg)" "1"
+# notice mails every transition a rollout makes; alert keeps only the failures.
+check "mails failures, not rollouts" "$(grep -c '^ *email-alert level alert$' /tmp/unipept-haproxy-fragment.cfg)" "1"
+check_absent "not at notice level" 'email-alert level notice' /tmp/unipept-haproxy-fragment.cfg
 check_absent "haproxy.cfg untouched" 'absent_backend' /etc/haproxy/haproxy.cfg
 sed -i 's#all_handlers,absent_backend#all_handlers,db_handlers#' /etc/unipept-rollout/servers.conf
 

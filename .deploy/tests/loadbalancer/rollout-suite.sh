@@ -241,8 +241,11 @@ check "exit 0"              "$?" "0"
 check "says after all"      "$(grep -c 'after all' /tmp/r8d.txt)" "1"
 check_absent "no rollback" '^ROLLBACK' /tmp/ssh.log
 check "back in the pool"    "$(printf '%s' "$($H state all_handlers/rick)" | cut -d' ' -f1)" "UP"
-# Not check_absent: an empty mailbox is the assertion here, not missing evidence.
-check "no mail"             "$(grep -c . /tmp/mail.txt)" "0"
+# It is serving the release, so it is mailed for like any server that came back — the case is that
+# it is not mailed for as a failure.
+check "mailed as a success"       "$(grep -c '^Subject:.*rick is on v2.6.0' /tmp/mail.txt)" "1"
+check_absent "not as one needing attention" 'needs attention' /tmp/mail.txt
+check_absent "and not as a rollback"        'was rolled back' /tmp/mail.txt
 
 reset_fleet
 section "9. backups are updated last, whatever the inventory says"
@@ -882,6 +885,59 @@ wait $runner 2>/dev/null
 pkill -f 'sleep 971' >/dev/null 2>&1
 cp /tmp/ssh.keep /usr/local/bin/ssh
 rm -f /tmp/shared.lock
+
+reset_fleet
+section "31. a rollout mails once per server, and once when it is done"
+# What a rollout sends instead of HAProxy's eighteen state-change mails.
+cp /tmp/ssh.keep /usr/local/bin/ssh
+: > /tmp/mail.txt
+$R --version v2.6.0 --allow-downtime >/tmp/r39.txt 2>&1
+check "exit 0"                  "$?" "0"
+check "four mails in all"       "$(grep -c '^Subject:' /tmp/mail.txt)" "4"
+check "one for each server"     "$(grep -cE '^Subject:.*(patty|selma|rick) is on v2.6.0' /tmp/mail.txt)" "3"
+check "and one closing the run" "$(grep -c '^Subject:.*v2.6.0 deployed on' /tmp/mail.txt)" "1"
+check "the last one names them" "$(grep -c 'is serving 2.6.0 and is back in rotation' /tmp/mail.txt)" "1"
+
+reset_fleet
+section "32. a run that changes nothing sends no mail"
+# --dry-run carries a VERSION, so keying the closing mail on that alone mailed a deploy that never
+# happened.
+: > /tmp/mail.txt
+$R --version v2.6.0 --dry-run >/tmp/r39b.txt 2>&1
+# Each paired with a positive assertion: "nothing was mailed" also passes for a run that died early.
+check "the dry run ran"         "$(grep -c 'dry run: nothing is changed' /tmp/r39b.txt)" "1"
+check "a dry run mails nothing" "$(grep -c . /tmp/mail.txt)" "0"
+: > /tmp/mail.txt
+FAKE_CHECK_FAILS=x $R --version v2.6.0 --allow-downtime >/tmp/r39c.txt 2>&1
+check "preflight did refuse it" "$(grep -c 'preflight problem' /tmp/r39c.txt)" "1"
+check "a refused preflight too" "$(grep -c . /tmp/mail.txt)" "0"
+
+reset_fleet
+section "33. a run that stopped part way does not say it deployed"
+# The servers before the failure are mailed for; the run as a whole is not.
+cat > /usr/local/bin/ssh <<'EOF'
+#!/usr/bin/env bash
+args=("$@"); cmd=""
+for a in "${args[@]}"; do case $a in -o|BatchMode=yes|ConnectTimeout=10|ServerAliveInterval=15|ServerAliveCountMax=4|-n) ;; *) cmd="$cmd $a" ;; esac; done
+echo "SSH:$cmd" >> /tmp/ssh.log
+case "$cmd" in
+  *"deploy.sh rollback"*) echo "ROLLBACK" >> /tmp/ssh.log; rm -f /tmp/unhealthy; exit 0 ;;
+  *"deploy.sh check"*)    printf 'variant=hybrid\nport=80\nindex_version=2026.09-test\nproblems=0\n'; exit 0 ;;
+  *"deploy --from"*)      case "$cmd" in *selma*) touch /tmp/unhealthy ;; esac; exit 0 ;;
+  *status*)            printf 'version=2.6.0\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n'; exit 0 ;;
+esac
+exit 0
+EOF
+chmod +x /usr/local/bin/ssh
+: > /tmp/mail.txt; : > /tmp/ssh.log
+$R --version v2.6.0 --allow-downtime >/tmp/r40.txt 2>&1
+check "exit non-zero"            "$([ $? -ne 0 ] && echo yes)" "yes"
+check "patty was mailed for"     "$(grep -c '^Subject:.*patty is on v2.6.0' /tmp/mail.txt)" "1"
+check "selma was rolled back"    "$(grep -c 'was rolled back' /tmp/mail.txt)" "1"
+check_absent "no closing mail"   'deployed on' /tmp/mail.txt
+check_absent "and rick was left" '^Subject:.*rick is on' /tmp/mail.txt
+rm -f /tmp/unhealthy
+cp /tmp/ssh.keep /usr/local/bin/ssh
 
 # The fake backends hold stdout open; without this a pipe on the outside never sees EOF.
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1

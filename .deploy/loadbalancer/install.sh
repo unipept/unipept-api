@@ -75,7 +75,10 @@ backend db_handlers
     email-alert mailers my_mailers
     email-alert from haproxy@unipeptapi.ugent.be
     email-alert to unipept@ugent.be
-    email-alert level notice
+    # alert, not notice: a rollout's own drain, maintenance and restore are logged at notice, so
+    # notice mails eighteen times for a fleet of three. A failed check is alert, an empty backend
+    # emerg. rollout.sh mails what a rollout did.
+    email-alert level alert
 
     server patty patty.ugent.be:80 check fall 100 maxconn 100
     server selma selma.ugent.be:80 check fall 100 maxconn 100

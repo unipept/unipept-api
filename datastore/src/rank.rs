@@ -218,6 +218,43 @@ mod tests {
         assert_eq!(TaxonRank::columns().count(), RANK_COUNT);
     }
 
+    /// The columns of a lineage row, in order. unipept-database's `ncbi` crate lists the same ranks
+    /// after `no rank`, and its taxdmp-parser writes the columns in that order, so a change here is
+    /// a change there as well.
+    #[test]
+    fn the_columns_are_these_ranks_in_this_order() {
+        assert_eq!(RANK_NAMES, [
+            "domain",
+            "realm",
+            "kingdom",
+            "subkingdom",
+            "superphylum",
+            "phylum",
+            "subphylum",
+            "superclass",
+            "class",
+            "subclass",
+            "superorder",
+            "order",
+            "suborder",
+            "infraorder",
+            "superfamily",
+            "family",
+            "subfamily",
+            "tribe",
+            "subtribe",
+            "genus",
+            "subgenus",
+            "species group",
+            "species subgroup",
+            "species",
+            "subspecies",
+            "strain",
+            "varietas",
+            "forma"
+        ]);
+    }
+
     #[test]
     fn the_top_rank_is_the_first_column() {
         assert_eq!(TaxonRank::TOP_RANK.lineage_index(), Some(0));

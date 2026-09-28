@@ -512,6 +512,187 @@ check_absent "never called it failing" 'failing, not loading' /tmp/t6.log
 check "rolled back"             "$([ "$(grep -c 'rolled back' /tmp/t6.log)" -ge 1 ] && echo yes)" "yes"
 check "serving the old binary"  "$(/opt/unipept-api/bin/unipept-api --version)" "unipept-api 8.1.0"
 
+# Switching the database: check-index and switch-index against two releases side by side, a fake
+# OpenSearch, and fake unipept-database scripts where its install.sh puts them, which is what switches
+# the alias.
+for v in 2025.11 2026.03; do
+  d="/srv/db/uniprot-${v/./-}/suffix-array"
+  mkdir -p "$d/datastore"
+  for f in sa.bin proteins.bin mapping.bin kmer_table.bin; do : > "$d/$f"; done
+  for f in sampledata.json ec_numbers.tsv go_terms.tsv interpro_entries.tsv proteomes.tsv lineages.tsv taxons.tsv; do : > "$d/datastore/$f"; done
+  echo "$v" > "$d/.version"
+done
+chmod -R a+rX /srv/db
+
+# OpenSearch, as far as deploy.sh asks it anything: whether it answers, and where the alias points.
+# /srv/fake-os/alias holds the alias's index; /srv/fake-os/concrete stands for uniprot_entries still
+# being an index of its own. Not in /tmp: it is sticky, and activate.sh runs as unipept and has to
+# rewrite and remove what the suite writes there as root.
+mkdir -p /srv/fake-os && chmod 777 /srv/fake-os
+cat > /usr/local/bin/fake-opensearch <<'EOF'
+#!/usr/bin/env bash
+read -r _ path _
+reply() { printf 'HTTP/1.1 %s\r\nContent-Length: %s\r\nConnection: close\r\n\r\n%s' "$1" "${#2}" "$2"; }
+case $path in
+  /_cluster/health*) reply '200 OK' '{}' ;;
+  /_cat/aliases/uniprot_entries*) reply '200 OK' "$(cat /srv/fake-os/alias 2>/dev/null)" ;;
+  /uniprot_entries) if [ -s /srv/fake-os/alias ] || [ -e /srv/fake-os/concrete ]; then reply '200 OK' '{}'; else reply '404 Not Found' '{}'; fi ;;
+  *) reply '404 Not Found' '{}' ;;
+esac
+EOF
+chmod 755 /usr/local/bin/fake-opensearch
+socat TCP-LISTEN:9299,reuseaddr,fork SYSTEM:/usr/local/bin/fake-opensearch >/dev/null 2>&1 &
+sleep 1
+
+# The two scripts deploy.sh calls in unipept-database: the completeness check, answered from
+# /srv/fake-os/incomplete-<index>, and activate.sh, which moves /srv/fake-os/alias.
+scripts=/opt/unipept-database/opensearch
+mkdir -p "$scripts"
+cat > "$scripts/load.sh" <<'EOF'
+#!/usr/bin/env bash
+index=''; while [ $# -gt 0 ]; do [ "$1" = --index-name ] && index=$2; shift; done
+[ ! -e "/srv/fake-os/incomplete-${index}" ]
+EOF
+cat > "$scripts/activate.sh" <<'EOF'
+#!/usr/bin/env bash
+index=''; while [ $# -gt 0 ]; do [ "$1" = --index-name ] && index=$2; shift; done
+echo "$index" >> /srv/fake-os/activate.log
+[ ! -e /srv/fake-os/activate-fails ] || exit 1
+# Replaced rather than written into: the suite writes it as root, and this runs as unipept.
+echo "$index" > "/srv/fake-os/alias.$$" && mv -f "/srv/fake-os/alias.$$" /srv/fake-os/alias
+rm -f /srv/fake-os/concrete
+EOF
+chmod 755 "$scripts"/*.sh
+
+env_file=/opt/unipept-api/etc/unipept-api.env
+sed -i 's#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/db/uniprot-2025-11/suffix-array#; s#^DATABASE_ADDRESS=.*#DATABASE_ADDRESS=http://127.0.0.1:9299#' "$env_file"
+echo uniprot_entries-2025-11 > /srv/fake-os/alias; : > /srv/fake-os/activate.log; chmod 666 /srv/fake-os/activate.log
+
+# A binary that will not serve an index holding a file called `refuse`, so a switch can fail for
+# real: the unit reads INDEX_LOCATION from the environment file, as the API does.
+d50=$(mktemp -d); chmod 755 "$d50"
+cat > "$d50/unipept-api-9.0.0-x86_64-linux-gnu-hybrid" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then echo "unipept-api 9.0.0"; exit 0; fi
+[ ! -e "${INDEX_LOCATION}/refuse" ] || exit 1
+PORT=$(sed -n 's/^PORT=//p' /opt/unipept-api/etc/unipept-api.env | tail -1)
+printf 'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok' > /tmp/response.http
+exec socat TCP-LISTEN:$PORT,reuseaddr,fork SYSTEM:'cat /tmp/response.http'
+EOF
+chmod 755 "$d50/unipept-api-9.0.0-x86_64-linux-gnu-hybrid"
+( cd "$d50" && sha256sum unipept-api-* > SHA256SUMS )
+as_user "/opt/unipept-api/lib/deploy.sh deploy --from $d50/unipept-api-9.0.0-x86_64-linux-gnu-hybrid --timeout 30" >/dev/null 2>&1
+index_location() { sed -n 's/^INDEX_LOCATION=//p' "$env_file"; }
+healthy() { curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8099/health; }
+
+section "check-index says a host is ready for a release beside the one in use"
+as_user "/opt/unipept-api/lib/deploy.sh check-index --uniprot-version 2026-03" >/tmp/ci1.txt 2>&1
+check "exit 0" "$?" "0"
+check "the release beside the one in use" "$(sed -n 's/^index_target=//p' /tmp/ci1.txt)" "/srv/db/uniprot-2026-03/suffix-array"
+check "what it is on now" "$(sed -n 's/^index_version=//p' /tmp/ci1.txt)" "2025.11"
+check "where the alias points now" "$(sed -n 's/^index_alias=//p' /tmp/ci1.txt)" "uniprot_entries-2025-11"
+check "not switched yet" "$(sed -n 's/^index_switched=//p' /tmp/ci1.txt)" "no"
+
+section "check-index refuses a host that is not ready, and says every reason"
+as_user "/opt/unipept-api/lib/deploy.sh check-index --uniprot-version 2030-01" >/tmp/ci2.txt 2>&1
+check "a release that is not there" "$(grep -c 'uniprot-2030-01/suffix-array is not there' /tmp/ci2.txt)" "1"
+check "nor its index" "$(grep -c 'uniprot_entries-2030-01 is not loaded to the end' /tmp/ci2.txt)" "0"
+touch /srv/fake-os/incomplete-uniprot_entries-2030-01
+as_user "/opt/unipept-api/lib/deploy.sh check-index --uniprot-version 2030-01" >/tmp/ci2.txt 2>&1
+check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "and an index not loaded to the end, both" "$(grep -c 'uniprot_entries-2030-01 is not loaded to the end' /tmp/ci2.txt)" "1"
+check "counted" "$(sed -n 's/^problems=//p' /tmp/ci2.txt)" "2"
+rm -f /srv/fake-os/incomplete-uniprot_entries-2030-01
+
+echo 2025.11 > /srv/db/uniprot-2026-03/suffix-array/.version
+as_user "/opt/unipept-api/lib/deploy.sh check-index --uniprot-version 2026-03" >/tmp/ci3.txt 2>&1
+check "a copy that says it is another release" "$(grep -c 'says it is 2025.11, not 2026-03' /tmp/ci3.txt)" "1"
+echo 2026.03 > /srv/db/uniprot-2026-03/suffix-array/.version
+
+sed -i 's#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/index#' "$env_file"
+as_user "/opt/unipept-api/lib/deploy.sh check-index --uniprot-version 2026-03" >/tmp/ci4.txt 2>&1
+check "an INDEX_LOCATION that names no release directory" "$(grep -c 'set DATABASE_DIR' /tmp/ci4.txt)" "1"
+printf 'DATABASE_DIR=/srv/db\n' >> "$env_file"
+as_user "/opt/unipept-api/lib/deploy.sh check-index --uniprot-version 2026-03" >/tmp/ci5.txt 2>&1
+check "DATABASE_DIR says where instead" "$?" "0"
+sed -i '/^DATABASE_DIR=/d; s#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/db/uniprot-2025-11/suffix-array#' "$env_file"
+
+mv /opt/unipept-database /opt/elsewhere
+as_user "/opt/unipept-api/lib/deploy.sh check-index --uniprot-version 2026-03" >/tmp/ci6.txt 2>&1
+check "unipept-database's scripts not installed" "$(grep -c "unipept-database's scripts are not installed" /tmp/ci6.txt)" "1"
+mv /opt/elsewhere /opt/unipept-database
+
+section "switch-index moves the files and the proteins together, and keeps the binary"
+as_user "/opt/unipept-api/lib/deploy.sh switch-index --uniprot-version 2026-03 --timeout 30" >/tmp/sw1.log 2>&1
+check "exit 0" "$?" "0"
+check "INDEX_LOCATION is the new release" "$(index_location)" "/srv/db/uniprot-2026-03/suffix-array"
+check "the alias points at its index" "$(cat /srv/fake-os/alias)" "uniprot_entries-2026-03"
+check "serving" "$(healthy)" "200"
+check "the binary is the one it had" "$(/opt/unipept-api/bin/unipept-api --version)" "unipept-api 9.0.0"
+check "the environment file keeps its mode" "$(stat -c %a "$env_file")" "600"
+check "what it replaced is kept" "$(sed -n 's/^ALIAS=//p' /opt/unipept-api/etc/index.previous)" "uniprot_entries-2025-11"
+
+: > /srv/fake-os/activate.log; chmod 666 /srv/fake-os/activate.log
+as_user "/opt/unipept-api/lib/deploy.sh switch-index --uniprot-version 2026-03 --timeout 30" >/tmp/sw2.log 2>&1
+check "again, it succeeds" "$?" "0"
+check "and says it is already there" "$(grep -c 'already on 2026-03' /tmp/sw2.log)" "1"
+check "without touching the alias" "$([ -s /srv/fake-os/activate.log ] && echo touched || echo untouched)" "untouched"
+
+section "switch-index --back puts the last switch back"
+as_user "/opt/unipept-api/lib/deploy.sh switch-index --back --timeout 30" >/tmp/sw3.log 2>&1
+check "exit 0" "$?" "0"
+check "INDEX_LOCATION is the old release" "$(index_location)" "/srv/db/uniprot-2025-11/suffix-array"
+check "the alias points at its index" "$(cat /srv/fake-os/alias)" "uniprot_entries-2025-11"
+check "serving" "$(healthy)" "200"
+check "and there is nothing left to put back" "$([ -e /opt/unipept-api/etc/index.previous ] && echo left || echo none)" "none"
+
+as_user "/opt/unipept-api/lib/deploy.sh switch-index --back --timeout 30" >/tmp/sw4.log 2>&1
+check "--back with nothing to put back changes nothing" "$(index_location)" "/srv/db/uniprot-2025-11/suffix-array"
+
+section "a release the service will not serve is switched back"
+touch /srv/db/uniprot-2026-03/suffix-array/refuse
+as_user "/opt/unipept-api/lib/deploy.sh switch-index --uniprot-version 2026-03 --timeout 20" >/tmp/sw5.log 2>&1
+check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "says so" "$(grep -c 'switched back\|was put back' /tmp/sw5.log)" "1"
+check "INDEX_LOCATION is the old release" "$(index_location)" "/srv/db/uniprot-2025-11/suffix-array"
+check "the alias points at its index" "$(cat /srv/fake-os/alias)" "uniprot_entries-2025-11"
+check "serving again" "$(healthy)" "200"
+
+as_user "/opt/unipept-api/lib/deploy.sh switch-index --uniprot-version 2026-03 --timeout 20 --no-rollback" >/tmp/sw6.log 2>&1
+check "--no-rollback fails too" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "but leaves the switch for the caller" "$(index_location)" "/srv/db/uniprot-2026-03/suffix-array"
+as_user "/opt/unipept-api/lib/deploy.sh switch-index --back --timeout 30" >/tmp/sw7.log 2>&1
+check "which --back then puts back" "$(index_location)" "/srv/db/uniprot-2025-11/suffix-array"
+check "serving again" "$(healthy)" "200"
+rm /srv/db/uniprot-2026-03/suffix-array/refuse
+
+section "--back never undoes more than the last switch"
+as_user "/opt/unipept-api/lib/deploy.sh switch-index --uniprot-version 2026-03 --timeout 30" >/dev/null 2>&1
+sed -i 's#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/index#' "$env_file"
+as_user "/opt/unipept-api/lib/deploy.sh switch-index --back --timeout 30" >/tmp/sw8.log 2>&1
+check "an INDEX_LOCATION set since is left alone" "$(index_location)" "/srv/index"
+check "and it says why" "$(grep -c 'nothing to put back' /tmp/sw8.log)" "1"
+sed -i 's#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/db/uniprot-2025-11/suffix-array#' "$env_file"
+rm -f /opt/unipept-api/etc/index.previous
+echo uniprot_entries-2025-11 > /srv/fake-os/alias
+as_user "systemctl --user restart unipept-api" >/dev/null 2>&1; sleep 2
+
+section "an alias that cannot be switched puts INDEX_LOCATION back at once"
+touch /srv/fake-os/activate-fails
+as_user "/opt/unipept-api/lib/deploy.sh switch-index --uniprot-version 2026-03 --timeout 30" >/tmp/sw9.log 2>&1
+check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "INDEX_LOCATION is the old release" "$(index_location)" "/srv/db/uniprot-2025-11/suffix-array"
+rm -f /srv/fake-os/activate-fails
+
+section "on a host loaded before versioned indices, going back means the index kept at the first switch"
+: > /srv/fake-os/alias; touch /srv/fake-os/concrete
+as_user "/opt/unipept-api/lib/deploy.sh switch-index --uniprot-version 2026-03 --timeout 30" >/tmp/sw10.log 2>&1
+check "exit 0" "$?" "0"
+check "what going back activates" "$(sed -n 's/^ALIAS=//p' /opt/unipept-api/etc/index.previous)" "uniprot_entries-legacy"
+as_user "/opt/unipept-api/lib/deploy.sh switch-index --back --timeout 30" >/dev/null 2>&1
+check "and --back activates it" "$(cat /srv/fake-os/alias)" "uniprot_entries-legacy"
+sed -i 's#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/index#; s#^DATABASE_ADDRESS=.*#DATABASE_ADDRESS=http://localhost:9200#' "$env_file"
+
 section "install.sh is idempotent and keeps an edited env file"
 $R/server/install.sh >/dev/null 2>&1; check "exit 0" "$?" "0"
 check "PORT kept" "$(sed -n 's/^PORT=//p' /opt/unipept-api/etc/unipept-api.env)" "8099"

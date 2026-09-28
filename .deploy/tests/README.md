@@ -18,9 +18,9 @@ boot; nothing else needs it.
 
 | Suite | Runs against | Covers |
 | --- | --- | --- |
-| `server/suite.sh` | systemd 255 on Ubuntu 24.04, with a user manager and lingering | the first install, a deploy with no privilege, `check` and each failure it reports, the memory arm per variant, the binary swap under signal, rollback, the interrupt paths, and the per-host `READY_TIMEOUT` with the unit watch that makes a long one safe |
+| `server/suite.sh` | systemd 255 on Ubuntu 24.04, with a user manager and lingering | the first install, a deploy with no privilege, `check` and each failure it reports, the memory arm per variant, the binary swap under signal, rollback, the interrupt paths, and the per-host `READY_TIMEOUT` with the unit watch that makes a long one safe, and `check-index` and `switch-index` against two releases side by side, including switching back from one the service will not serve |
 | `loadbalancer/haproxy-suite.sh` | HAProxy 2.8 | reading `show stat` by field name, multi-backend targets, the drain cycle, a transitional `UP 1/100` status, backups |
-| `loadbalancer/rollout-suite.sh` | HAProxy 2.8 with two backends over three servers | the four phases, the lock, ordering, preflight, each failure-resolution path, cleanup, the record, an interrupt during an install, and the deadline each server asks for |
+| `loadbalancer/rollout-suite.sh` | HAProxy 2.8 with two backends over three servers | the four phases, the lock, ordering, preflight, each failure-resolution path, cleanup, the record, an interrupt during an install, the deadline each server asks for, and a database rollout: its preflight, a server already on the release, and switching back |
 
 ## Why containers rather than mocks
 

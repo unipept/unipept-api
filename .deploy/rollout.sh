@@ -35,6 +35,14 @@
 #      reached, write one journal line per server, and email if an update failed or a server is out
 #      of the pool — a server this run drained and never put back included, which is what an
 #      interrupted install leaves behind.
+#
+# `rollout.sh database --uniprot-version YYYY-MM` moves the fleet to another UniProtKB release the
+# same way, one server at a time, and keeps the binary. Nothing is downloaded or staged: the release
+# is already on every server, beside the one in use, put there by unipept-database's distribute.sh.
+# Phase 1 runs `deploy.sh check-index` instead, which refuses a server whose copy or OpenSearch index
+# is not there whole; phase 2 runs `deploy.sh switch-index`, and a server that does not come back is
+# switched back with `switch-index --back`. A server already on the release is passed over, so a run
+# that stopped part way is finished by running it again.
 
 set -euo pipefail
 
@@ -92,6 +100,7 @@ export HAPROXY_SOCKET NOTIFY_TO NOTIFY_SMTP
 usage() {
     cat >&2 <<'EOF'
 usage: rollout.sh --version <tag> [options]
+       rollout.sh database --uniprot-version <YYYY-MM> [options]
        rollout.sh status
        rollout.sh abort
        rollout.sh ready [<name> ...]
@@ -102,6 +111,12 @@ usage: rollout.sh --version <tag> [options]
   --allow-downtime         proceed even when draining leaves a backend with no server UP
   --allow-index-mismatch   proceed even when the fleet does not agree on an index version
   --inventory <path>       inventory file, default servers.conf beside this script
+
+  database                 move the fleet to another UniProtKB release rather than another binary.
+                           Takes --uniprot-version instead of --version, and --only, --dry-run,
+                           --allow-downtime and --inventory as a rollout does.
+  --uniprot-version <v>    the release to move to, for example 2026-03. unipept-database's
+                           distribute.sh has to have put it on every server first.
 
   status                   read the fleet and change nothing: HAProxy state, version, variant and
                            index version per server, and what a rollout in progress is doing. What
@@ -124,6 +139,7 @@ EOF
 # The subcommand, if one was given. Empty means a rollout.
 COMMAND=''
 VERSION=''
+UNIPROT_VERSION=''
 ONLY=''
 DRY_RUN=false
 ALLOW_DOWNTIME=false
@@ -171,7 +187,10 @@ while [ $# -gt 0 ]; do
     # check below, saying nothing at all.
     case $1 in
         status | abort | ready) COMMAND=$1; shift; break ;;
+        # Not a break: a database rollout takes the flags a rollout does.
+        database) COMMAND=$1; shift ;;
         --version) [ $# -ge 2 ] || usage; VERSION=$2; shift 2 ;;
+        --uniprot-version) [ $# -ge 2 ] || usage; UNIPROT_VERSION=$2; shift 2 ;;
         --only) [ $# -ge 2 ] || usage; ONLY=$2; shift 2 ;;
         --inventory) [ $# -ge 2 ] || usage; INVENTORY=$2; shift 2 ;;
         --dry-run) DRY_RUN=true; shift ;;
@@ -182,7 +201,37 @@ while [ $# -gt 0 ]; do
 done
 
 # Only a rollout needs a release. The subcommands read the fleet, or act on what a run left.
-[ -n "$COMMAND" ] || [ -n "$VERSION" ] || usage
+case $COMMAND in
+    '')
+        [ -n "$VERSION" ] || usage
+        [ -z "$UNIPROT_VERSION" ] || die "--uniprot-version moves the database; that is 'rollout.sh database', which installs no binary"
+        ;;
+    database)
+        [ -n "$UNIPROT_VERSION" ] || usage
+        [ -z "$VERSION" ] || die "'rollout.sh database' keeps the binary; roll out a --version on its own"
+        case $UNIPROT_VERSION in
+            [0-9][0-9][0-9][0-9]-[0-9][0-9]) ;;
+            *) die "--uniprot-version takes YYYY-MM, not '${UNIPROT_VERSION}'" ;;
+        esac
+        ;;
+esac
+
+# What a run sets out to put on the fleet, for its messages, mail and state; what a server serves
+# once it has it; and how the journal keys its lines. Empty for the subcommands that change nothing,
+# which is what `finish` and `record_run` go by.
+RUN_LABEL=''
+SERVING_LABEL=''
+RECORD_KEY=''
+if [ "$COMMAND" = database ]; then
+    RUN_LABEL="UniProtKB ${UNIPROT_VERSION}"
+    SERVING_LABEL=$RUN_LABEL
+    RECORD_KEY="database=${UNIPROT_VERSION}"
+elif [ -n "$VERSION" ]; then
+    RUN_LABEL=$VERSION
+    SERVING_LABEL=${VERSION#v}
+    RECORD_KEY="version=${VERSION}"
+fi
+readonly RUN_LABEL SERVING_LABEL RECORD_KEY
 [ -f "$INVENTORY" ] || die "no inventory at $INVENTORY"
 require_cmd curl sha256sum socat ssh scp flock logger
 
@@ -375,26 +424,34 @@ report_fleet_versions() {
 # binary is staged here too, and `deploy.sh check --from` executes it on each host: a build for the
 # wrong architecture matches its checksum and still cannot run, and learning that from the first
 # server means that server is already out of the pool.
+# How many ways a server is not fit to be drained: not UP in every backend it names, or not
+# answering one of the two health routes. Both kinds of rollout ask it of every server first.
+routing_problems() {
+    local name=$1 host=$2 port=$3 backends=$4 server=$5 problems=0 states route
+
+    states=$("$HAPROXY" states "${backends}/${server}")
+    # Every backend has to read UP, possibly with a check counter after it.
+    if printf '%s' "$states" | grep -qvE '^([[:alnum:]_.-]+=UP[^=]*)+$'; then
+        log "preflight: ${name} is ${states}"
+        problems=$((problems + 1))
+    fi
+
+    for route in /health /health/database; do
+        if [ "$(http_code "http://${host}:${port}${route}")" != "200" ]; then
+            log "preflight: ${name} does not answer ${route}"
+            problems=$((problems + 1))
+        fi
+    done
+
+    printf '%s\n' "$problems"
+}
+
 preflight() {
     local lines=$1 name host port backends server failures=0 versions=''
 
     while read -r name host port backends server; do
         [ -n "$name" ] || continue
-        local states
-        states=$("$HAPROXY" states "${backends}/${server}")
-        # Every backend has to read UP, possibly with a check counter after it.
-        if printf '%s' "$states" | grep -qvE '^([[:alnum:]_.-]+=UP[^=]*)+$'; then
-            log "preflight: ${name} is ${states}"
-            failures=$((failures + 1))
-        fi
-
-        local route
-        for route in /health /health/database; do
-            if [ "$(http_code "http://${host}:${port}${route}")" != "200" ]; then
-                log "preflight: ${name} does not answer ${route}"
-                failures=$((failures + 1))
-            fi
-        done
+        failures=$((failures + $(routing_problems "$name" "$host" "$port" "$backends" "$server")))
 
         # The asset this host asks for, delivered now and kept for phase 2, so the bytes that were
         # verified here are the bytes that get installed.
@@ -513,7 +570,14 @@ update_server() {
     trap - ERR
     trap 'exit 130' INT TERM
 
-    if install_on "$name" "$host" "$port" "$asset"; then
+    local changed=false
+    if [ "$COMMAND" = database ]; then
+        switch_on "$name" "$host" "$port" && changed=true
+    else
+        install_on "$name" "$host" "$port" "$asset" && changed=true
+    fi
+
+    if [ "$changed" = true ]; then
         # Through return_to_pool like every other way back in. Called here in the open, a `ready`
         # the load balancer refused was reported by `finish` as a server "left out of the pool by a
         # run that did not finish" — the wording for an interrupt, for a case nobody interrupted.
@@ -525,7 +589,11 @@ update_server() {
     # --no-rollback means the server has done nothing about the failure, so this decides. Ask it what
     # is actually true first: ssh failing is not the same as the deploy failing, and a partition can
     # leave a deploy that succeeded looking like one that did not.
-    resolve_failure "$name" "$host" "$port" "$target"
+    if [ "$COMMAND" = database ]; then
+        resolve_switch_failure "$name" "$host" "$port" "$target"
+    else
+        resolve_failure "$name" "$host" "$port" "$target"
+    fi
 }
 
 # Whether a server answers on both routes. A server is only worth returning to the pool when it does:
@@ -643,8 +711,8 @@ note_updated() {
     local name=$1
 
     UPDATED="${UPDATED}${name} "
-    notify "[unipept-rollout] ${name} is on ${VERSION}" \
-"${name} took ${VERSION#v} and is back in every backend it belongs to.
+    notify "[unipept-rollout] ${name} is on ${RUN_LABEL}" \
+"${name} took ${SERVING_LABEL} and is back in every backend it belongs to.
 
   $(printf '%s' "${STATUS[$name]:-unknown}" | tr '\n' ' ')
 
@@ -700,6 +768,159 @@ install_on() {
     log "${name} is serving ${installed}"
 }
 
+# name -> "yes" for a server already on the release a database rollout moves to, read in phase 1.
+declare -A ALREADY_ON=()
+
+# The database rollout's phase 1: every server checked before one is drained. Nothing is staged, so
+# this is the whole of it: routable, and `deploy.sh check-index` passing there, which is the server's
+# own copy of the release, its version, and its OpenSearch index loaded to the end.
+preflight_database() {
+    local lines=$1 name host port backends server failures=0 versions='' report asked
+
+    while read -r name host port backends server; do
+        [ -n "$name" ] || continue
+        failures=$((failures + $(routing_problems "$name" "$host" "$port" "$backends" "$server")))
+
+        if ! report=$(on_server "$host" check-index --uniprot-version "$UNIPROT_VERSION" 2>&1); then
+            log "preflight: ${name} is not ready for ${UNIPROT_VERSION}:"
+            printf '%s\n' "$report" | sed 's/^/    /' >&2
+            failures=$((failures + 1))
+            continue
+        fi
+
+        versions="${versions}${name}=$(printf '%s\n' "$report" | env_value index_version) "
+        [ "$(printf '%s\n' "$report" | env_value index_switched)" = yes ] && ALREADY_ON[$name]=yes
+
+        asked=$(printf '%s\n' "$report" | env_value ready_timeout)
+        case ${asked:-} in
+            '' | *[!0-9]*) asked=$READY_TIMEOUT ;;
+        esac
+        TIMEOUT_OF[$name]=$asked
+    done <<<"$lines"
+
+    [ "$failures" -eq 0 ] ||
+        die "${failures} preflight problem(s); nothing was touched. unipept-database's distribute.sh puts ${UNIPROT_VERSION} on every server."
+
+    # Reported, never refused: a fleet split between two releases is what a run that stopped part way
+    # leaves, and this run is what puts it right.
+    log "preflight passed; the fleet is on ${versions}"
+}
+
+# Switches one drained server to the release, and verifies the result from here rather than trusting
+# what the server said about itself. Returns non-zero for the caller to resolve.
+switch_on() {
+    local name=$1 host=$2 port=$3 report
+
+    # --no-rollback: this side decides what a failure means, so the two of them cannot each switch back.
+    on_server "$host" switch-index --uniprot-version "$UNIPROT_VERSION" \
+        --timeout "${TIMEOUT_OF[$name]:-$READY_TIMEOUT}" --no-rollback || return 1
+
+    wait_for_http "http://${host}:${port}/health" "$HEALTH_TIMEOUT" || return 1
+    if ! wait_for_http "http://${host}:${port}/health/database" "$HEALTH_TIMEOUT"; then
+        log "${name} serves but its OpenSearch does not answer"
+        return 1
+    fi
+
+    report=$(on_server "$host" check-index --uniprot-version "$UNIPROT_VERSION" 2>/dev/null) || true
+    if [ "$(printf '%s\n' "$report" | env_value index_switched)" != yes ]; then
+        log "${name} does not report ${UNIPROT_VERSION} as the release it serves"
+        return 1
+    fi
+
+    STATUS[$name]=$(printf '%s\n' "$report" | grep -E '^index_(version|target|alias)=')
+    log "${name} is serving ${SERVING_LABEL}"
+}
+
+# Decides what a failed switch left behind, and acts once. The same questions as resolve_failure, of
+# the index rather than the binary.
+resolve_switch_failure() {
+    local name=$1 host=$2 port=$3 target=$4 report
+
+    if ! on_server "$host" status >/dev/null 2>&1; then
+        log "${name} cannot be reached to ask what happened; leaving it out of the pool"
+        note_down "$name" "$target"
+        die "stopped at ${name}; the servers after it were not touched"
+    fi
+
+    report=$(on_server "$host" check-index --uniprot-version "$UNIPROT_VERSION" 2>/dev/null) || true
+    if [ "$(printf '%s\n' "$report" | env_value index_switched)" = yes ] && serving "$host" "$port" 10; then
+        log "${name} is serving ${UNIPROT_VERSION} after all, so only the connection failed"
+        STATUS[$name]=$(printf '%s\n' "$report" | grep -E '^index_(version|target|alias)=')
+        return_to_pool "$name" "$host" "$port" "$target" ||
+            die "stopped at ${name}; the servers after it were not touched"
+        return 0
+    fi
+
+    # Only what that switch changed is put back: switch-index --back refuses an INDEX_LOCATION that
+    # something else has set since, so a switch that never happened undoes nothing.
+    log "${name} is not serving ${UNIPROT_VERSION}; switching it back"
+    if on_server "$host" switch-index --back --timeout "${TIMEOUT_OF[$name]:-$READY_TIMEOUT}"; then
+        if return_to_pool "$name" "$host" "$port" "$target"; then
+            log "${name} was switched back and is serving again"
+            note_failed_update "$name" "$(on_server "$host" check 2>/dev/null | env_value index_version || true)"
+        fi
+    else
+        log "${name} could not be switched back"
+        note_down "$name" "$target"
+    fi
+
+    die "stopped at ${name}; the servers after it were not touched"
+}
+
+# A database rollout: the same order and the same one-at-a-time as a rollout, with no release to
+# fetch and nothing to stage.
+main_database() {
+    local inventory
+    inventory=$(read_inventory) || exit 1
+    validate_inventory "$inventory"
+
+    local -a servers=()
+    mapfile -t servers < <(ordered_servers "$inventory")
+    if [ "${#servers[@]}" -eq 0 ] || [ -z "${servers[0]}" ]; then
+        die "the inventory selects no server"
+    fi
+
+    local line name host port backends server report
+
+    if [ "$DRY_RUN" = true ]; then
+        log "dry run: nothing is changed"
+        for line in "${servers[@]}"; do
+            read -r name host port backends server <<<"$line"
+            if report=$(on_server "$host" check-index --uniprot-version "$UNIPROT_VERSION" 2>/dev/null); then
+                report="ready=yes on=$(printf '%s\n' "$report" | env_value index_version) switched=$(printf '%s\n' "$report" | env_value index_switched)"
+            else
+                report="ready=no"
+            fi
+            printf '%-10s %-22s server=%s %shealth=%s %s\n' \
+                "$name" "${host}:${port}" "$server" \
+                "$("$HAPROXY" states "${backends}/${server}")" \
+                "$(http_code "http://${host}:${port}/health")" "$report"
+        done
+        return 0
+    fi
+
+    prepare_run_state
+    note_phase "checking the fleet"
+    preflight_database "$inventory"
+
+    for line in "${servers[@]}"; do
+        read -r name host port backends server <<<"$line"
+        if [ "${ALREADY_ON[$name]:-}" = yes ]; then
+            log "${name} is already on ${UNIPROT_VERSION}"
+            continue
+        fi
+        note_phase "switching" "$name"
+        update_server "$name" "$host" "$port" "$backends" "$server" ''
+        note_updated "$name"
+    done
+
+    log "rollout of ${RUN_LABEL} finished"
+    for line in "${servers[@]}"; do
+        read -r name _ <<<"$line"
+        printf '%-10s %s\n' "$name" "$(printf '%s' "${STATUS[$name]:-already on ${UNIPROT_VERSION}}" | tr '\n' ' ')"
+    done
+}
+
 # Runs on every exit, including a signal, so nothing is left behind and nothing goes unreported.
 finish() {
     local status=$? host
@@ -726,7 +947,7 @@ finish() {
     # rollout that is still going. Quietly, because a file this run could not own is already
     # reported where it is prepared, and failing to clear it must not be the last word of a rollout
     # that worked.
-    if [ -n "$VERSION" ] && [ -n "$RUN_STATE" ]; then
+    if [ -n "$RUN_LABEL" ] && [ -n "$RUN_STATE" ]; then
         rm -f "$RUN_STATE" 2>/dev/null || true
     fi
 
@@ -735,11 +956,11 @@ finish() {
     # Two texts for the one state, because a subcommand reaches it too. `ready` takes no --version
     # and attempts no fleet, so the rollout wording mailed "A rollout of  left a server" and sent
     # the operator looking for servers after it that were never part of the run. Keyed the way
-    # record_run is keyed: a run that set out to change something has a VERSION, and nothing else
+    # record_run is keyed: a run that set out to change something has a RUN_LABEL, and nothing else
     # does.
-    if [ -n "$NEEDS_ATTENTION" ] && [ -n "$VERSION" ]; then
+    if [ -n "$NEEDS_ATTENTION" ] && [ -n "$RUN_LABEL" ]; then
         notify "[unipept-rollout] a server needs attention on $(hostname -s)" \
-"A rollout of ${VERSION} left a server that cannot be routed to.
+"A rollout of ${RUN_LABEL} left a server that cannot be routed to.
 
   ${NEEDS_ATTENTION}
 
@@ -764,8 +985,8 @@ On the server itself:  ${REMOTE_DEPLOY} status
 
 Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
     elif [ -n "$FAILED_UPDATE" ]; then
-        notify "[unipept-rollout] ${VERSION} was rolled back on $(hostname -s)" \
-"A rollout of ${VERSION} stopped and the fleet is serving its previous version.
+        notify "[unipept-rollout] ${RUN_LABEL} was rolled back on $(hostname -s)" \
+"A rollout of ${RUN_LABEL} stopped and the fleet is serving its previous version.
 
   ${FAILED_UPDATE}
 
@@ -776,9 +997,9 @@ consistent only if this was the first one. Check with:
 
 Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
     elif [ -n "$UPDATED" ] && [ "$status" -eq 0 ]; then
-        # Keyed on a server having been updated, not on VERSION: --dry-run sets that too.
-        notify "[unipept-rollout] ${VERSION} deployed on $(hostname -s)" \
-"Every server this run set out to update is serving ${VERSION#v} and is back in rotation.
+        # Keyed on a server having been updated, not on RUN_LABEL: --dry-run sets that too.
+        notify "[unipept-rollout] ${RUN_LABEL} deployed on $(hostname -s)" \
+"Every server this run set out to update is serving ${SERVING_LABEL} and is back in rotation.
 
   ${UPDATED}
 
@@ -795,19 +1016,19 @@ Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
 record_run() {
     local status=$1 name
 
-    [ -n "$VERSION" ] || return 0
+    [ -n "$RUN_LABEL" ] || return 0
 
     for name in "${!STATUS[@]}"; do
         logger -t unipept-rollout -- \
-            "version=${VERSION} server=${name} by=${RUN_BY} from=${RUN_FROM:-local} outcome=deployed $(printf '%s' "${STATUS[$name]}" | tr '\n' ' ')"
+            "${RECORD_KEY} server=${name} by=${RUN_BY} from=${RUN_FROM:-local} outcome=deployed $(printf '%s' "${STATUS[$name]}" | tr '\n' ' ')"
     done
     for name in $FAILED_NAMES; do
-        logger -t unipept-rollout -- "version=${VERSION} server=${name} by=${RUN_BY} from=${RUN_FROM:-local} outcome=rolled-back"
+        logger -t unipept-rollout -- "${RECORD_KEY} server=${name} by=${RUN_BY} from=${RUN_FROM:-local} outcome=rolled-back"
     done
     for name in $DOWN_NAMES; do
-        logger -t unipept-rollout -- "version=${VERSION} server=${name} by=${RUN_BY} from=${RUN_FROM:-local} outcome=needs-attention"
+        logger -t unipept-rollout -- "${RECORD_KEY} server=${name} by=${RUN_BY} from=${RUN_FROM:-local} outcome=needs-attention"
     done
-    logger -t unipept-rollout -- "version=${VERSION} by=${RUN_BY} from=${RUN_FROM:-local} exit=${status}"
+    logger -t unipept-rollout -- "${RECORD_KEY} by=${RUN_BY} from=${RUN_FROM:-local} exit=${status}"
 }
 
 # Makes the state file writable by this run before anything depends on it.
@@ -842,7 +1063,7 @@ note_phase() {
     [ -n "$RUN_STATE" ] || return 0
     {
         printf 'pid=%s\n' "$$"
-        printf 'version=%s\n' "$VERSION"
+        printf 'version=%s\n' "$RUN_LABEL"
         printf 'phase=%s\n' "$phase"
         printf 'server=%s\n' "$server"
         printf 'started=%s\n' "$STARTED_AT"
@@ -1041,7 +1262,7 @@ main() {
         note_updated "$name"
     done
 
-    log "rollout of ${VERSION} finished"
+    log "rollout of ${RUN_LABEL} finished"
     for line in "${servers[@]}"; do
         read -r name _ <<<"$line"
         printf '%-10s %s\n' "$name" "$(printf '%s' "${STATUS[$name]:-unknown}" | tr '\n' ' ')"
@@ -1056,5 +1277,6 @@ case $COMMAND in
     status) do_status ;;
     abort) do_abort ;;
     ready) do_ready "$@" ;;
+    database) main_database ;;
     *) main ;;
 esac

@@ -15,7 +15,7 @@ holding copies.
 | `server/unipept-api.service` | systemd **user** unit, installed at `~unipept/.config/systemd/user/` |
 | `server/unipept-api.env.example` | per-host configuration, installed at `/opt/unipept-api/etc/unipept-api.env` |
 | `server/install.sh` | prepares a host once. The only step that needs root |
-| `server/deploy.sh` | installs or puts back a binary on one server |
+| `server/deploy.sh` | installs or puts back a binary on one server, or switches it to another database |
 
 ## Deploying
 
@@ -105,6 +105,35 @@ A long deadline is safe because the wait watches the unit as well as the port. `
 the exec rather than readiness, so a binary that exits at once and one that is still loading both
 look started and neither answers. The pid separates them, and a binary that already gave up is
 reported at once instead of at the deadline.
+
+## Moving the fleet to another database
+
+```bash
+./rollout.sh database --uniprot-version 2026-03 --dry-run
+./rollout.sh database --uniprot-version 2026-03
+```
+
+The same one-server-at-a-time as a rollout, keeping the binary. What moves is the database: the
+files in `INDEX_LOCATION`, and the proteins in OpenSearch, which the API finds through the
+`uniprot_entries` alias. The two move together while the server is out of the pool, so no server
+ever answers with the files of one release and the proteins of another.
+
+**unipept-database puts the release in place first.** Its `distribute.sh` copies it to every server
+beside the one in use and loads it into an OpenSearch index of its own, without changing what any
+server serves. This rollout refuses to start until every server has both, checked by `deploy.sh
+check-index`, and names the ones that do not.
+
+Per server, `deploy.sh switch-index` records what it replaces in `etc/index.previous`, points
+`INDEX_LOCATION` at `<DATABASE_DIR>/uniprot-<version>/suffix-array`, switches the alias through
+unipept-database's `opensearch/activate.sh`, restarts, and waits for `/health` as a deploy does. A
+server that does not come back is switched back with `deploy.sh switch-index --back`, which puts
+back only the switch it recorded. A server already on the release is passed over, so a run that
+stopped part way is finished by running it again.
+
+The alias is switched through the scripts unipept-database's `install.sh` puts in
+`/opt/unipept-database` on every host, so the rules for it live in one place. `DATABASE_DIR` in the
+environment file says where a server keeps its databases, where `INDEX_LOCATION` does not show it;
+the example file says more.
 
 ## Reading what happened
 

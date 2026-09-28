@@ -40,6 +40,21 @@
 #
 #   status: print the installed version, the previous one, the variant, the port, and whether the
 #   unit is active.
+#
+#   check-index: whether this host can move to another UniProtKB version, with every problem rather
+#   than the first — the database directory beside the one in use, its files and their version, the
+#   scripts unipept-database installs, and the version's own OpenSearch index loaded to the end. Print
+#   key=value for a caller to read, and exit non-zero if anything is wrong.
+#
+#   switch-index: move this host to that version, keeping the binary.
+#     1. Run the same checks as `check-index`. A host that is not ready changes nothing; one already
+#        on that version changes nothing either.
+#     2. Record where INDEX_LOCATION and the uniprot_entries alias point now, in etc/index.previous.
+#     3. Point INDEX_LOCATION at the new directory, and the alias at the new index through
+#        unipept-database's opensearch/activate.sh, which keeps the old index closed to go back to.
+#     4. Restart the unit, and wait for /health as a deploy does.
+#     5. Healthy: done. Not healthy: with --no-rollback, leave it for the caller to decide; otherwise
+#        switch back, which is what `switch-index --back` does on its own.
 
 set -euo pipefail
 
@@ -67,6 +82,17 @@ readonly STAGED="${BINARY}.new"
 readonly REJECTED="${BINARY}.failed"
 readonly ENV_FILE="${ROOT}/etc/unipept-api.env"
 
+# What a switch replaced, so it can be put back: INDEX_LOCATION before it, the index the alias
+# pointed at before it, and the INDEX_LOCATION the switch set, so going back only undoes that switch
+# and never one before it.
+readonly INDEX_STATE="${ROOT}/etc/index.previous"
+# The name the API queries in OpenSearch, an alias once unipept-database has switched it.
+readonly ALIAS=uniprot_entries
+# Where unipept-database's install.sh installs the scripts a host runs, as install.sh here fills
+# /opt/unipept-api. The alias is switched through its opensearch/activate.sh, so the rules for it
+# live in one place.
+readonly DATABASE_SCRIPTS=/opt/unipept-database
+
 usage() {
     cat >&2 <<'EOF'
 usage:
@@ -75,6 +101,9 @@ usage:
                    [--no-rollback]
   deploy.sh rollback [--timeout <seconds>]
   deploy.sh status
+  deploy.sh check-index --uniprot-version <YYYY-MM>
+  deploy.sh switch-index --uniprot-version <YYYY-MM> [--timeout <seconds>] [--no-rollback]
+  deploy.sh switch-index --back [--timeout <seconds>]
 
   --version       release tag to download, for example v2.6.0. Required without --from.
   --variant       storage backend build. Defaults to VARIANT in the environment file.
@@ -83,6 +112,10 @@ usage:
   --timeout       seconds to wait for /health. Defaults to READY_TIMEOUT in the environment
                   file, or 900 where that is unset.
   --no-rollback   report a failure instead of rolling back, for a caller that decides.
+  --uniprot-version
+                  the database to move to, which unipept-database's distribute.sh puts on
+                  every server beside the one in use.
+  --back          undo the last switch, if nothing has changed INDEX_LOCATION since.
 
 Run as the unipept user. Nothing here needs root.
 EOF
@@ -248,6 +281,13 @@ on_signal() {
     local signal=$1
 
     log "caught ${signal}"
+    # The same reasoning as the binary below: after the environment file was rewritten nobody else is
+    # left to decide, so the switch is put back.
+    if [ "$index_switched" = true ]; then
+        log "INDEX_LOCATION was already switched, switching back"
+        switch_back "$(ready_timeout)" ||
+            log "could not switch back; ${INDEX_STATE} says what the switch replaced"
+    fi
     if [ "$swapped" = true ]; then
         if [ -f "$PREVIOUS" ]; then
             log "the binary was already swapped, rolling back"
@@ -269,6 +309,11 @@ clean_staging() {
 
 restart_service() {
     log "restarting ${SERVICE}"
+    # A unit that failed fast enough, often enough, has hit its start limit, and systemd then refuses
+    # every start with "Start request repeated too quickly" — this one included. That is exactly the
+    # state a rollback or a switch back finds after a release that exits at once, so the limit is
+    # cleared first: a restart asked for here is deliberate, not the loop the limit guards against.
+    systemctl --user reset-failed "$SERVICE" 2>/dev/null || true
     systemctl --user restart "$SERVICE"
 }
 
@@ -606,6 +651,263 @@ do_status() {
     printf 'active=%s\n' "$(systemctl --user is-active "$SERVICE" || true)"
 }
 
+# The directory this host keeps its databases in, one uniprot-<version> per UniProtKB release.
+#
+# DATABASE_DIR in the environment file where it is set, because hosts keep them in different places.
+# Otherwise it is read off INDEX_LOCATION, which on a host set up by unipept-database's deploy is
+# <that directory>/uniprot-<version>/suffix-array. Fails for a location that is neither.
+database_dir() {
+    local configured location
+    configured=$(env_value DATABASE_DIR "$ENV_FILE" 2>/dev/null || true)
+    if [ -n "$configured" ]; then
+        printf '%s\n' "${configured%/}"
+        return 0
+    fi
+
+    location=$(env_value INDEX_LOCATION "$ENV_FILE" 2>/dev/null || true)
+    location=${location%/}
+    case $location in
+        */uniprot-[0-9][0-9][0-9][0-9]-[0-9][0-9]/suffix-array) ;;
+        *) return 1 ;;
+    esac
+    location=${location%/suffix-array}
+    printf '%s\n' "${location%/*}"
+}
+
+# Where the alias points: an index name, `index` where uniprot_entries is still an index of its own
+# as on a host loaded before versioned indices, or nothing where OpenSearch has neither.
+alias_target() {
+    local address=$1 target
+    target=$(curl -s --max-time 10 "${address}/_cat/aliases/${ALIAS}?h=index" 2>/dev/null | tr -d '[:space:]') || true
+    if [ -n "$target" ]; then
+        printf '%s\n' "$target"
+    elif [ "$(http_code "${address}/${ALIAS}")" = "200" ]; then
+        printf 'index\n'
+    fi
+}
+
+# Rewrites INDEX_LOCATION in the environment file, whole or not at all: the new file is written
+# beside it and renamed over it, with the mode of the one it replaces, which holds no secret now but
+# is kept at 0600 by install.sh all the same.
+set_index_location() {
+    local location=$1 staged="${ENV_FILE}.new"
+
+    sed "s#^INDEX_LOCATION=.*#INDEX_LOCATION=${location}#" "$ENV_FILE" > "$staged"
+    chmod --reference="$ENV_FILE" "$staged"
+    mv "$staged" "$ENV_FILE"
+}
+
+# Points the alias at an index, through unipept-database.
+activate_index() {
+    local address=$1 index=$2
+    "${DATABASE_SCRIPTS}/opensearch/activate.sh" --opensearch-url "$address" --index-name "$index"
+}
+
+# Everything that has to be true before this host is moved to another database. Run by the rollout on
+# every server before it drains the first one, and by `switch-index` on itself.
+#
+# Prints key=value for a caller to read, and exits non-zero if anything is wrong.
+do_check_index() {
+    local version='' problems=0
+
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --uniprot-version) [ $# -ge 2 ] || usage; version=$2; shift 2 ;;
+            *) usage ;;
+        esac
+    done
+    case $version in
+        [0-9][0-9][0-9][0-9]-[0-9][0-9]) ;;
+        *) die "--uniprot-version takes YYYY-MM, not '${version}'" ;;
+    esac
+
+    fail() { log "check-index: $*"; problems=$((problems + 1)); }
+
+    local base target='-'
+    if base=$(database_dir); then
+        target="${base}/uniprot-${version}/suffix-array"
+        case $target in
+            *'#'*) fail "${target} holds a #, which INDEX_LOCATION cannot be rewritten to" ;;
+        esac
+    else
+        fail "INDEX_LOCATION is not <directory>/uniprot-YYYY-MM/suffix-array, so where this host keeps its databases is not known; set DATABASE_DIR in ${ENV_FILE}"
+    fi
+
+    # The files the service opens, as `check` looks for them, and the version they say they are. A
+    # directory named after one release holding another is what a copy gone wrong looks like.
+    if [ "$target" != '-' ]; then
+        if [ -d "$target" ] && [ -r "$target" ]; then
+            local relative
+            for relative in $INDEX_FILES; do
+                [ -r "${target}/${relative}" ] || fail "${target}/${relative} is missing or unreadable"
+            done
+            if [ -r "${target}/.version" ]; then
+                local says
+                says=$(tr -d '[:space:]' < "${target}/.version")
+                [ "$says" = "${version/-/.}" ] || fail "${target} says it is ${says}, not ${version}"
+            fi
+        else
+            fail "${target} is not there; unipept-database's distribute.sh puts it there"
+        fi
+    fi
+
+    local address alias current_alias='-'
+    address=$(env_value DATABASE_ADDRESS "$ENV_FILE" 2>/dev/null || true)
+    if [ ! -x "${DATABASE_SCRIPTS}/opensearch/activate.sh" ] || [ ! -x "${DATABASE_SCRIPTS}/opensearch/load.sh" ]; then
+        fail "unipept-database's scripts are not installed in ${DATABASE_SCRIPTS} to switch the index with; its .deploy/opensearch/install.sh installs them"
+    elif [ -z "$address" ]; then
+        fail "DATABASE_ADDRESS is not set"
+    elif [ "$(http_code "${address}/_cluster/health")" != "200" ]; then
+        fail "OpenSearch does not answer at ${address}"
+    else
+        if ! "${DATABASE_SCRIPTS}/opensearch/load.sh" --opensearch-url "$address" --index-name "${ALIAS}-${version}" --check-complete; then
+            fail "${ALIAS}-${version} is not loaded to the end in OpenSearch; unipept-database's distribute.sh loads it"
+        fi
+        alias=$(alias_target "$address")
+        current_alias=${alias:--}
+    fi
+
+    # Whether this host already serves the version, files and proteins both, so a rollout run again
+    # after it stopped part way passes over the servers it finished.
+    local location switched=no current_version='-'
+    location=$(env_value INDEX_LOCATION "$ENV_FILE" 2>/dev/null || true)
+    [ -r "${location}/.version" ] && current_version=$(tr -d '[:space:]' < "${location}/.version")
+    [ "${location%/}" = "$target" ] && [ "$current_alias" = "${ALIAS}-${version}" ] && switched=yes
+
+    printf 'index_target=%s\n' "$target"
+    printf 'index_version=%s\n' "$current_version"
+    printf 'index_alias=%s\n' "$current_alias"
+    printf 'index_switched=%s\n' "$switched"
+    printf 'ready_timeout=%s\n' "$(ready_timeout)"
+    printf 'problems=%s\n' "$problems"
+
+    [ "$problems" -eq 0 ] || return 1
+}
+
+# Whether INDEX_LOCATION was rewritten by this run, which decides what an interrupt has to undo.
+index_switched=false
+
+# Puts back what the last switch changed, and returns whether the service then serves. Only when
+# INDEX_LOCATION is still what that switch set: anything else means something changed it since, and
+# going back would undo that instead.
+switch_back() {
+    local timeout=$1 previous_location previous_alias switched_to location
+
+    if [ ! -f "$INDEX_STATE" ]; then
+        log "no switch to put back"
+        return 0
+    fi
+    previous_location=$(env_value INDEX_LOCATION "$INDEX_STATE")
+    previous_alias=$(env_value ALIAS "$INDEX_STATE")
+    switched_to=$(env_value SWITCHED_TO "$INDEX_STATE")
+    location=$(env_value INDEX_LOCATION "$ENV_FILE")
+
+    if [ "${location%/}" != "${switched_to%/}" ]; then
+        log "INDEX_LOCATION is ${location}, not the ${switched_to} the last switch set; nothing to put back"
+        return 0
+    fi
+
+    log "putting back ${previous_location}"
+    set_index_location "$previous_location"
+    index_switched=false
+    if [ -n "$previous_alias" ]; then
+        activate_index "$(env_value DATABASE_ADDRESS "$ENV_FILE")" "$previous_alias" || {
+            log "could not point ${ALIAS} back at ${previous_alias}"
+            return 1
+        }
+    fi
+
+    restart_service && wait_until_healthy "$timeout" || return 1
+    rm -f "$INDEX_STATE"
+}
+
+do_switch_index() {
+    local version='' timeout='' no_rollback=false back=false
+
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --uniprot-version) [ $# -ge 2 ] || usage; version=$2; shift 2 ;;
+            --timeout) [ $# -ge 2 ] || usage; timeout=$2; shift 2 ;;
+            --no-rollback) no_rollback=true; shift ;;
+            --back) back=true; shift ;;
+            *) usage ;;
+        esac
+    done
+
+    [ -n "$timeout" ] || timeout=$(ready_timeout)
+    case $timeout in
+        '' | *[!0-9]*) die "--timeout takes seconds, not '${timeout}'" ;;
+    esac
+
+    if [ "$back" = true ]; then
+        [ -z "$version" ] || usage
+        prepare_user_manager
+        switch_back "$timeout" || die "the switch could not be put back; ${INDEX_STATE} says what it replaced"
+        log "switched back"
+        return 0
+    fi
+    [ -n "$version" ] || usage
+
+    local report
+    report=$(do_check_index --uniprot-version "$version") ||
+        die "this host is not ready for ${version}; run 'deploy.sh check-index --uniprot-version ${version}' to see why"
+    prepare_user_manager
+
+    if [ "$(printf '%s\n' "$report" | env_value index_switched)" = yes ]; then
+        log "already on ${version}"
+        return 0
+    fi
+
+    local target address previous_location previous_alias
+    target=$(printf '%s\n' "$report" | env_value index_target)
+    address=$(env_value DATABASE_ADDRESS "$ENV_FILE")
+    previous_location=$(env_value INDEX_LOCATION "$ENV_FILE")
+    previous_alias=$(printf '%s\n' "$report" | env_value index_alias)
+    # activate.sh keeps an index that was still uniprot_entries itself under this name, so that is
+    # what going back points the alias at.
+    case $previous_alias in
+        index) previous_alias="${ALIAS}-legacy" ;;
+        -) previous_alias='' ;;
+    esac
+
+    # A switch to this same release that stopped part way, with INDEX_LOCATION moved and the alias
+    # not, left the record of what it replaced. That record still says where to go back to, and the
+    # half-switched state this run found does not.
+    if [ -f "$INDEX_STATE" ] && [ "$(env_value SWITCHED_TO "$INDEX_STATE")" = "$target" ] &&
+        [ "${previous_location%/}" = "$target" ]; then
+        previous_location=$(env_value INDEX_LOCATION "$INDEX_STATE")
+        previous_alias=$(env_value ALIAS "$INDEX_STATE")
+    fi
+
+    # Written before anything changes, so an interrupt at any later point has it to go back by.
+    printf 'INDEX_LOCATION=%s\nALIAS=%s\nSWITCHED_TO=%s\n' "$previous_location" "$previous_alias" "$target" > "$INDEX_STATE"
+
+    log "switching from ${previous_location} to ${target}"
+    index_switched=true
+    set_index_location "$target"
+
+    if ! activate_index "$address" "${ALIAS}-${version}"; then
+        log "could not point ${ALIAS} at ${ALIAS}-${version}"
+        switch_back "$timeout" || die "the switch failed and could not be put back; ${INDEX_STATE} says what it replaced"
+        die "the switch failed and was put back"
+    fi
+
+    if restart_service && wait_until_healthy "$timeout"; then
+        index_switched=false
+        log "switched to ${version}"
+        return 0
+    fi
+
+    if [ "$no_rollback" = true ]; then
+        index_switched=false
+        die "the service is not serving ${version}; left in place for the caller to decide"
+    fi
+
+    log "the service is not serving ${version}, switching back"
+    switch_back "$timeout" || die "the switch failed and could not be put back; ${INDEX_STATE} says what it replaced"
+    die "the switch failed and was put back"
+}
+
 [ $# -gt 0 ] || usage
 command=$1
 shift
@@ -621,5 +923,7 @@ case $command in
     deploy) do_deploy "$@" ;;
     rollback) do_rollback "$@" ;;
     status) do_status "$@" ;;
+    check-index) do_check_index "$@" ;;
+    switch-index) do_switch_index "$@" ;;
     *) usage ;;
 esac

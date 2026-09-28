@@ -939,6 +939,125 @@ check_absent "and rick was left" '^Subject:.*rick is on' /tmp/mail.txt
 rm -f /tmp/unhealthy
 cp /tmp/ssh.keep /usr/local/bin/ssh
 
+# A database rollout. The fake ssh answers check-index and switch-index the way deploy.sh does, per
+# server: /tmp/switched-<host> is a server on the new release, and FAKE_* make one misbehave.
+cp /usr/local/bin/ssh /tmp/ssh.keep
+cat > /usr/local/bin/ssh <<'EOF'
+#!/usr/bin/env bash
+cmd=""; host=""
+for a in "$@"; do
+  case $a in
+    -o|BatchMode=yes|ConnectTimeout=10|ServerAliveInterval=15|ServerAliveCountMax=4|-n) ;;
+    unipept@*) host=${a#unipept@}; cmd="$cmd $a" ;;
+    *) cmd="$cmd $a" ;;
+  esac
+done
+echo "SSH:$cmd" >> /tmp/ssh.log
+named() { [[ " ${1:-} " == *" ${host} "* ]]; }
+case "$cmd" in
+  *"check-index"*)
+    if named "${FAKE_INDEX_NOT_READY:-}"; then
+      echo "check-index: uniprot_entries-2026-03 is not loaded to the end" >&2; echo "problems=1"; exit 1
+    fi
+    if [ -f "/tmp/switched-${host}" ]; then on=2026.03 switched=yes; else on=2025.11 switched=no; fi
+    printf 'index_target=/mnt/uniprot-2026-03/suffix-array\nindex_version=%s\nindex_alias=uniprot_entries-%s\nindex_switched=%s\nready_timeout=30\nproblems=0\n' \
+      "$on" "${on/./-}" "$switched"
+    exit 0 ;;
+  *"switch-index --back"*)
+    echo "BACK ${host}" >> /tmp/ssh.log
+    named "${FAKE_BACK_FAILS:-}" && exit 1
+    rm -f "/tmp/switched-${host}" /tmp/unhealthy
+    exit 0 ;;
+  *"switch-index"*)
+    echo "SWITCH ${host}" >> /tmp/ssh.log
+    named "${FAKE_SWITCH_FAILS:-}" && exit 1
+    touch "/tmp/switched-${host}"
+    named "${FAKE_SWITCH_BREAKS_HEALTH:-}" && touch /tmp/unhealthy
+    exit 0 ;;
+  *"deploy.sh check"*)
+    if [ -f "/tmp/switched-${host}" ]; then on=2026.03; else on=2025.11; fi
+    printf 'variant=hybrid\nport=80\nindex_version=%s\nproblems=0\n' "$on"; exit 0 ;;
+  *status*) printf 'version=2.6.0\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n'; exit 0 ;;
+esac
+exit 0
+EOF
+chmod +x /usr/local/bin/ssh
+reset_database() { reset_fleet; rm -f /tmp/switched-*; }
+
+section "D1. a database dry run reads every server and changes nothing"
+reset_database
+$R database --uniprot-version 2026-03 --dry-run > /tmp/db-dry.txt 2>&1; check "exit 0" "$?" "0"
+check "every server is ready" "$(grep -c 'ready=yes' /tmp/db-dry.txt)" "3"
+check "and says what it is on" "$(grep -c 'on=2025.11' /tmp/db-dry.txt)" "3"
+check_absent "nothing is switched" 'SWITCH' /tmp/ssh.log
+check "haproxy untouched" "$($H up-count all_handlers)" "3"
+
+section "D2. a database rollout switches every server, one at a time, and keeps the binary"
+reset_database
+: > /tmp/logged.txt; : > /tmp/curl-args.log
+$R database --uniprot-version 2026-03 > /tmp/db1.txt 2>&1; check "exit 0" "$?" "0"
+check "every server is switched" "$(ls /tmp/switched-* 2>/dev/null | wc -l)" "3"
+check "a primary first" "$(grep -oE '^SWITCH [a-z]+' /tmp/ssh.log | head -1)" "SWITCH patty"
+check "the backup last" "$(grep -oE '^SWITCH [a-z]+' /tmp/ssh.log | tail -1)" "SWITCH rick"
+check_absent "no binary is installed" 'deploy --from' /tmp/ssh.log
+check_absent "nothing is downloaded" 'github.com' /tmp/curl-args.log
+check "every server is back in the pool" "$($H up-count all_handlers)" "3"
+check "it mails that the fleet is on it" "$(grep -c '^Subject:.*UniProtKB 2026-03 deployed' /tmp/mail.txt)" "1"
+check "a mail per server" "$(grep -c '^Subject:.*is on UniProtKB 2026-03' /tmp/mail.txt)" "3"
+check "it journals a line per server, keyed by the release" "$(grep -c 'database=2026-03 server=.*outcome=deployed' /tmp/logged.txt)" "3"
+
+section "D3. run again, a server already on the release is passed over"
+: > /tmp/ssh.log; : > /tmp/mail.txt
+$R database --uniprot-version 2026-03 > /tmp/db2.txt 2>&1; check "exit 0" "$?" "0"
+check_absent "nothing is switched again" 'SWITCH' /tmp/ssh.log
+check "each is said to be on it already" "$(grep -c 'is already on 2026-03' /tmp/db2.txt)" "3"
+check "and nothing is drained" "$($H up-count all_handlers)" "3"
+
+section "D4. a server without the release stops the run before anything is drained"
+reset_database
+FAKE_INDEX_NOT_READY=selma $R database --uniprot-version 2026-03 > /tmp/db3.txt 2>&1
+check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "names the server" "$(grep -c 'selma is not ready for 2026-03' /tmp/db3.txt)" "1"
+check "and what it lacks" "$(grep -c 'not loaded to the end' /tmp/db3.txt)" "1"
+check "and what puts it there" "$(grep -c 'distribute.sh' /tmp/db3.txt)" "1"
+check_absent "nothing is switched" 'SWITCH' /tmp/ssh.log
+check "nothing is drained" "$($H up-count all_handlers)" "3"
+
+section "D5. a server that does not come back is switched back, returned, and the run stops"
+reset_database
+FAKE_SWITCH_BREAKS_HEALTH=patty $R database --uniprot-version 2026-03 > /tmp/db4.txt 2>&1
+check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "patty is switched back" "$(grep -c '^BACK patty' /tmp/ssh.log)" "1"
+check "and is on the old release" "$([ -f /tmp/switched-patty ] && echo switched || echo back)" "back"
+check "and in the pool again" "$($H up-count all_handlers)" "3"
+check_absent "the servers after it are not touched" '^SWITCH selma' /tmp/ssh.log
+check "it mails that the release was rolled back" "$(grep -c '^Subject:.*UniProtKB 2026-03 was rolled back' /tmp/mail.txt)" "1"
+
+section "D6. a switch that also cannot be put back leaves the server out and says so"
+reset_database
+FAKE_SWITCH_BREAKS_HEALTH=patty FAKE_BACK_FAILS=patty $R database --uniprot-version 2026-03 --allow-downtime > /tmp/db5.txt 2>&1
+check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "it could not be switched back" "$(grep -c 'patty could not be switched back' /tmp/db5.txt)" "1"
+check "patty is left out of the pool" "$($H state all_handlers/patty | cut -d' ' -f1)" "MAINT"
+check "and the mail says it needs attention" "$(grep -c '^Subject:.*a server needs attention' /tmp/mail.txt)" "1"
+check "naming the release" "$(grep -c 'A rollout of UniProtKB 2026-03 left a server' /tmp/mail.txt)" "1"
+
+section "D7. what a database rollout refuses"
+reset_database
+$R database > /tmp/db6.txt 2>&1; check "without --uniprot-version it says usage" "$?" "2"
+$R database --uniprot-version 2026-03 --version v2.6.0 > /tmp/db7.txt 2>&1
+check "with a --version it refuses" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "and says it keeps the binary" "$(grep -c 'keeps the binary' /tmp/db7.txt)" "1"
+$R database --uniprot-version 2026-3 > /tmp/db8.txt 2>&1
+check "a release not written YYYY-MM is refused" "$(grep -c 'takes YYYY-MM' /tmp/db8.txt)" "1"
+$R --version v2.6.0 --uniprot-version 2026-03 > /tmp/db9.txt 2>&1
+check "--uniprot-version on a binary rollout is refused" "$(grep -c "that is 'rollout.sh database'" /tmp/db9.txt)" "1"
+# Refused before any ssh, so the log reset_database emptied is still empty.
+check "none of these reaches a server" "$([ -s /tmp/ssh.log ] && echo reached || echo untouched)" "untouched"
+
+rm -f /tmp/switched-* /tmp/unhealthy
+cp /tmp/ssh.keep /usr/local/bin/ssh
+
 # The fake backends hold stdout open; without this a pipe on the outside never sees EOF.
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1
 kill "$(jobs -p)" >/dev/null 2>&1

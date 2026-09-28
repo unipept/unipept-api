@@ -269,6 +269,11 @@ clean_staging() {
 
 restart_service() {
     log "restarting ${SERVICE}"
+    # A unit that failed fast enough, often enough, has hit its start limit, and systemd then refuses
+    # every start with "Start request repeated too quickly" — this one included. That is exactly the
+    # state a rollback or a switch back finds after a release that exits at once, so the limit is
+    # cleared first: a restart asked for here is deliberate, not the loop the limit guards against.
+    systemctl --user reset-failed "$SERVICE" 2>/dev/null || true
     systemctl --user restart "$SERVICE"
 }
 

@@ -513,7 +513,8 @@ check "rolled back"             "$([ "$(grep -c 'rolled back' /tmp/t6.log)" -ge 
 check "serving the old binary"  "$(/opt/unipept-api/bin/unipept-api --version)" "unipept-api 8.1.0"
 
 # Switching the database: check-index and switch-index against two releases side by side, a fake
-# OpenSearch, and a fake unipept-database checkout, which is where the alias is switched.
+# OpenSearch, and fake unipept-database scripts where its install.sh puts them, which is what switches
+# the alias.
 for v in 2025.11 2026.03; do
   d="/srv/db/uniprot-${v/./-}/suffix-array"
   mkdir -p "$d/datastore"
@@ -545,14 +546,14 @@ sleep 1
 
 # The two scripts deploy.sh calls in unipept-database: the completeness check, answered from
 # /srv/fake-os/incomplete-<index>, and activate.sh, which moves /srv/fake-os/alias.
-checkout=/home/unipept/unipept-database/opensearch
-mkdir -p "$checkout"
-cat > "$checkout/load.sh" <<'EOF'
+scripts=/opt/unipept-database/opensearch
+mkdir -p "$scripts"
+cat > "$scripts/load.sh" <<'EOF'
 #!/usr/bin/env bash
 index=''; while [ $# -gt 0 ]; do [ "$1" = --index-name ] && index=$2; shift; done
 [ ! -e "/srv/fake-os/incomplete-${index}" ]
 EOF
-cat > "$checkout/activate.sh" <<'EOF'
+cat > "$scripts/activate.sh" <<'EOF'
 #!/usr/bin/env bash
 index=''; while [ $# -gt 0 ]; do [ "$1" = --index-name ] && index=$2; shift; done
 echo "$index" >> /srv/fake-os/activate.log
@@ -561,8 +562,7 @@ echo "$index" >> /srv/fake-os/activate.log
 echo "$index" > "/srv/fake-os/alias.$$" && mv -f "/srv/fake-os/alias.$$" /srv/fake-os/alias
 rm -f /srv/fake-os/concrete
 EOF
-chmod 755 "$checkout"/*.sh
-chown -R unipept:unipept /home/unipept/unipept-database
+chmod 755 "$scripts"/*.sh
 
 env_file=/opt/unipept-api/etc/unipept-api.env
 sed -i 's#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/db/uniprot-2025-11/suffix-array#; s#^DATABASE_ADDRESS=.*#DATABASE_ADDRESS=http://127.0.0.1:9299#' "$env_file"
@@ -617,10 +617,10 @@ as_user "/opt/unipept-api/lib/deploy.sh check-index --uniprot-version 2026-03" >
 check "DATABASE_DIR says where instead" "$?" "0"
 sed -i '/^DATABASE_DIR=/d; s#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/db/uniprot-2025-11/suffix-array#' "$env_file"
 
-mv /home/unipept/unipept-database /home/unipept/elsewhere
+mv /opt/unipept-database /opt/elsewhere
 as_user "/opt/unipept-api/lib/deploy.sh check-index --uniprot-version 2026-03" >/tmp/ci6.txt 2>&1
-check "no unipept-database checkout" "$(grep -c 'no unipept-database checkout' /tmp/ci6.txt)" "1"
-mv /home/unipept/elsewhere /home/unipept/unipept-database
+check "unipept-database's scripts not installed" "$(grep -c "unipept-database's scripts are not installed" /tmp/ci6.txt)" "1"
+mv /opt/elsewhere /opt/unipept-database
 
 section "switch-index moves the files and the proteins together, and keeps the binary"
 as_user "/opt/unipept-api/lib/deploy.sh switch-index --uniprot-version 2026-03 --timeout 30" >/tmp/sw1.log 2>&1

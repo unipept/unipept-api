@@ -43,7 +43,7 @@
 #
 #   check-index: whether this host can move to another UniProtKB version, with every problem rather
 #   than the first — the database directory beside the one in use, its files and their version, the
-#   unipept-database checkout, and the version's own OpenSearch index loaded to the end. Print
+#   scripts unipept-database installs, and the version's own OpenSearch index loaded to the end. Print
 #   key=value for a caller to read, and exit non-zero if anything is wrong.
 #
 #   switch-index: move this host to that version, keeping the binary.
@@ -88,6 +88,10 @@ readonly ENV_FILE="${ROOT}/etc/unipept-api.env"
 readonly INDEX_STATE="${ROOT}/etc/index.previous"
 # The name the API queries in OpenSearch, an alias once unipept-database has switched it.
 readonly ALIAS=uniprot_entries
+# Where unipept-database's install.sh installs the scripts a host runs, as install.sh here fills
+# /opt/unipept-api. The alias is switched through its opensearch/activate.sh, so the rules for it
+# live in one place.
+readonly DATABASE_SCRIPTS=/opt/unipept-database
 
 usage() {
     cat >&2 <<'EOF'
@@ -670,14 +674,6 @@ database_dir() {
     printf '%s\n' "${location%/*}"
 }
 
-# Where unipept-database is cloned on this host, the checkout distribute.sh runs its scripts in. The
-# alias is switched through its opensearch/activate.sh, so the rules for that live in one place.
-database_checkout() {
-    local configured
-    configured=$(env_value DATABASE_CHECKOUT "$ENV_FILE" 2>/dev/null || true)
-    printf '%s\n' "${configured:-${HOME}/unipept-database}"
-}
-
 # Where the alias points: an index name, `index` where uniprot_entries is still an index of its own
 # as on a host loaded before versioned indices, or nothing where OpenSearch has neither.
 alias_target() {
@@ -704,7 +700,7 @@ set_index_location() {
 # Points the alias at an index, through unipept-database.
 activate_index() {
     local address=$1 index=$2
-    "$(database_checkout)/opensearch/activate.sh" --opensearch-url "$address" --index-name "$index"
+    "${DATABASE_SCRIPTS}/opensearch/activate.sh" --opensearch-url "$address" --index-name "$index"
 }
 
 # Everything that has to be true before this host is moved to another database. Run by the rollout on
@@ -755,17 +751,16 @@ do_check_index() {
         fi
     fi
 
-    local checkout address alias current_alias='-'
-    checkout=$(database_checkout)
+    local address alias current_alias='-'
     address=$(env_value DATABASE_ADDRESS "$ENV_FILE" 2>/dev/null || true)
-    if [ ! -x "${checkout}/opensearch/activate.sh" ] || [ ! -x "${checkout}/opensearch/load.sh" ]; then
-        fail "no unipept-database checkout at ${checkout} to switch the index with; clone it there or set DATABASE_CHECKOUT in ${ENV_FILE}"
+    if [ ! -x "${DATABASE_SCRIPTS}/opensearch/activate.sh" ] || [ ! -x "${DATABASE_SCRIPTS}/opensearch/load.sh" ]; then
+        fail "unipept-database's scripts are not installed in ${DATABASE_SCRIPTS} to switch the index with; its .deploy/opensearch/install.sh installs them"
     elif [ -z "$address" ]; then
         fail "DATABASE_ADDRESS is not set"
     elif [ "$(http_code "${address}/_cluster/health")" != "200" ]; then
         fail "OpenSearch does not answer at ${address}"
     else
-        if ! "${checkout}/opensearch/load.sh" --opensearch-url "$address" --index-name "${ALIAS}-${version}" --check-complete; then
+        if ! "${DATABASE_SCRIPTS}/opensearch/load.sh" --opensearch-url "$address" --index-name "${ALIAS}-${version}" --check-complete; then
             fail "${ALIAS}-${version} is not loaded to the end in OpenSearch; unipept-database's distribute.sh loads it"
         fi
         alias=$(alias_target "$address")

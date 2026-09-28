@@ -130,8 +130,10 @@ server that does not come back is switched back with `deploy.sh switch-index --b
 back only the switch it recorded. A server already on the release is passed over, so a run that
 stopped part way is finished by running it again.
 
-`DATABASE_DIR` and `DATABASE_CHECKOUT` in the environment file say where a server keeps its databases
-and unipept-database, where the defaults do not fit; the example file says what they are.
+The alias is switched through the scripts unipept-database's `install.sh` puts in
+`/opt/unipept-database` on every host, so the rules for it live in one place. `DATABASE_DIR` in the
+environment file says where a server keeps its databases, where `INDEX_LOCATION` does not show it;
+the example file says more.
 
 ## Reading what happened
 

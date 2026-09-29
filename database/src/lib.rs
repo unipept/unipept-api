@@ -25,11 +25,8 @@ pub struct Database {
 }
 
 impl Database {
-    /// A client for the OpenSearch at `url`, querying the index of `uniprot_version`.
-    ///
-    /// The version is the one in the `.version` beside the suffix array, so the proteins always
-    /// come from the release the files do. Each release is loaded into an index of its own, and
-    /// which one this process queries changes only when it restarts on other files.
+    /// A client for the OpenSearch at `url`, querying the index of `uniprot_version`, the one in
+    /// the `.version` beside the suffix array.
     pub fn try_from_url(url: &str, uniprot_version: &str) -> Result<Self, DatabaseError> {
         let index = index_name(uniprot_version)?;
         let url = Url::parse(url)?;
@@ -52,7 +49,8 @@ impl Database {
 /// `uniprot_entries-2026-03` for the `2026.03` a `.version` file holds.
 ///
 /// Refuses a version that would not make a valid index name, so a malformed `.version` stops the
-/// process at startup rather than turning every protein query into an error.
+/// process at startup rather than turning every protein query into an error. `deploy.sh check`
+/// applies the same rule before a start; change both together.
 pub fn index_name(uniprot_version: &str) -> Result<String, DatabaseError> {
     let version = uniprot_version.trim();
     let valid = version.starts_with(|c: char| c.is_ascii_digit())
@@ -62,11 +60,8 @@ pub fn index_name(uniprot_version: &str) -> Result<String, DatabaseError> {
         return Err(DatabaseError::InvalidVersion(version.to_string()));
     }
 
-    Ok(format!("{INDEX_PREFIX}{}", version.replace('.', "-")))
+    Ok(format!("uniprot_entries-{}", version.replace('.', "-")))
 }
-
-/// What every index name starts with, the version following it.
-const INDEX_PREFIX: &str = "uniprot_entries-";
 
 /// Checks that the index of this process's version answers a search.
 ///

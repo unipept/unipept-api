@@ -62,12 +62,13 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
         &taxons
     )?;
 
-    let index = Index::try_from_files(&sa, &proteins, &mappings, &kmer_table)?;
-
-    // After the datastore, whose `.version` names the index: the proteins come from the release the
-    // files do, and move to another one only when this process restarts on other files.
+    // Right after the datastore, whose `.version` names the index, and before the suffix array: a
+    // version that names no index stops the process in milliseconds rather than after the minutes
+    // a preloaded index takes to read.
     let database = Database::try_from_url(database_address, datastore.version())?;
     tracing::info!(index = database.index(), "querying opensearch");
+
+    let index = Index::try_from_files(&sa, &proteins, &mappings, &kmer_table)?;
 
     let app_state = AppState {
         datastore: Arc::new(datastore),

@@ -30,6 +30,33 @@ sed -i 's#^PORT=.*#PORT=8099#; s#^VARIANT=.*#VARIANT=hybrid#; s#^INDEX_LOCATION=
 # install.sh applied the redirect against the example PORT; the suite just changed it.
 systemctl restart unipept-api-ports >/dev/null 2>&1
 
+# A fake OpenSearch at the example's DATABASE_ADDRESS. An index named in `indices` answers a search
+# with the status in `status`, 200 unless a case says otherwise; any other index is 404, as a real
+# cluster answers for one never loaded.
+mkdir -p /srv/opensearch
+echo uniprot_entries-2026-09-test > /srv/opensearch/indices
+echo 200 > /srv/opensearch/status
+cat > /usr/local/bin/fake-opensearch <<'EOF'
+#!/usr/bin/env bash
+read -r _ target _
+while IFS= read -r line; do [ -z "${line%$'\r'}" ] && break; done
+index=${target#/}; index=${index%%/*}; index=${index%%\?*}
+status=404
+grep -qx "$index" /srv/opensearch/indices && status=$(cat /srv/opensearch/status)
+printf 'HTTP/1.1 %s X\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}' "$status"
+EOF
+chmod 755 /usr/local/bin/fake-opensearch
+start_fake_opensearch() {
+  socat TCP-LISTEN:9200,reuseaddr,fork SYSTEM:/usr/local/bin/fake-opensearch &
+  FAKE_OPENSEARCH=$!
+  local _
+  for _ in $(seq 50); do
+    [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:9200/)" != 000 ] && return 0
+    sleep 0.1
+  done
+}
+start_fake_opensearch
+
 UID_N=$(id -u unipept)
 as_user() { setpriv --reuid unipept --regid unipept --init-groups env XDG_RUNTIME_DIR=/run/user/"$UID_N" HOME=/home/unipept bash -c "$1"; }
 
@@ -177,6 +204,130 @@ check "one more warning" "$(sed -n 's/^warnings=//p' /tmp/c1k.log)" "$(( $(sed -
 check "names the file"  "$(grep -c 'kmer_table.bin is missing' /tmp/c1k.log)" "1"
 check "index_version"   "$(sed -n 's/^index_version=//p' /tmp/c1k.log)" "2026.09-test"
 mv /srv/kmer_table.bin.away /srv/index/kmer_table.bin
+
+
+section "check finds the OpenSearch index of the version it serves"
+check "names it" "$(sed -n 's/^opensearch_index=//p' /tmp/c0.log)" "uniprot_entries-2026-09-test"
+
+echo uniprot_entries-2026-08-test > /srv/opensearch/indices
+as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/o1.log 2>&1
+check "a version never loaded: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "says to load it" "$(grep -c "uniprot_entries-2026-09-test is not in OpenSearch; load its proteins with unipept-database's load.sh$" /tmp/o1.log)" "1"
+echo uniprot_entries-2026-09-test > /srv/opensearch/indices
+
+# A closed index is in the cluster and still refuses every search.
+echo 400 > /srv/opensearch/status
+as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/o2.log 2>&1
+check "a closed index: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "asks whether it is closed" "$(grep -c 'does not answer a search (HTTP 400); is it closed' /tmp/o2.log)" "1"
+echo 200 > /srv/opensearch/status
+
+# An outage is /health/database's to report; a binary has to be deployable during one.
+kill "$FAKE_OPENSEARCH"; wait "$FAKE_OPENSEARCH" 2>/dev/null
+as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/o3.log 2>&1
+check "OpenSearch down: exit 0" "$?" "0"
+check "one more warning" "$(sed -n 's/^warnings=//p' /tmp/o3.log)" "$(( $(sed -n 's/^warnings=//p' /tmp/c0.log) + 1 ))"
+check "says it does not answer" "$(grep -c 'OpenSearch at http://localhost:9200 does not answer' /tmp/o3.log)" "1"
+start_fake_opensearch
+
+# The process refuses to start on a version that names no index, so check says so first. OpenSearch
+# refuses an index name with a capital in it.
+echo "2026.09-Test" > /srv/index/.version
+as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/o4.log 2>&1
+check "a malformed .version: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "says it names no index" "$(grep -c 'which names no OpenSearch index' /tmp/o4.log)" "1"
+
+# Whitespace inside is not removed, as the binary does not remove it, and an empty file is no version.
+printf '2026. 09-test\n' > /srv/index/.version
+as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/o5.log 2>&1
+check "whitespace inside: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "says it names no index" "$(grep -c "holds '2026. 09-test', which names no OpenSearch index" /tmp/o5.log)" "1"
+: > /srv/index/.version
+as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/o6.log 2>&1
+check "an empty .version: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "says it names no index" "$(grep -c "holds '', which names no OpenSearch index" /tmp/o6.log)" "1"
+
+# Whitespace around the version is not part of it.
+printf '  2026.09-test \n\n' > /srv/index/.version
+as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/o7.log 2>&1
+check "whitespace around: exit 0" "$?" "0"
+check "it is trimmed" "$(sed -n 's/^index_version=//p' /tmp/o7.log)" "2026.09-test"
+echo "2026.09-test" > /srv/index/.version
+
+# A release version gets the command that loads it; anything else, which load.sh refuses, does not.
+cp -a /srv/index /srv/index-release
+echo "2026.03" > /srv/index-release/.version
+as_user "/opt/unipept-api/lib/deploy.sh check --index /srv/index-release" >/tmp/o8.log 2>&1
+check "a release: the command" "$(grep -c "load.sh --uniprot-version 2026-03$" /tmp/o8.log)" "1"
+rm -rf /srv/index-release
+
+section "check --index checks a directory before anything points at it"
+cp -a /srv/index /srv/index-next
+echo "2026.10-test" > /srv/index-next/.version
+as_user "/opt/unipept-api/lib/deploy.sh check --index /srv/index-next" >/tmp/n1.log 2>&1
+check "its proteins not loaded: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "names that index" "$(grep -c 'uniprot_entries-2026-10-test is not in OpenSearch' /tmp/n1.log)" "1"
+echo uniprot_entries-2026-10-test >> /srv/opensearch/indices
+as_user "/opt/unipept-api/lib/deploy.sh check --index /srv/index-next" >/tmp/n2.log 2>&1
+check "loaded: exit 0" "$?" "0"
+check "reports its version" "$(sed -n 's/^index_version=//p' /tmp/n2.log)" "2026.10-test"
+check "and its index" "$(sed -n 's/^opensearch_index=//p' /tmp/n2.log)" "uniprot_entries-2026-10-test"
+check "INDEX_LOCATION is untouched" "$(sed -n 's/^INDEX_LOCATION=//p' /opt/unipept-api/etc/unipept-api.env)" "/srv/index"
+rm /srv/index-next/mapping.bin
+as_user "/opt/unipept-api/lib/deploy.sh check --index /srv/index-next" >/tmp/n3.log 2>&1
+check "a missing file there: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "names the file there" "$(grep -c '/srv/index-next/mapping.bin is missing' /tmp/n3.log)" "1"
+cp -a /srv/index/mapping.bin /srv/index-next/mapping.bin
+
+section "stop, then start on what the environment file names"
+as_user "/opt/unipept-api/lib/deploy.sh start --timeout 30" >/tmp/r0.log 2>&1
+check "start while running: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "says to stop it first" "$(grep -c 'is running; stop it first' /tmp/r0.log)" "1"
+
+# Not running, rather than inactive: the stand-in binary exits non-zero on SIGTERM, so systemd calls
+# it failed where the real one, which shuts down gracefully, is inactive.
+as_user "/opt/unipept-api/lib/deploy.sh stop" >/tmp/r1s.log 2>&1
+check "stop: exit 0" "$?" "0"
+check "stopped" "$(as_user 'systemctl --user is-active unipept-api' | grep -qx active || echo yes)" "yes"
+
+sed -i 's#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/index-next#' /opt/unipept-api/etc/unipept-api.env
+as_user "/opt/unipept-api/lib/deploy.sh start --timeout 30" >/tmp/r1.log 2>&1
+check "start: exit 0" "$?" "0"
+check "says started" "$(grep -c 'started$' /tmp/r1.log)" "1"
+check "active" "$(as_user 'systemctl --user is-active unipept-api')" "active"
+check "health answers" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8099/health)" "200"
+check "binary untouched" "$(/opt/unipept-api/bin/unipept-api --version)" "unipept-api 2.7.0"
+
+# Refused before the start, so nothing half-started is left behind.
+as_user "/opt/unipept-api/lib/deploy.sh stop" >/dev/null 2>&1
+sed -i '/uniprot_entries-2026-09-test/d' /srv/opensearch/indices
+sed -i 's#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/index#' /opt/unipept-api/etc/unipept-api.env
+as_user "/opt/unipept-api/lib/deploy.sh start --timeout 30" >/tmp/r2.log 2>&1
+check "its proteins not loaded: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "says the host is not ready" "$(grep -c 'this host is not ready' /tmp/r2.log)" "1"
+check "not started" "$(as_user 'systemctl --user is-active unipept-api' | grep -qx active || echo yes)" "yes"
+echo uniprot_entries-2026-09-test >> /srv/opensearch/indices
+
+# The proteins have to answer: a start without them would serve /health and nothing else.
+kill "$FAKE_OPENSEARCH"; wait "$FAKE_OPENSEARCH" 2>/dev/null
+as_user "/opt/unipept-api/lib/deploy.sh start --timeout 30" >/tmp/r5.log 2>&1
+check "OpenSearch down: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "says to start it first" "$(grep -c 'OpenSearch does not answer; start it first' /tmp/r5.log)" "1"
+check "still not started" "$(as_user 'systemctl --user is-active unipept-api' | grep -qx active || echo yes)" "yes"
+start_fake_opensearch
+
+as_user "/opt/unipept-api/lib/deploy.sh start --timeout nonsense" >/tmp/r3.log 2>&1
+check "a timeout that is not seconds: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "says so" "$(grep -c "takes seconds, not 'nonsense'" /tmp/r3.log)" "1"
+
+# A unit that tripped systemd's start limit refuses a plain start; a deliberate one clears it.
+for _ in 1 2 3 4 5 6 7; do as_user 'systemctl --user restart unipept-api' >/dev/null 2>&1; done
+as_user 'systemctl --user stop unipept-api' >/dev/null 2>&1
+check "the limit tripped" "$(as_user 'systemctl --user start unipept-api' >/dev/null 2>&1 || echo refused)" "refused"
+as_user "/opt/unipept-api/lib/deploy.sh start --timeout 30" >/tmp/r4.log 2>&1
+check "start clears it: exit 0" "$?" "0"
+check "back on the first" "$(as_user 'systemctl --user is-active unipept-api')" "active"
+rm -rf /srv/index-next
 
 section "each failure on its own"
 # A missing index file.
@@ -453,8 +604,9 @@ check "a connect timeout on each" "$(grep 'releases/download' /tmp/curl-args.log
 check "a throughput floor"        "$(grep 'releases/download' /tmp/curl-args.log | grep -c -- '--speed-limit 1024')" "2"
 check "and a window for it"       "$(grep 'releases/download' /tmp/curl-args.log | grep -c -- '--speed-time 30')" "2"
 check "retries are still asked"   "$(grep 'releases/download' /tmp/curl-args.log | grep -c -- '--retry 3')" "2"
-# The health probe must keep its own short bound rather than inherit the download's.
-check "the probe is unchanged"    "$(grep -c -- '--max-time 5' /tmp/curl-args.log)" "1"
+# The health probe must keep its own short bound rather than inherit the download's. Selected by its
+# route, since check's search of the OpenSearch index shares that bound.
+check "the probe is unchanged"    "$(grep -- '/health' /tmp/curl-args.log | grep -c -- '--max-time 5')" "1"
 rm -rf /tmp/curlbin
 
 section "READY_TIMEOUT belongs to the host"

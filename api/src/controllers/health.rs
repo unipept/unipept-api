@@ -19,10 +19,11 @@ pub async fn get_handler() -> StatusCode {
     StatusCode::OK
 }
 
-/// As [`get_handler`], but for OpenSearch: 503 if it fails to answer within
-/// `DATABASE_PROBE_TIMEOUT`, OK otherwise.
+/// As [`get_handler`], but for OpenSearch: 503 if the index of the version this process serves does
+/// not answer within `DATABASE_PROBE_TIMEOUT`, OK otherwise. A cluster that is up but lacks that
+/// index fails every protein query, so it is unavailable here too.
 pub async fn get_database_handler(State(AppState { database, .. }): State<AppState>) -> StatusCode {
-    match tokio::time::timeout(DATABASE_PROBE_TIMEOUT, database::ping(database.get_conn())).await {
+    match tokio::time::timeout(DATABASE_PROBE_TIMEOUT, database::ping(&database)).await {
         Ok(Ok(())) => StatusCode::OK,
         _ => StatusCode::SERVICE_UNAVAILABLE
     }

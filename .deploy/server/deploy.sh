@@ -33,10 +33,18 @@
 #   rollback: keep the binary in place as .failed, put .previous back, restart, and wait for
 #   /health. .previous is only removed once it serves.
 #
+#   stop and start: for a change that is not a new binary, such as another INDEX_LOCATION. The
+#   process reads that, and the OpenSearch index of its version, only when it starts. `start` refuses
+#   a service that is still running, runs the same checks as `check` and requires OpenSearch to
+#   answer, then waits for /health and /health/database. Nothing is undone on a failure: the binary
+#   did not change, and putting back what did is for whoever changed it.
+#
 #   check: collect every problem instead of stopping at the first — the commands, the user, the
 #   runtime directory, the values in the environment file, the index files, memory for the variant,
-#   the port redirect, free space, and with --from the checksum and that the binary runs here. Print
-#   key=value for a caller to read, and exit non-zero if anything is wrong.
+#   the OpenSearch index of their version, the port redirect, free space, and with --from the
+#   checksum and that the binary runs here. --index checks another directory in place of
+#   INDEX_LOCATION, before anything points the service at it. Print key=value for a caller to read,
+#   and exit non-zero if anything is wrong.
 #
 #   status: print the installed version, the previous one, the variant, the port, and whether the
 #   unit is active.
@@ -67,19 +75,30 @@ readonly STAGED="${BINARY}.new"
 readonly REJECTED="${BINARY}.failed"
 readonly ENV_FILE="${ROOT}/etc/unipept-api.env"
 
+# Seconds for /health/database to answer once /health does. The process is up by then and only asks
+# OpenSearch, so this is short.
+readonly DATABASE_READY_TIMEOUT=60
+
+# Seconds for OpenSearch to answer the search `check` makes. Longer than a health probe: an index
+# that was just opened can take a while to answer its first one.
+readonly OPENSEARCH_TIMEOUT=30
+
 usage() {
     cat >&2 <<'EOF'
 usage:
-  deploy.sh check [--from <path>]
+  deploy.sh check [--from <path>] [--index <dir>]
   deploy.sh deploy [--version <tag>] [--variant <name>] [--from <path>] [--timeout <seconds>]
                    [--no-rollback]
   deploy.sh rollback [--timeout <seconds>]
+  deploy.sh stop
+  deploy.sh start [--timeout <seconds>]
   deploy.sh status
 
   --version       release tag to download, for example v2.6.0. Required without --from.
   --variant       storage backend build. Defaults to VARIANT in the environment file.
   --from          install this binary instead of downloading, or with check, validate it.
                   SHA256SUMS must sit beside it.
+  --index         with check, the index directory to check in place of INDEX_LOCATION.
   --timeout       seconds to wait for /health. Defaults to READY_TIMEOUT in the environment
                   file, or 900 where that is unset.
   --no-rollback   report a failure instead of rolling back, for a caller that decides.
@@ -114,6 +133,17 @@ ready_timeout() {
         '' | *[!0-9]*) printf '%s\n' "$DEFAULT_READY_TIMEOUT" ;;
         *) printf '%s\n' "$configured" ;;
     esac
+}
+
+# The seconds a command waits for /health: its --timeout, or this host's own. Dies on a value that is
+# not a number, before anything has changed: `$((SECONDS + timeout))` on one is fatal under `set -u`.
+resolve_timeout() {
+    local timeout=${1:-$(ready_timeout)}
+
+    case $timeout in
+        '' | *[!0-9]*) die "--timeout takes seconds, not '${timeout}'" ;;
+    esac
+    printf '%s\n' "$timeout"
 }
 
 # How many times systemd has restarted the unit on its own, as a number whatever it answers.
@@ -269,8 +299,44 @@ clean_staging() {
 
 restart_service() {
     log "restarting ${SERVICE}"
+    clear_start_limit
     systemctl --user restart "$SERVICE"
 }
+
+# A binary that exits at once is restarted every RestartSec, and once systemd's start limit trips it
+# refuses every start with "Start request repeated too quickly", a rollback's included. The limit
+# stays for the restarts systemd makes on its own; a deliberate start clears it first.
+clear_start_limit() {
+    systemctl --user reset-failed "$SERVICE" 2>/dev/null || true
+}
+
+# What a .version file holds, with the whitespace around it removed and none inside: the binary reads
+# it the same way.
+version_in() {
+    local content
+    content=$(<"$1")
+    content="${content#"${content%%[![:space:]]*}"}"
+    printf '%s\n' "${content%"${content##*[![:space:]]}"}"
+}
+
+# The OpenSearch index a version is served from: uniprot_entries-2026-03 for 2026.03. Fails for a
+# version that makes no valid index name. The same rule as `index_name` in the binary's database
+# crate, which refuses such a version at startup; change both together.
+index_name() {
+    case $1 in
+        '' | [!0-9]* | *[!a-z0-9.-]*) return 1 ;;
+    esac
+    printf 'uniprot_entries-%s\n' "${1//./-}"
+}
+
+# The --uniprot-version to load a version with, for a release version, which is all load.sh takes.
+load_hint() {
+    [[ $1 =~ ^[0-9]{4}\.[0-9]{2}$ ]] && printf ' --uniprot-version %s' "${1//./-}"
+    return 0
+}
+
+# Whether the last `check` reached OpenSearch at all, for `start`, which will not start without it.
+OPENSEARCH_ANSWERED=false
 
 # Everything that has to be true before this host is asked to install anything.
 #
@@ -280,11 +346,12 @@ restart_service() {
 #
 # Prints key=value for a caller to read, and exits non-zero if anything is wrong.
 do_check() {
-    local from='' problems=0 warnings=0
+    local from='' index_override='' problems=0 warnings=0
 
     while [ $# -gt 0 ]; do
         case $1 in
             --from) [ $# -ge 2 ] || usage; from=$2; shift 2 ;;
+            --index) [ $# -ge 2 ] || usage; index_override=$2; shift 2 ;;
             *) usage ;;
         esac
     done
@@ -306,14 +373,15 @@ do_check() {
     local runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
     [ -d "$runtime" ] || fail "no ${runtime}; enable lingering for ${SERVICE_USER}"
 
-    local index='' variant='' port=''
+    local index='' variant='' port='' database=''
     if [ -r "$ENV_FILE" ]; then
         index=$(env_value INDEX_LOCATION "$ENV_FILE")
         variant=$(env_value VARIANT "$ENV_FILE")
         port=$(env_value PORT "$ENV_FILE")
+        database=$(env_value DATABASE_ADDRESS "$ENV_FILE")
 
-        [ -n "$index" ] || fail "INDEX_LOCATION is not set in ${ENV_FILE}"
-        [ -n "$(env_value DATABASE_ADDRESS "$ENV_FILE")" ] || fail "DATABASE_ADDRESS is not set"
+        [ -n "$index" ] || [ -n "$index_override" ] || fail "INDEX_LOCATION is not set in ${ENV_FILE}"
+        [ -n "$database" ] || fail "DATABASE_ADDRESS is not set"
         case $port in
             '') fail "PORT is not set" ;;
             *[!0-9]*) fail "PORT is '${port}', which is not a number" ;;
@@ -337,6 +405,9 @@ do_check() {
         fail "cannot read ${ENV_FILE}"
     fi
 
+    # A directory about to be served, checked by the same rules before anything points at it.
+    [ -z "$index_override" ] || index=$index_override
+
     # The index, which is the setting most often wrong and the slowest to find out about: without
     # this the service simply never answers and the deploy waits out its whole timeout.
     local index_version='-'
@@ -355,7 +426,7 @@ do_check() {
             for relative in $OPTIONAL_INDEX_FILES; do
                 [ -r "${index}/${relative}" ] || warn "${index}/${relative} is missing or unreadable; the service runs without it, but searches are slower"
             done
-            [ "$missing" -eq 0 ] && index_version=$(tr -d '[:space:]' < "${index}/.version")
+            [ "$missing" -eq 0 ] && index_version=$(version_in "${index}/.version")
         else
             fail "${index} is not a readable directory"
         fi
@@ -384,6 +455,28 @@ do_check() {
                 warn "${variant} needs $((needed / 1024 / 1024)) MiB resident and $((available / 1024 / 1024)) MiB is available; the kernel has to reclaim first"
             fi
         fi
+    fi
+
+    # The proteins of that version, in an index of their own, searched as /health/database does, so
+    # a closed index fails here too. OpenSearch not answering at all is only a warning, so a binary
+    # can still be deployed during an outage; `start` refuses it.
+    local opensearch_index='-' answered
+    OPENSEARCH_ANSWERED=false
+    if [ "$index_version" != '-' ] && ! opensearch_index=$(index_name "$index_version"); then
+        fail "${index}/.version holds '${index_version}', which names no OpenSearch index; the service will not start"
+        opensearch_index='-'
+    fi
+    if [ "$opensearch_index" != '-' ] && [ -n "$database" ]; then
+        # curl exits non-zero when nothing listens, and prints 000, or nothing at all.
+        answered=$(curl -s -o /dev/null -w '%{http_code}' --max-time "$OPENSEARCH_TIMEOUT" \
+            "${database%/}/${opensearch_index}/_search?size=0&terminate_after=1") || true
+        [ "${answered:-000}" = 000 ] || OPENSEARCH_ANSWERED=true
+        case ${answered:-000} in
+            200) ;;
+            000) warn "OpenSearch at ${database} does not answer, so whether ${opensearch_index} is there is unknown" ;;
+            404) fail "${opensearch_index} is not in OpenSearch; load its proteins with unipept-database's load.sh$(load_hint "$index_version")" ;;
+            *) fail "${opensearch_index} does not answer a search (HTTP ${answered}); is it closed?" ;;
+        esac
     fi
 
     # The service listens above 1024 and the load balancer reaches it on 80, so the redirect is as
@@ -447,6 +540,7 @@ do_check() {
     printf 'variant=%s\n' "${variant:-unknown}"
     printf 'port=%s\n' "${port:-unknown}"
     printf 'index_version=%s\n' "$index_version"
+    printf 'opensearch_index=%s\n' "$opensearch_index"
     printf 'ready_timeout=%s\n' "$(ready_timeout)"
     printf 'problems=%s\n' "$problems"
     printf 'warnings=%s\n' "$warnings"
@@ -470,13 +564,9 @@ do_deploy() {
         esac
     done
 
-    [ -n "$timeout" ] || timeout=$(ready_timeout)
-
-    # Before anything else: `$((SECONDS + timeout))` on a non-numeric value is fatal under `set -u`,
-    # and it is only reached after the binary has been swapped, where nothing would roll it back.
-    case $timeout in
-        '' | *[!0-9]*) die "--timeout takes seconds, not '${timeout}'" ;;
-    esac
+    # Before anything else: a bad value is only used after the binary has been swapped, where
+    # nothing would roll it back.
+    timeout=$(resolve_timeout "$timeout")
 
     do_check ${from:+--from "$from"} >/dev/null || die "this host is not ready; run 'deploy.sh check' to see why"
     prepare_user_manager
@@ -545,11 +635,7 @@ do_rollback() {
         esac
     done
 
-    [ -n "$timeout" ] || timeout=$(ready_timeout)
-
-    case $timeout in
-        '' | *[!0-9]*) die "--timeout takes seconds, not '${timeout}'" ;;
-    esac
+    timeout=$(resolve_timeout "$timeout")
 
     prepare_user_manager
     [ -f "$PREVIOUS" ] || die "no previous binary at $PREVIOUS"
@@ -582,6 +668,50 @@ rollback_to_previous() {
 
     # Only now, with the previous binary proven to serve, is the spare copy redundant.
     rm -f "$PREVIOUS"
+}
+
+do_stop() {
+    prepare_user_manager
+    log "stopping ${SERVICE}"
+    systemctl --user stop "$SERVICE"
+    log "stopped"
+}
+
+# Starts the stopped service on what its environment file names, and waits until it serves.
+do_start() {
+    local timeout='' port
+
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --timeout) [ $# -ge 2 ] || usage; timeout=$2; shift 2 ;;
+            *) usage ;;
+        esac
+    done
+
+    timeout=$(resolve_timeout "$timeout")
+    prepare_user_manager
+
+    # A running process would keep what it read when it started: `start` would change nothing.
+    case $(unit_state) in
+        active | activating | reloading) die "${SERVICE} is running; stop it first" ;;
+    esac
+
+    # Before the start, so a host whose index is missing or does not fit says so without a start
+    # that fails. The proteins have to answer: a start without them serves /health and nothing else.
+    do_check >/dev/null || die "this host is not ready; run 'deploy.sh check' to see why"
+    [ "$OPENSEARCH_ANSWERED" = true ] || die "OpenSearch does not answer; start it first"
+
+    log "starting ${SERVICE}"
+    clear_start_limit
+    systemctl --user start "$SERVICE" || die "systemd did not start ${SERVICE}"
+    wait_until_healthy "$timeout" || die "${SERVICE} does not answer /health"
+
+    # /health answers without OpenSearch, so the proteins are checked on their own.
+    port=$(env_value PORT "$ENV_FILE")
+    wait_for_http "http://127.0.0.1:${port}/health/database" "$DATABASE_READY_TIMEOUT" ||
+        die "${SERVICE} answers /health, but not /health/database: the OpenSearch index of its version does not answer"
+
+    log "started"
 }
 
 # What a binary calls itself, or `unknown` for one too old to answer --version, which is every
@@ -620,6 +750,8 @@ case $command in
     check) do_check "$@" ;;
     deploy) do_deploy "$@" ;;
     rollback) do_rollback "$@" ;;
+    stop) do_stop "$@" ;;
+    start) do_start "$@" ;;
     status) do_status "$@" ;;
     *) usage ;;
 esac

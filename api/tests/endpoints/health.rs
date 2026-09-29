@@ -6,7 +6,7 @@ use axum::{
 };
 use httpmock::MockServer;
 
-use crate::common::{SEARCH, offline_state, request_raw, test_state};
+use crate::common::{offline_state, request_raw, search, test_state};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn it_answers_empty_whenever_the_process_is_serving() {
@@ -42,7 +42,7 @@ async fn database_health_is_ok_when_the_index_of_the_version_answers() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.path(SEARCH).query_param("size", "0").query_param("terminate_after", "1");
+            when.path(search()).query_param("size", "0").query_param("terminate_after", "1");
             then.status(200).json_body(serde_json::json!({ "hits": { "hits": [] } }));
         })
         .await;
@@ -68,7 +68,7 @@ async fn database_health_is_unavailable_when_the_index_of_the_version_is_missing
         .await;
     server
         .mock_async(|when, then| {
-            when.path(SEARCH);
+            when.path(search());
             then.status(404).json_body(serde_json::json!({ "error": { "type": "index_not_found_exception" } }));
         })
         .await;

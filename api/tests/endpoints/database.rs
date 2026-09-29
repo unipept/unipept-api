@@ -63,13 +63,3 @@ pub fn taxon_of(accession: &str) -> u32 {
         .parse()
         .expect("the taxon column is numeric")
 }
-
-/// The mocks answer on the index the fixture's `.version` names, which is the one the state
-/// queries. Spelled out in `common` so a mock reads as a path; held to the fixture here.
-#[test]
-fn the_mocks_answer_on_the_index_the_fixture_names() {
-    let index = database::index_name(fixtures::VERSION).expect("the fixture version names an index");
-
-    assert_eq!(crate::common::MGET, format!("/{index}/_mget"));
-    assert_eq!(crate::common::SEARCH, format!("/{index}/_search"));
-}

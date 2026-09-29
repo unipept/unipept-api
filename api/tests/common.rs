@@ -23,10 +23,20 @@ use tempfile::TempDir;
 use tower::ServiceExt;
 use unipept_api::{AppState, middleware::normalize_path::NormalizePath, routes::create_app};
 
-/// The `_mget` and `_search` paths of the index the fixture's `.version` names, which every
-/// OpenSearch mock answers on. `the_mocks_answer_on_the_index_the_fixture_names` holds them to it.
-pub const MGET: &str = "/uniprot_entries-2026-09-fixtures/_mget";
-pub const SEARCH: &str = "/uniprot_entries-2026-09-fixtures/_search";
+/// The `_mget` path of the index the fixture's `.version` names, which every OpenSearch mock
+/// answers on.
+pub fn mget() -> String {
+    format!("/{}/_mget", fixture_index())
+}
+
+/// The `_search` path of that index.
+pub fn search() -> String {
+    format!("/{}/_search", fixture_index())
+}
+
+fn fixture_index() -> String {
+    database::index_name(fixtures::VERSION).expect("the fixture version names an index")
+}
 
 /// 50 MiB, the ceiling `create_router` installs.
 pub const BODY_LIMIT: usize = 50 * 1024 * 1024;

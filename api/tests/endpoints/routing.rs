@@ -6,7 +6,7 @@ use httpmock::{Method::POST, MockServer};
 use serde_json::{Value, json};
 
 use crate::{
-    common::{MGET, SEARCH, get_json, post_json},
+    common::{get_json, mget, post_json, search},
     database::{get_against, post_against, source, taxon_of}
 };
 
@@ -174,7 +174,7 @@ async fn get_and_post_answer_alike_against_a_cluster() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path(MGET);
+            when.method(POST).path(mget());
             then.status(200).json_body(json!({
                 "docs": fixtures::ACCESSIONS
                     .iter()
@@ -193,13 +193,13 @@ async fn get_and_post_answer_alike_against_a_cluster() {
     // Both search mocks match on the filter, so a request that lost it reaches no mock at all.
     server
         .mock_async(|when, then| {
-            when.method(POST).path(SEARCH).query_param("size", "0").body_includes("8501");
+            when.method(POST).path(search()).query_param("size", "0").body_includes("8501");
             then.status(200).json_body(json!({ "hits": { "total": { "value": 2 } } }));
         })
         .await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path(SEARCH).query_param("from", "0").body_includes("8501");
+            when.method(POST).path(search()).query_param("from", "0").body_includes("8501");
             then.status(200).json_body(json!({ "hits": { "hits": [
                 { "_source": { "uniprot_accession_number": "P00001" } },
                 { "_source": { "uniprot_accession_number": "P00003" } }

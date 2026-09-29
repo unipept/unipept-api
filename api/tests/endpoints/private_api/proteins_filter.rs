@@ -9,7 +9,7 @@ use httpmock::{Method::POST, MockServer};
 use serde_json::json;
 
 use crate::{
-    common::{SEARCH, request_raw, test_state},
+    common::{request_raw, search, test_state},
     database::get_against
 };
 
@@ -21,7 +21,7 @@ async fn the_protein_count_is_the_cluster_total() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path(SEARCH).query_param("size", "0");
+            when.method(POST).path(search()).query_param("size", "0");
             then.status(200).json_body(json!({ "hits": { "total": { "value": 4321 } } }));
         })
         .await;
@@ -42,7 +42,7 @@ async fn the_filtered_count_and_listing_both_reach_the_cluster() {
     let server = MockServer::start_async().await;
     let count = server
         .mock_async(|when, then| {
-            when.method(POST).path(SEARCH).query_param("size", "0").json_body_includes(
+            when.method(POST).path(search()).query_param("size", "0").json_body_includes(
                 r#"{ "track_total_hits": true, "query": { "bool": { "minimum_should_match": 1, "should": [
                            { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
                            { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
@@ -54,13 +54,17 @@ async fn the_filtered_count_and_listing_both_reach_the_cluster() {
         .await;
     let list = server
         .mock_async(|when, then| {
-            when.method(POST).path(SEARCH).query_param("from", "0").query_param("size", "2").json_body_includes(
-                r#"{ "query": { "bool": { "minimum_should_match": 1, "should": [
+            when.method(POST)
+                .path(search())
+                .query_param("from", "0")
+                .query_param("size", "2")
+                .json_body_includes(
+                    r#"{ "query": { "bool": { "minimum_should_match": 1, "should": [
                            { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
                            { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
                            { "term": { "taxon_id": 8501 } }
                          ] } } }"#
-            );
+                );
             then.status(200).json_body(json!({ "hits": { "hits": [
                 { "_source": { "uniprot_accession_number": "P00001" } },
                 { "_source": { "uniprot_accession_number": "P00003" } }
@@ -92,7 +96,7 @@ async fn an_end_below_start_is_rejected() {
     let server = MockServer::start_async().await;
     let mock = server
         .mock_async(|when, then| {
-            when.method(POST).path(SEARCH);
+            when.method(POST).path(search());
             then.status(200).json_body(json!({ "hits": { "hits": [] } }));
         })
         .await;
@@ -117,14 +121,14 @@ async fn the_last_page_of_the_browser_is_served() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path(SEARCH).query_param("size", "0");
+            when.method(POST).path(search()).query_param("size", "0");
             then.status(200).json_body(json!({ "hits": { "total": { "value": TOTAL } } }));
         })
         .await;
     let list = server
         .mock_async(|when, then| {
             when.method(POST)
-                .path(SEARCH)
+                .path(search())
                 .query_param("from", "0")
                 .query_param("size", "5")
                 .json_body_includes(r#"{ "sort": [ { "uniprot_accession_number": { "order": "desc" } } ] }"#);
@@ -156,7 +160,7 @@ async fn a_page_in_the_unreachable_middle_is_rejected() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path(SEARCH).query_param("size", "0");
+            when.method(POST).path(search()).query_param("size", "0");
             then.status(200).json_body(json!({ "hits": { "total": { "value": TOTAL } } }));
         })
         .await;
@@ -180,7 +184,7 @@ async fn the_last_page_inside_the_window_is_served() {
     let server = MockServer::start_async().await;
     let mock = server
         .mock_async(|when, then| {
-            when.method(POST).path(SEARCH).query_param("from", "9990").query_param("size", "10");
+            when.method(POST).path(search()).query_param("from", "9990").query_param("size", "10");
             then.status(200).json_body(json!({ "hits": { "hits": [
                 { "_source": { "uniprot_accession_number": "P00001" } }
             ] } }));
@@ -208,7 +212,7 @@ async fn the_listing_is_ordered_on_the_accession() {
     let mock = server
         .mock_async(|when, then| {
             when.method(POST)
-                .path(SEARCH)
+                .path(search())
                 .json_body_includes(r#"{ "sort": [ { "uniprot_accession_number": { "order": "asc" } } ] }"#);
             then.status(200).json_body(json!({ "hits": { "hits": [] } }));
         })

@@ -17,6 +17,14 @@ use serde_json::json;
 /// The version the client is built for, and so the index every mock answers on.
 const VERSION: &str = "2026.03";
 
+fn mget() -> String {
+    format!("/{}/_mget", database::index_name(VERSION).unwrap())
+}
+
+fn search() -> String {
+    format!("/{}/_search", database::index_name(VERSION).unwrap())
+}
+
 /// The live protein count, which is what makes a last-page request a deep one.
 const TOTAL: usize = 149_655_504;
 
@@ -66,9 +74,7 @@ async fn accessions_are_fetched_by_mget_and_parsed() {
     let server = MockServer::start_async().await;
     let mock = server
         .mock_async(|when, then| {
-            when.method(POST)
-                .path("/uniprot_entries-2026-03/_mget")
-                .json_body_includes(r#"{ "docs": [ { "_id": "P00001" } ] }"#);
+            when.method(POST).path(mget()).json_body_includes(r#"{ "docs": [ { "_id": "P00001" } ] }"#);
             then.status(200).json_body(json!({
                 "docs": [ { "_source": source("P00001", 8501) } ]
             }));
@@ -94,7 +100,7 @@ async fn accessions_are_requested_in_the_order_they_are_given() {
     let mock = server
         .mock_async(|when, then| {
             when.method(POST)
-                .path("/uniprot_entries-2026-03/_mget")
+                .path(mget())
                 .json_body(json!({ "docs": [ { "_id": "P00003" }, { "_id": "P00001" } ] }));
             then.status(200).json_body(json!({
                 "docs": [ { "_source": source("P00003", 8502) }, { "_source": source("P00001", 8501) } ]
@@ -117,7 +123,7 @@ async fn get_accessions_map_keys_entries_by_accession() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries-2026-03/_mget");
+            when.method(POST).path(mget());
             then.status(200).json_body(json!({
                 "docs": [ { "_source": source("P00001", 8501) }, { "_source": source("P00003", 8502) } ]
             }));
@@ -140,7 +146,7 @@ async fn a_document_without_a_source_is_skipped() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries-2026-03/_mget");
+            when.method(POST).path(mget());
             then.status(200).json_body(json!({
                 "docs": [ { "_id": "P99999", "found": false }, { "_source": source("P00001", 8501) } ]
             }));
@@ -160,7 +166,7 @@ async fn a_non_success_response_is_an_error() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries-2026-03/_mget");
+            when.method(POST).path(mget());
             then.status(500).body("index is closed");
         })
         .await;
@@ -180,7 +186,7 @@ async fn an_empty_filter_counts_everything_with_match_all() {
     let mock = server
         .mock_async(|when, then| {
             when.method(POST)
-                .path("/uniprot_entries-2026-03/_search")
+                .path(search())
                 .query_param("size", "0")
                 .json_body_includes(r#"{ "track_total_hits": true, "query": { "match_all": {} } }"#);
             then.status(200).json_body(json!({ "hits": { "total": { "value": 4321 } } }));
@@ -199,15 +205,12 @@ async fn a_text_filter_matches_on_name_and_accession() {
     let server = MockServer::start_async().await;
     let mock = server
         .mock_async(|when, then| {
-            when.method(POST)
-                .path("/uniprot_entries-2026-03/_search")
-                .query_param("size", "0")
-                .json_body_includes(
-                    r#"{ "track_total_hits": true, "query": { "bool": { "minimum_should_match": 1, "should": [
+            when.method(POST).path(search()).query_param("size", "0").json_body_includes(
+                r#"{ "track_total_hits": true, "query": { "bool": { "minimum_should_match": 1, "should": [
                    { "wildcard": { "name": { "value": "*croc*", "case_insensitive": true } } },
                    { "prefix": { "uniprot_accession_number": { "value": "croc", "case_insensitive": true } } }
                  ] } } }"#
-                );
+            );
             then.status(200).json_body(json!({ "hits": { "total": { "value": 2 } } }));
         })
         .await;
@@ -230,16 +233,13 @@ async fn a_numeric_filter_also_matches_the_taxon_id() {
             // The whole `should` array is spelled out: a partial match compares arrays as a unit, and
             // the point of this test is that the numeric clause is *added* to the two text clauses
             // rather than replacing them.
-            when.method(POST)
-                .path("/uniprot_entries-2026-03/_search")
-                .query_param("size", "0")
-                .json_body_includes(
-                    r#"{ "track_total_hits": true, "query": { "bool": { "minimum_should_match": 1, "should": [
+            when.method(POST).path(search()).query_param("size", "0").json_body_includes(
+                r#"{ "track_total_hits": true, "query": { "bool": { "minimum_should_match": 1, "should": [
                    { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
                    { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
                    { "term": { "taxon_id": 8501 } }
                  ] } } }"#
-                );
+            );
             then.status(200).json_body(json!({ "hits": { "total": { "value": 1 } } }));
         })
         .await;
@@ -259,10 +259,7 @@ async fn pagination_converts_start_and_end_into_from_and_size() {
     let server = MockServer::start_async().await;
     let mock = server
         .mock_async(|when, then| {
-            when.method(POST)
-                .path("/uniprot_entries-2026-03/_search")
-                .query_param("from", "10")
-                .query_param("size", "5");
+            when.method(POST).path(search()).query_param("from", "10").query_param("size", "5");
             then.status(200).json_body(json!({
                 "hits": { "hits": [
                     { "_source": { "uniprot_accession_number": "P00001" } },
@@ -286,7 +283,7 @@ async fn canned_documents_cover_the_corpus_accessions() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries-2026-03/_mget");
+            when.method(POST).path(mget());
             then.status(200).json_body(json!({
                 "docs": fixtures::ACCESSIONS.iter().map(|a| json!({ "_source": source(a, 8501) })).collect::<Vec<_>>()
             }));
@@ -313,7 +310,7 @@ async fn a_numeric_filter_lists_by_a_term_clause() {
     let mock = server
         .mock_async(|when, then| {
             when.method(POST)
-                .path("/uniprot_entries-2026-03/_search")
+                .path(search())
                 .query_param("from", "0")
                 .query_param("size", "2")
                 .json_body_includes(
@@ -345,7 +342,7 @@ async fn a_text_filter_lists_without_a_taxon_clause() {
     let server = MockServer::start_async().await;
     let mock = server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries-2026-03/_search").json_body_includes(
+            when.method(POST).path(search()).json_body_includes(
                 r#"{ "query": { "bool": { "minimum_should_match": 1, "should": [
                        { "wildcard": { "name": { "value": "*croc*", "case_insensitive": true } } },
                        { "prefix": { "uniprot_accession_number": { "value": "croc", "case_insensitive": true } } }
@@ -371,10 +368,7 @@ async fn an_end_below_start_is_an_empty_page_not_an_underflow() {
     let server = MockServer::start_async().await;
     let mock = server
         .mock_async(|when, then| {
-            when.method(POST)
-                .path("/uniprot_entries-2026-03/_search")
-                .query_param("from", "10")
-                .query_param("size", "0");
+            when.method(POST).path(search()).query_param("from", "10").query_param("size", "0");
             then.status(200).json_body(json!({ "hits": { "hits": [] } }));
         })
         .await;
@@ -397,16 +391,13 @@ async fn an_end_past_the_last_entry_is_clamped_to_it() {
     let server = MockServer::start_async().await;
     let count = server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries-2026-03/_search").query_param("size", "0");
+            when.method(POST).path(search()).query_param("size", "0");
             then.status(200).json_body(json!({ "hits": { "total": { "value": 3 } } }));
         })
         .await;
     let list = server
         .mock_async(|when, then| {
-            when.method(POST)
-                .path("/uniprot_entries-2026-03/_search")
-                .query_param("from", "0")
-                .query_param("size", "3");
+            when.method(POST).path(search()).query_param("from", "0").query_param("size", "3");
             then.status(200).json_body(json!({ "hits": { "hits": [
                 { "_source": { "uniprot_accession_number": "P00003" } },
                 { "_source": { "uniprot_accession_number": "P00002" } },
@@ -435,7 +426,7 @@ async fn the_count_and_the_listing_select_the_same_set() {
     let server = MockServer::start_async().await;
     let shared = server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries-2026-03/_search").json_body_includes(
+            when.method(POST).path(search()).json_body_includes(
                 r#"{ "query": { "bool": { "minimum_should_match": 1, "should": [
                        { "wildcard": { "name": { "value": "*8501*", "case_insensitive": true } } },
                        { "prefix": { "uniprot_accession_number": { "value": "8501", "case_insensitive": true } } },
@@ -467,14 +458,14 @@ async fn the_last_page_is_reached_from_the_other_end() {
 
     let count = server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries-2026-03/_search").query_param("size", "0");
+            when.method(POST).path(search()).query_param("size", "0");
             then.status(200).json_body(json!({ "hits": { "total": { "value": TOTAL } } }));
         })
         .await;
     let list = server
         .mock_async(|when, then| {
             when.method(POST)
-                .path("/uniprot_entries-2026-03/_search")
+                .path(search())
                 // The window starts at the very end, and the order runs the other way.
                 .query_param("from", "0")
                 .query_param("size", "5")
@@ -508,13 +499,13 @@ async fn a_page_in_the_middle_is_refused() {
 
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries-2026-03/_search").query_param("size", "0");
+            when.method(POST).path(search()).query_param("size", "0");
             then.status(200).json_body(json!({ "hits": { "total": { "value": TOTAL } } }));
         })
         .await;
     let list = server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries-2026-03/_search").query_param("from", "74827747");
+            when.method(POST).path(search()).query_param("from", "74827747");
             then.status(200).json_body(json!({ "hits": { "hits": [] } }));
         })
         .await;
@@ -537,13 +528,13 @@ async fn a_shallow_page_does_not_count_first() {
     let server = MockServer::start_async().await;
     let count = server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries-2026-03/_search").query_param("size", "0");
+            when.method(POST).path(search()).query_param("size", "0");
             then.status(200).json_body(json!({ "hits": { "total": { "value": TOTAL } } }));
         })
         .await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries-2026-03/_search").query_param("size", "5");
+            when.method(POST).path(search()).query_param("size", "5");
             then.status(200).json_body(json!({ "hits": { "hits": [] } }));
         })
         .await;

@@ -51,8 +51,6 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
     let mappings = format!("{}/mapping.bin", index_location);
     let kmer_table = format!("{}/kmer_table.bin", index_location);
 
-    let database = Database::try_from_url(database_address)?;
-
     let datastore = DataStore::try_from_files(
         &version,
         &sampledata,
@@ -65,6 +63,11 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
     )?;
 
     let index = Index::try_from_files(&sa, &proteins, &mappings, &kmer_table)?;
+
+    // After the datastore, whose `.version` names the index: the proteins come from the release the
+    // files do, and move to another one only when this process restarts on other files.
+    let database = Database::try_from_url(database_address, datastore.version())?;
+    tracing::info!(index = database.index(), "querying opensearch");
 
     let app_state = AppState {
         datastore: Arc::new(datastore),

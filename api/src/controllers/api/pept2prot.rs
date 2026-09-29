@@ -67,8 +67,6 @@ async fn handler(
 ) -> Result<Vec<ProtInformation>, ApiError> {
     let input = sanitize_peptides(input);
 
-    let connection = database.get_conn();
-
     let distinct = distinct_peptides(&input);
 
     let result = tokio::task::block_in_place(|| index.analyse(&distinct, equate_il, tryptic, Some(cutoff)));
@@ -89,7 +87,7 @@ async fn handler(
         return Ok(vec![]);
     }
 
-    let accessions_map = get_accessions_map(connection, &accession_numbers).await?;
+    let accessions_map = get_accessions_map(&database, &accession_numbers).await?;
 
     let taxon_store = datastore.taxon_store();
 

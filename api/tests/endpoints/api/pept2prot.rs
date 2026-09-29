@@ -15,7 +15,7 @@ use httpmock::{Method::POST, MockServer};
 use serde_json::json;
 
 use crate::{
-    common::{request_raw, test_state},
+    common::{MGET, request_raw, test_state},
     database::{get_against, source, taxon_of}
 };
 
@@ -24,7 +24,7 @@ async fn cluster_holding_the_corpus() -> MockServer {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_mget");
+            when.method(POST).path(MGET);
             then.status(200).json_body(json!({
                 // The taxon comes from the corpus rather than a constant, so a row attributing
                 // one species' protein to another cannot pass.
@@ -106,7 +106,7 @@ async fn a_protein_the_cluster_cannot_resolve_is_left_out() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_mget");
+            when.method(POST).path(MGET);
             then.status(200).json_body(json!({ "docs": [] }));
         })
         .await;

@@ -8,7 +8,7 @@ use httpmock::{Method::POST, MockServer};
 use serde_json::json;
 
 use crate::{
-    common::{request_raw, test_state},
+    common::{MGET, request_raw, test_state},
     database::{get_against, source}
 };
 
@@ -17,7 +17,7 @@ async fn proteins_returns_what_the_cluster_holds() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_mget");
+            when.method(POST).path(MGET);
             then.status(200)
                 .json_body(json!({ "docs": [ { "_source": source("P00001", 8501, "Protein one", "") } ] }));
         })
@@ -39,7 +39,7 @@ async fn an_accession_the_cluster_lacks_does_not_lose_the_others() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_mget");
+            when.method(POST).path(MGET);
             then.status(200).json_body(json!({ "docs": [
                 { "_id": "P99999", "found": false },
                 { "_source": source("P00001", 8501, "Protein one", "") }
@@ -100,7 +100,7 @@ async fn the_whole_corpus_can_be_requested_in_one_batch() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_mget");
+            when.method(POST).path(MGET);
             then.status(200).json_body(json!({
                 "docs": fixtures::ACCESSIONS.iter().map(|a| json!({ "_source": source(a, 8501, "P", "") }))
                     .collect::<Vec<_>>()

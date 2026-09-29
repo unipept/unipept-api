@@ -16,8 +16,20 @@ should use `/api/v2`.
 
 ### Service endpoints
 * `/health` answers 200 whenever the process is serving, for a load balancer to poll.
-* `/health/database` answers 200 when OpenSearch answers and 503 when it does not, so an
-  OpenSearch outage can be told apart from the API itself being down.
+* `/health/database` answers 200 when the OpenSearch index of the served version answers, and 503
+  when it does not, so an OpenSearch outage, or a release whose proteins were never loaded, can be
+  told apart from the API itself being down.
+
+## Which proteins it serves
+
+The protein metadata is in OpenSearch, one index per UniProt release, loaded by
+[unipept-database](https://github.com/unipept/unipept-database)'s `load.sh`. The API queries the
+index of the release its files are from: `.version` beside the suffix array says `2026.03`, so it
+queries `uniprot_entries-2026-03`. It never follows the `uniprot_entries` alias.
+
+The files and the proteins therefore change together, when the process restarts on another
+`INDEX_LOCATION`, and never one without the other. A release whose index is missing fails
+`/health/database`; a `.version` that makes no valid index name stops the process at startup.
 
 ## Choosing a storage backend
 

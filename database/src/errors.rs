@@ -18,6 +18,8 @@ pub enum DatabaseError {
         window = MAX_RESULT_WINDOW
     )]
     WindowUnreachable { start: usize, end: usize, total: usize },
+    #[error("the UniProt version {0:?} names no OpenSearch index; expected one like 2026.03")]
+    InvalidVersion(String),
     #[error("{0}")]
     GeneralError(String)
 }

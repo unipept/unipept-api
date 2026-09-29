@@ -18,12 +18,20 @@ mod models;
 
 const OPENSEARCH_TIMEOUT_DURATION: u64 = 120;
 
+/// An OpenSearch client, and the index of the UniProt version this process serves.
 pub struct Database {
-    client: OpenSearch
+    client: OpenSearch,
+    index: String
 }
 
 impl Database {
-    pub fn try_from_url(url: &str) -> Result<Self, DatabaseError> {
+    /// A client for the OpenSearch at `url`, querying the index of `uniprot_version`.
+    ///
+    /// The version is the one in the `.version` beside the suffix array, so the proteins always
+    /// come from the release the files do. Each release is loaded into an index of its own, and
+    /// which one this process queries changes only when it restarts on other files.
+    pub fn try_from_url(url: &str, uniprot_version: &str) -> Result<Self, DatabaseError> {
+        let index = index_name(uniprot_version)?;
         let url = Url::parse(url)?;
         let conn_pool = SingleNodeConnectionPool::new(url);
         let transport = TransportBuilder::new(conn_pool)
@@ -31,21 +39,51 @@ impl Database {
             .disable_proxy()
             .build()?;
         let client = OpenSearch::new(transport);
-        Ok(Self { client })
+        Ok(Self { client, index })
     }
 
-    pub fn get_conn(&self) -> &OpenSearch {
-        &self.client
+    /// The index this process queries.
+    pub fn index(&self) -> &str {
+        &self.index
     }
 }
 
-/// Checks that OpenSearch answers, without asking it for anything.
+/// The index a UniProt version is loaded into, as unipept-database's `load.sh` names it:
+/// `uniprot_entries-2026-03` for the `2026.03` a `.version` file holds.
+///
+/// Refuses a version that would not make a valid index name, so a malformed `.version` stops the
+/// process at startup rather than turning every protein query into an error.
+pub fn index_name(uniprot_version: &str) -> Result<String, DatabaseError> {
+    let version = uniprot_version.trim();
+    let valid = version.starts_with(|c: char| c.is_ascii_digit())
+        && version.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-');
+
+    if !valid {
+        return Err(DatabaseError::InvalidVersion(version.to_string()));
+    }
+
+    Ok(format!("{INDEX_PREFIX}{}", version.replace('.', "-")))
+}
+
+/// What every index name starts with, the version following it.
+const INDEX_PREFIX: &str = "uniprot_entries-";
+
+/// Checks that the index of this process's version answers a search.
+///
+/// A search rather than a ping, because a cluster that is up can still lack the index, or hold it
+/// closed, and either fails every protein query. One document is enough to answer.
 ///
 /// # Returns
-/// * `Ok(())` if OpenSearch answered with a success status
+/// * `Ok(())` if the index answered with a success status
 /// * `DatabaseError` if it answered with a failure status, or could not be reached at all
-pub async fn ping(client: &OpenSearch) -> Result<(), DatabaseError> {
-    let response = client.ping().send().await?;
+pub async fn ping(database: &Database) -> Result<(), DatabaseError> {
+    let response = database
+        .client
+        .search(SearchParts::Index(&[database.index()]))
+        .size(0)
+        .terminate_after(1)
+        .send()
+        .await?;
 
     if !response.status_code().is_success() {
         return Err(GeneralError(response.text().await?));
@@ -57,7 +95,7 @@ pub async fn ping(client: &OpenSearch) -> Result<(), DatabaseError> {
 /// Retrieves protein information from the database for a given list of UniProt accession IDs
 ///
 /// # Arguments
-/// * `conn` - Database connection handle
+/// * `database` - the client, and the index to query
 /// * `accessions` - UniProt accession IDs to retrieve data for, in the order the answer should
 ///   take. An id the database does not hold is left out rather than reported. Deduplicate before
 ///   calling: an id given twice is asked for twice and answered twice, where a set could not have
@@ -67,7 +105,7 @@ pub async fn ping(client: &OpenSearch) -> Result<(), DatabaseError> {
 /// * Vector of `UniprotEntry` records containing protein info from the database, in the order the
 ///   accessions were given
 /// * `DatabaseError` if the database operation fails
-pub async fn get_accessions(client: &OpenSearch, accessions: &[String]) -> Result<Vec<UniprotEntry>, DatabaseError> {
+pub async fn get_accessions(database: &Database, accessions: &[String]) -> Result<Vec<UniprotEntry>, DatabaseError> {
     if accessions.is_empty() {
         return Ok(vec![]);
     }
@@ -78,7 +116,7 @@ pub async fn get_accessions(client: &OpenSearch, accessions: &[String]) -> Resul
 
     let body = json!({ "docs": docs });
 
-    let response = client.mget(opensearch::MgetParts::Index("uniprot_entries")).body(body).send().await?;
+    let response = database.client.mget(opensearch::MgetParts::Index(database.index())).body(body).send().await?;
 
     if response.status_code().is_success() {
         let response_body: serde_json::Value = response.json().await?;
@@ -102,7 +140,7 @@ pub async fn get_accessions(client: &OpenSearch, accessions: &[String]) -> Resul
 /// Gets protein information as a map with UniProt accession IDs as keys and UniprotEntry objects as values
 ///
 /// # Arguments
-/// * `conn` - Database connection handle
+/// * `database` - the client, and the index to query
 /// * `accessions` - UniProt accession IDs to retrieve data for
 ///
 /// # Returns
@@ -112,10 +150,10 @@ pub async fn get_accessions(client: &OpenSearch, accessions: &[String]) -> Resul
 /// This function returns the same protein information as `get_accessions()` but organized as a lookup map
 /// instead of a vector, allowing direct access to entries by their accession ID.
 pub async fn get_accessions_map(
-    client: &OpenSearch,
+    database: &Database,
     accessions: &[String]
 ) -> Result<HashMap<String, UniprotEntry>, DatabaseError> {
-    Ok(get_accessions(client, accessions)
+    Ok(get_accessions(database, accessions)
         .await?
         .into_iter()
         .map(|entry| (entry.uniprot_accession_number.clone(), entry))
@@ -180,14 +218,15 @@ fn entry_query(filter: &str) -> serde_json::Value {
 ///
 /// `track_total_hits` is what makes this exact rather than capped at 10,000, which the deep-paging
 /// arithmetic in `get_accessions_by_filter` depends on.
-pub async fn get_accessions_count_by_filter(client: &OpenSearch, filter: String) -> Result<u32, DatabaseError> {
+pub async fn get_accessions_count_by_filter(database: &Database, filter: String) -> Result<u32, DatabaseError> {
     let body = json!({
         "query": entry_query(&filter),
         "track_total_hits": true
     });
 
-    let response = client
-        .search(SearchParts::Index(&["uniprot_entries"]))
+    let response = database
+        .client
+        .search(SearchParts::Index(&[database.index()]))
         .size(0) // We only need count, no actual documents
         .body(body)
         .send()
@@ -227,7 +266,7 @@ fn as_window_bound(value: usize) -> i64 {
 ///
 /// `from + size` must stay inside `MAX_RESULT_WINDOW`; the caller is what guarantees that.
 async fn search_window(
-    client: &OpenSearch,
+    database: &Database,
     filter: &str,
     from: usize,
     size: usize,
@@ -239,8 +278,9 @@ async fn search_window(
         "sort": [{ "uniprot_accession_number": { "order": order } }]
     });
 
-    let response = client
-        .search(SearchParts::Index(&["uniprot_entries"]))
+    let response = database
+        .client
+        .search(SearchParts::Index(&[database.index()]))
         .from(as_window_bound(from))
         .size(as_window_bound(size))
         .body(body)
@@ -267,7 +307,7 @@ async fn search_window(
 /// Gets UniProt accession IDs from the database that match the given filter criteria
 ///
 /// # Arguments
-/// * `client` - Database connection handle
+/// * `database` - the client, and the index to query
 /// * `filter` - String to filter entries by. If empty, returns unfiltered results
 /// * `start` - Starting index for pagination
 /// * `end` - Ending index for pagination
@@ -289,7 +329,7 @@ async fn search_window(
 /// The table this serves offers first, previous, next and last, and no way to jump to a page — so
 /// the middle is not somewhere a client can land in one step, only somewhere it can walk to.
 pub async fn get_accessions_by_filter(
-    client: &OpenSearch,
+    database: &Database,
     filter: String,
     start: usize,
     end: usize
@@ -297,13 +337,13 @@ pub async fn get_accessions_by_filter(
     // Inside the window, so the cluster answers it as asked. `end` is `from + size`, which is the
     // bound OpenSearch applies.
     if end <= MAX_RESULT_WINDOW {
-        return search_window(client, &filter, start, end.saturating_sub(start), false).await;
+        return search_window(database, &filter, start, end.saturating_sub(start), false).await;
     }
 
     // Past it, so how far the page sits from the end decides whether it can be reached at all, and
     // that needs the size of the result set. One extra count, on a page a client reaches by asking
     // for it rather than by walking there.
-    let total = get_accessions_count_by_filter(client, filter.clone()).await? as usize;
+    let total = get_accessions_count_by_filter(database, filter.clone()).await? as usize;
 
     // A window running past the last entry asks for what there is, as it does inside the window.
     let end = end.min(total);
@@ -317,7 +357,7 @@ pub async fn get_accessions_by_filter(
         return Err(DatabaseError::WindowUnreachable { start, end, total });
     }
 
-    let mut page = search_window(client, &filter, total - end, end - start, true).await?;
+    let mut page = search_window(database, &filter, total - end, end - start, true).await?;
 
     // Read back into the ascending order the listing is served in.
     page.reverse();

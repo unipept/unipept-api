@@ -4,7 +4,10 @@ use axum::http::StatusCode;
 use httpmock::{Method::POST, MockServer};
 use serde_json::json;
 
-use crate::database::{get_against, source};
+use crate::{
+    common::MGET,
+    database::{get_against, source}
+};
 
 /// `protinfo` is the first endpoint to compose two halves of the state: the cluster supplies the
 /// protein, the datastore names its taxon and expands its annotations.
@@ -13,7 +16,7 @@ async fn protinfo_joins_the_cluster_to_the_datastore() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_mget");
+            when.method(POST).path(MGET);
             then.status(200).json_body(json!({ "docs": [
                 { "_source": source("P00001", 8501, "Protein one", "EC:1.1.1.1;GO:0009279;IPR:IPR016364") }
             ] }));
@@ -37,7 +40,7 @@ async fn domains_groups_the_annotations_by_namespace() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_mget");
+            when.method(POST).path(MGET);
             then.status(200).json_body(json!({ "docs": [
                 { "_source": source("P00001", 8501, "Protein one", "EC:1.1.1.1;GO:0009279;IPR:IPR016364") }
             ] }));
@@ -66,7 +69,7 @@ async fn extra_and_names_choose_how_much_comes_back() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_mget");
+            when.method(POST).path(MGET);
             then.status(200).json_body(json!({ "docs": [
                 { "_source": source("P00001", 8501, "Protein one", "EC:1.1.1.1") }
             ] }));
@@ -88,7 +91,7 @@ async fn an_unresolvable_accession_yields_no_row() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(POST).path("/uniprot_entries/_mget");
+            when.method(POST).path(MGET);
             then.status(200).json_body(json!({ "docs": [] }));
         })
         .await;
@@ -110,7 +113,7 @@ async fn results_follow_the_order_of_the_input() {
     server
         .mock_async(|when, then| {
             when.method(POST)
-                .path("/uniprot_entries/_mget")
+                .path(MGET)
                 .json_body(json!({ "docs": [ { "_id": "P00003" }, { "_id": "P00001" } ] }));
             then.status(200).json_body(json!({ "docs": [
                 { "_source": source("P00003", 8502, "Protein three", "EC:1.1.1.1") },

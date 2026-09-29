@@ -31,9 +31,8 @@ async fn count_handler(
     State(AppState { database, .. }): State<AppState>,
     ProteinCountParameters { filter }: ProteinCountParameters
 ) -> Result<ProteinCountResult, ApiError> {
-    let connection = database.get_conn();
     Ok(ProteinCountResult {
-        count: get_accessions_count_by_filter(connection, filter).await?
+        count: get_accessions_count_by_filter(&database, filter).await?
     })
 }
 
@@ -45,8 +44,7 @@ async fn filter_handler(
         return Err(ApiError::InvalidParameter(format!("end ({end}) must be at least start ({start})")));
     }
 
-    let connection = database.get_conn();
-    Ok(get_accessions_by_filter(connection, filter, start, end).await?)
+    Ok(get_accessions_by_filter(&database, filter, start, end).await?)
 }
 
 generate_handlers!(

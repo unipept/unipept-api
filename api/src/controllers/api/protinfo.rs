@@ -57,9 +57,7 @@ async fn handler(
     // Each accession once, in first-appearance order, which is the order the answer takes.
     let input: Vec<String> = sanitize_proteins(input).into_iter().unique().collect();
 
-    let connection = database.get_conn();
-
-    let entries = get_accessions(connection, &input).await?;
+    let entries = get_accessions(&database, &input).await?;
 
     let ec_store = datastore.ec_store();
     let go_store = datastore.go_store();

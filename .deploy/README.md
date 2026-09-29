@@ -15,7 +15,7 @@ holding copies.
 | `server/unipept-api.service` | systemd **user** unit, installed at `~unipept/.config/systemd/user/` |
 | `server/unipept-api.env.example` | per-host configuration, installed at `/opt/unipept-api/etc/unipept-api.env` |
 | `server/install.sh` | prepares a host once. The only step that needs root |
-| `server/deploy.sh` | installs or puts back a binary on one server |
+| `server/deploy.sh` | installs or puts back a binary on one server, or restarts it on another database |
 
 ## Deploying
 
@@ -26,6 +26,31 @@ One server, on that server, as the `unipept` user:
 /opt/unipept-api/lib/deploy.sh deploy --version v2.6.0
 /opt/unipept-api/lib/deploy.sh rollback
 ```
+
+## Serving another database
+
+The API serves the release its files are from: `INDEX_LOCATION` in the environment file names the
+suffix array, and the `.version` beside it names the OpenSearch index of its proteins,
+`uniprot_entries-2026-03` for `2026.03`. The process reads both when it starts, so the files and the
+proteins change together, on a restart, and never one without the other. Building a release,
+copying it to a server and loading its proteins is
+[unipept-database](https://github.com/unipept/unipept-database)'s part; this repository only
+restarts the service on it.
+
+```bash
+/opt/unipept-api/lib/deploy.sh check --index /mnt/data/uniprot-2026-03/suffix-array   # would it serve?
+/opt/unipept-api/lib/deploy.sh restart               # serve what the environment file names now
+```
+
+`check --index` checks a directory by the rules `check` applies to `INDEX_LOCATION`, before anything
+points the service at it: its files, whether the variant fits them in memory, and whether the
+OpenSearch index of its version is there and open. `restart` runs `check` first and refuses a host
+that fails it, so the process serving the old release keeps serving it. It then restarts the unit
+and waits for `/health` and `/health/database`. It changes no binary, so it undoes nothing:
+point `INDEX_LOCATION` back and restart again to go back.
+
+`check` warns rather than fails when OpenSearch does not answer at all, so a binary can still be
+deployed during an outage. `/health/database` reports the outage itself.
 
 On the load balancer, once:
 

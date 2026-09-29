@@ -171,8 +171,8 @@ wait_until_healthy() {
             return 1
         fi
 
-        # And the state for the case the count cannot show: a unit that did reach its start limit
-        # has given up, and is failed with nothing running.
+        # And the state for the case the count cannot show: a unit that stopped on its own, or one
+        # installed before it had no start limit and reached it, is failed with nothing running.
         state=$(unit_state)
         case $state in
             failed | inactive)

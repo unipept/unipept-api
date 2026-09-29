@@ -23,6 +23,11 @@
 [Unit]
 Description=Unipept API Server
 Documentation=https://github.com/unipept/unipept-api/wiki/Deploying-the-Unipept-API
+# No start rate limit. A binary that exits at once is restarted every RestartSec, and once systemd's
+# limit trips it refuses every start, the deliberate one of a rollback or a restart included, with
+# "Start request repeated too quickly". Restart=on-failure every five seconds is not a loop worth
+# that refusal.
+StartLimitIntervalSec=0
 
 [Service]
 # Type=exec reports a failed exec as a failed start.

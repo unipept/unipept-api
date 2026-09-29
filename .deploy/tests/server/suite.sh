@@ -178,6 +178,9 @@ check "names the file"  "$(grep -c 'kmer_table.bin is missing' /tmp/c1k.log)" "1
 check "index_version"   "$(sed -n 's/^index_version=//p' /tmp/c1k.log)" "2026.09-test"
 mv /srv/kmer_table.bin.away /srv/index/kmer_table.bin
 
+section "the unit has no start limit, so a deliberate start is never refused"
+check "StartLimitIntervalUSec" "$(as_user 'systemctl --user show -p StartLimitIntervalUSec --value unipept-api')" "0"
+
 section "each failure on its own"
 # A missing index file.
 mv /srv/index/mapping.bin /srv/mapping.bin.away

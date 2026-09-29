@@ -32,25 +32,26 @@ One server, on that server, as the `unipept` user:
 The API serves the release its files are from: `INDEX_LOCATION` in the environment file names the
 suffix array, and the `.version` beside it names the OpenSearch index of its proteins,
 `uniprot_entries-2026-03` for `2026.03`. The process reads both when it starts, so the files and the
-proteins change together, on a restart, and never one without the other. Building a release,
-copying it to a server and loading its proteins is
-[unipept-database](https://github.com/unipept/unipept-database)'s part; this repository only
-restarts the service on it.
+proteins change together and never one without the other. Building a release, copying it to a
+server, loading its proteins and switching to it is
+[unipept-database](https://github.com/unipept/unipept-database)'s part. It uses these:
 
 ```bash
 /opt/unipept-api/lib/deploy.sh check --index /mnt/data/uniprot-2026-03/suffix-array   # would it serve?
-/opt/unipept-api/lib/deploy.sh restart               # serve what the environment file names now
+/opt/unipept-api/lib/deploy.sh stop
+/opt/unipept-api/lib/deploy.sh start                 # on what the environment file names now
 ```
 
 `check --index` checks a directory by the rules `check` applies to `INDEX_LOCATION`, before anything
 points the service at it: its files, whether the variant fits them in memory, and whether the
-OpenSearch index of its version is there and open. `restart` runs `check` first and refuses a host
-that fails it, so the process serving the old release keeps serving it. It then restarts the unit
-and waits for `/health` and `/health/database`. It changes no binary, so it undoes nothing:
-point `INDEX_LOCATION` back and restart again to go back.
+OpenSearch index of its version is there and open. `start` refuses a service that is still running,
+since it would keep what it read when it started, and runs `check` first: a host that fails it, or
+whose OpenSearch does not answer at all, is not started. It then waits for `/health` and
+`/health/database`. Neither changes a binary, so neither undoes anything; going back is for whatever
+changed `INDEX_LOCATION`.
 
-`check` warns rather than fails when OpenSearch does not answer at all, so a binary can still be
-deployed during an outage. `/health/database` reports the outage itself.
+`check` on its own only warns when OpenSearch does not answer, so a binary can still be deployed
+during an outage. `/health/database` reports the outage itself.
 
 On the load balancer, once:
 

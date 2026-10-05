@@ -13,8 +13,10 @@
 # Flow:
 #   1. Check that every command it uses is installed, that this runs as root, and that the operator
 #      account exists.
-#   2. Install rollout.sh, loadbalancer/haproxy.sh and lib.sh in /opt/unipept-rollout, in the shape
-#      of the checkout, because rollout.sh resolves haproxy.sh relative to itself.
+#   2. Take the rollout lock, so no rollout runs from the files while they are replaced. Install
+#      rollout.sh, loadbalancer/haproxy.sh, lib.sh and the parts it loads from lib/ in
+#      /opt/unipept-rollout, in the shape of the checkout, because rollout.sh resolves haproxy.sh
+#      and lib.sh relative to itself.
 #   3. Write /etc/unipept-rollout/rollout.conf and servers.conf from the examples, or keep the ones
 #      already there.
 #   4. Put the operator in the haproxy group, which is what reaches the admin socket.
@@ -89,6 +91,37 @@ FRAGMENT
 
 problems=0
 note() { log "$*"; problems=$((problems + 1)); }
+
+# Read the way rollout.sh reads it, which is `source`. Matching the lines with sed instead meant
+# anything shell understands and a line-matcher does not became part of the value: the example file
+# comments half its settings, so `SSH_USER=unipept  # deploy account` is the natural thing for an
+# operator to write, and the audit then tried to reach `unipept  # deploy account@patty` and called
+# every server unreachable — while the rollout it is auditing read the same file and worked.
+#
+# In a subshell, so a setting here cannot land in this script's own variables. It is still root
+# running what the file says, which is why install_config keeps rollout.conf root-owned.
+conf_value() {
+    (
+        # The file names only what this host decides; the rest is unset, and reading one must not
+        # end the audit.
+        set +u
+        # shellcheck source=/dev/null  # written on this host, not in this repository.
+        source "${CONFIG}/rollout.conf" >/dev/null 2>&1 || exit 0
+        printf '%s' "${!1}"
+    )
+}
+
+# A rollout running while this replaces its files could load a new lib.sh into an old rollout.sh,
+# which misses what moved out of lib.sh, or the other way round. So this takes the rollout's own
+# lock for as long as it runs, and refuses while a rollout holds it. The path is rollout.sh's
+# default unless rollout.conf moves it. Created here where no run has made it yet, as rollout.sh
+# would; readable is all a later rollout needs, so the file being root's does not stop one.
+lock_file=$(conf_value LOCK_FILE)
+lock_file=${lock_file:-/tmp/unipept-rollout.lock}
+[ -e "$lock_file" ] || : > "$lock_file"
+exec 9< "$lock_file"
+flock -n 9 || die "a rollout holds ${lock_file}; install once it has finished, or see '${ROOT}/rollout.sh status'"
+
 
 # The same shape as the checkout, because rollout.sh resolves haproxy.sh as loadbalancer/haproxy.sh
 # relative to itself. Flattening it here left the installed rollout unable to find it at all.
@@ -204,25 +237,6 @@ fi
 # Every server the inventory names, reached the way a rollout reaches it, on the options a rollout
 # uses — the same array rollout.sh builds SSH_OPTIONS from, so tuning a timeout there tunes it here.
 readonly AUDIT_SSH=(-n "${SSH_CONNECTION_BOUNDS[@]}")
-
-# Read the way rollout.sh reads it, which is `source`. Matching the lines with sed instead meant
-# anything shell understands and a line-matcher does not became part of the value: the example file
-# comments half its settings, so `SSH_USER=unipept  # deploy account` is the natural thing for an
-# operator to write, and the audit then tried to reach `unipept  # deploy account@patty` and called
-# every server unreachable — while the rollout it is auditing read the same file and worked.
-#
-# In a subshell, so a setting here cannot land in this script's own variables. It is still root
-# running what the file says, which is why install_config keeps rollout.conf root-owned.
-conf_value() {
-    (
-        # The file names only what this host decides; the rest is unset, and reading one must not
-        # end the audit.
-        set +u
-        # shellcheck source=/dev/null  # written on this host, not in this repository.
-        source "${CONFIG}/rollout.conf" >/dev/null 2>&1 || exit 0
-        printf '%s' "${!1}"
-    )
-}
 
 # Every server the inventory names, reached the way a rollout reaches it.
 ssh_user=$(conf_value SSH_USER)

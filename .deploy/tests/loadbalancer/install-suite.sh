@@ -169,6 +169,25 @@ check "the installed copy runs"  "$?" "0"
 check "and reached HAProxy"      "$(grep -c 'all_handlers=UP' /tmp/installed.txt)" "3"
 check "backup still sorted last" "$(grep -oE '^(patty|selma|rick)' /tmp/installed.txt | tail -1)" "rick"
 
+section "no install while a rollout runs"
+# A rollout holds its lock for the whole run. Replacing its files under it could pair a new lib.sh
+# with the old rollout.sh, which misses what moved out of lib.sh.
+# Held for a few seconds, then let go by itself: killing flock would leave its sleep holding the lock.
+flock /tmp/unipept-rollout.lock sleep 5 &
+holder=$!
+sleep 1
+before=$(stat -c %Y /opt/unipept-rollout/rollout.sh)
+touch -d '2000-01-01' /opt/unipept-rollout/rollout.sh
+/deploy/loadbalancer/install.sh >/tmp/i-lock.log 2>&1
+check "refused"                  "$?" "1"
+check "and says a rollout holds it" "$(grep -c 'a rollout holds /tmp/unipept-rollout.lock' /tmp/i-lock.log)" "1"
+check "nothing was replaced"     "$(stat -c %Y /opt/unipept-rollout/rollout.sh)" "$(date -d '2000-01-01' +%s)"
+wait "$holder"
+touch -d "@${before}" /opt/unipept-rollout/rollout.sh
+/deploy/loadbalancer/install.sh >/tmp/i-lock.log 2>&1
+check_absent "once it has finished, the install is not refused" 'a rollout holds' /tmp/i-lock.log
+check "and replaces the files" "$([ "$(stat -c %Y /opt/unipept-rollout/rollout.sh)" -gt "$(date -d '2000-01-01' +%s)" ] && echo yes)" "yes"
+
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1
 kill "$(jobs -p)" >/dev/null 2>&1
 summary

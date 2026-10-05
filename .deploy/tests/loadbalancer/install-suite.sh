@@ -157,6 +157,7 @@ section "the installed rollout can find haproxy.sh"
 # installed copy unable to reach HAProxy at all — and ordered_servers would swallow the failure and
 # sort the backup as a primary.
 check "installed in place"   "$([ -x /opt/unipept-rollout/loadbalancer/haproxy.sh ] && echo yes)" "yes"
+check "and every part of lib.sh" "$(ls /opt/unipept-rollout/lib)" "$(ls /deploy/lib)"
 echo ok > /tmp/fake-ssh-mode
 cat > /etc/unipept-rollout/servers.conf <<EOF
 patty  patty 9101 all_handlers,db_handlers patty

@@ -7,7 +7,7 @@ holding copies.
 
 | Path | What it is |
 | --- | --- |
-| `lib.sh` | shared shell, sourced by the scripts |
+| `lib.sh` | shared shell, sourced by the scripts. It loads the parts in `lib/`: `core.sh` (log, die, require_cmd), `config.sh` (reading `key=value` settings), `locks.sh` (empty until the API lock), `release.sh` (release names, download, checksums), `remote.sh` (ssh bounds, health polling) |
 | `rollout.sh` | updates every server one at a time. Run on the load balancer |
 | `servers.example.conf` | the inventory. Copy to `servers.conf` on the load balancer |
 | `rollout.conf.example` | load balancer settings. Copy to `rollout.conf` |

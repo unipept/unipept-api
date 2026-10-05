@@ -7,7 +7,7 @@ holding copies.
 
 | Path | What it is |
 | --- | --- |
-| `lib.sh` | shared shell, sourced by the scripts. It loads the parts in `lib/`: `core.sh` (log, die, require_cmd), `config.sh` (reading `key=value` settings), `locks.sh` (empty until the API lock), `release.sh` (release names, download, checksums), `remote.sh` (ssh bounds, health polling) |
+| `lib.sh`, `lib/` | shared shell, sourced by the scripts. See [The shared library](#the-shared-library) |
 | `rollout.sh` | updates every server one at a time. Run on the load balancer |
 | `servers.example.conf` | the inventory. Copy to `servers.conf` on the load balancer |
 | `rollout.conf.example` | load balancer settings. Copy to `rollout.conf` |
@@ -16,6 +16,24 @@ holding copies.
 | `server/unipept-api.env.example` | per-host configuration, installed at `/opt/unipept-api/etc/unipept-api.env` |
 | `server/install.sh` | prepares a host once. The only step that needs root |
 | `server/deploy.sh` | installs or puts back a binary on one server, or restarts it on another database |
+
+## The shared library
+
+Every script sources `lib.sh`, which loads its parts from `lib/`. Each part says in its header what
+it uses of the others. unipept-database's `.deploy/lib.sh` has the same layout, and the parts both
+repositories have carry the same names: `core.sh`, `config.sh` and `locks.sh`.
+
+| Part | What it holds |
+| --- | --- |
+| `lib/core.sh` | `log`, `die`, `require_cmd` |
+| `lib/config.sh` | reading `key=value` settings, from a file or from `deploy.sh status` |
+| `lib/locks.sh` | the rollout lock |
+| `lib/release.sh` | where a release is published, its file names, the download, checksums |
+| `lib/remote.sh` | the bounds on a connection to a server, and polling its health |
+
+`server/install.sh` installs them as `/opt/unipept-api/lib/lib.sh` and `/opt/unipept-api/lib/lib/`,
+the service user's like `deploy.sh` beside them. `loadbalancer/install.sh` installs them as
+`/opt/unipept-rollout/lib.sh` and `/opt/unipept-rollout/lib/`, root's like `rollout.sh`.
 
 ## Deploying
 

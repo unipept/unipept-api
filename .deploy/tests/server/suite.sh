@@ -7,7 +7,7 @@ set -uo pipefail
 
 R=/deploy
 # The container path; shellcheck is pointed at the checkout instead.
-# shellcheck source-path=SCRIPTDIR source=../lib.sh
+# shellcheck source=../lib.sh
 source /deploy/tests/lib.sh
 
 section "install.sh (the one root step)"

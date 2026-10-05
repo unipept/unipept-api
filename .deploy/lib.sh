@@ -12,13 +12,13 @@
 # name unipept-database's lib.sh gives it.
 DEPLOY_DIR="${BASH_SOURCE[0]%/*}"
 
-# shellcheck source-path=SCRIPTDIR source=lib/core.sh
+# shellcheck source=lib/core.sh
 source "${DEPLOY_DIR}/lib/core.sh"
-# shellcheck source-path=SCRIPTDIR source=lib/config.sh
+# shellcheck source=lib/config.sh
 source "${DEPLOY_DIR}/lib/config.sh"
-# shellcheck source-path=SCRIPTDIR source=lib/locks.sh
+# shellcheck source=lib/locks.sh
 source "${DEPLOY_DIR}/lib/locks.sh"
-# shellcheck source-path=SCRIPTDIR source=lib/release.sh
+# shellcheck source=lib/release.sh
 source "${DEPLOY_DIR}/lib/release.sh"
-# shellcheck source-path=SCRIPTDIR source=lib/remote.sh
+# shellcheck source=lib/remote.sh
 source "${DEPLOY_DIR}/lib/remote.sh"

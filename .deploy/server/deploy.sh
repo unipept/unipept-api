@@ -56,7 +56,7 @@ readonly HERE
 
 # Beside this script once install.sh has placed both in /opt/unipept-api/lib, one level up in a
 # repository checkout.
-# shellcheck source-path=SCRIPTDIR source=../lib.sh
+# shellcheck source=../lib.sh
 if [ -f "${HERE}/lib.sh" ]; then
     source "${HERE}/lib.sh"
 else

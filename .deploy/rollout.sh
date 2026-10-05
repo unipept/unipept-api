@@ -59,7 +59,9 @@ HAPROXY_SOCKET=/run/haproxy/haproxy.sock
 # privilege and the rollout carries no sudo.
 SSH_USER=unipept
 REMOTE_DEPLOY=/opt/unipept-api/lib/deploy.sh
-DRAIN_TIMEOUT=$DEFAULT_DRAIN_TIMEOUT
+# Seconds to wait for a draining server to finish. Above the API's own 150-second request timeout,
+# so a server answers or gives up before this runs out.
+DRAIN_TIMEOUT=240
 # Stands in for a server that reports no deadline of its own, which is one still running an older
 # deploy.sh. Each server's own READY_TIMEOUT is what a rollout uses where it has one.
 READY_TIMEOUT=$DEFAULT_READY_TIMEOUT
@@ -88,6 +90,40 @@ fi
 trap 'exit 1' USR1
 
 export HAPROXY_SOCKET NOTIFY_TO NOTIFY_SMTP
+
+# Sends one message to the team, through the MTA this host already runs for HAProxy's email-alert.
+#
+# curl rather than mail or sendmail: neither is installed on a stock Ubuntu 24.04, and curl is
+# already required here. The hostname goes in the URL path so that EHLO does not announce a filename.
+#
+# Never fatal. A rollout that has just failed must not also fail at telling somebody.
+notify() {
+    local subject=$1 body=$2 message
+
+    if [ -z "${NOTIFY_TO:-}" ]; then
+        log "no NOTIFY_TO set, so nobody was emailed: ${subject}"
+        return 0
+    fi
+
+    message=$(mktemp)
+    {
+        printf 'From: %s\n' "${NOTIFY_FROM:-unipept-rollout@$(hostname -f 2>/dev/null || hostname)}"
+        printf 'To: %s\n' "$NOTIFY_TO"
+        printf 'Subject: %s\n\n' "$subject"
+        printf '%s\n' "$body"
+    } > "$message"
+
+    if curl -s --max-time 20 \
+        --url "smtp://${NOTIFY_SMTP:-127.0.0.1:25}/$(hostname -f 2>/dev/null || hostname)" \
+        --mail-from "${NOTIFY_FROM:-unipept-rollout@$(hostname -f 2>/dev/null || hostname)}" \
+        --mail-rcpt "$NOTIFY_TO" --upload-file "$message"; then
+        log "emailed ${NOTIFY_TO}: ${subject}"
+    else
+        log "could not email ${NOTIFY_TO}; the message was: ${subject}"
+    fi
+    rm -f "$message"
+    return 0
+}
 
 usage() {
     cat >&2 <<'EOF'

@@ -77,8 +77,12 @@ fi
 
 # The rollout runs these over SSH as the service user, so they sit at a fixed path it owns.
 # Re-running install.sh is how they are updated.
-install -m 0755 -o "$USER" -g "$USER" "${HERE}/deploy.sh" "${ROOT}/lib/deploy.sh"
+# The parts of lib.sh before lib.sh, and lib.sh before deploy.sh, so a deploy started meanwhile
+# finds what the files beside it load.
+install -d -m 0755 -o "$USER" -g "$USER" "${ROOT}/lib/lib"
+install -m 0644 -o "$USER" -g "$USER" "${HERE}/../lib/"*.sh "${ROOT}/lib/lib/"
 install -m 0644 -o "$USER" -g "$USER" "${HERE}/../lib.sh" "${ROOT}/lib/lib.sh"
+install -m 0755 -o "$USER" -g "$USER" "${HERE}/deploy.sh" "${ROOT}/lib/deploy.sh"
 log "installed ${ROOT}/lib/deploy.sh"
 
 # The service cannot bind port 80 itself, so a netfilter rule sends 80 to the port it does bind.

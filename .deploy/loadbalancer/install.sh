@@ -92,10 +92,13 @@ note() { log "$*"; problems=$((problems + 1)); }
 
 # The same shape as the checkout, because rollout.sh resolves haproxy.sh as loadbalancer/haproxy.sh
 # relative to itself. Flattening it here left the installed rollout unable to find it at all.
-install -d -m 0755 "$ROOT" "${ROOT}/loadbalancer" "$CONFIG"
+# The parts of lib.sh before lib.sh, and lib.sh before the scripts that load it, so a rollout
+# started meanwhile finds what the files beside it load.
+install -d -m 0755 "$ROOT" "${ROOT}/lib" "${ROOT}/loadbalancer" "$CONFIG"
+install -m 0644 "${SOURCE}/lib/"*.sh "${ROOT}/lib/"
+install -m 0644 "${SOURCE}/lib.sh" "${ROOT}/lib.sh"
 install -m 0755 "${SOURCE}/rollout.sh" "${ROOT}/rollout.sh"
 install -m 0755 "${HERE}/haproxy.sh" "${ROOT}/loadbalancer/haproxy.sh"
-install -m 0644 "${SOURCE}/lib.sh" "${ROOT}/lib.sh"
 log "installed the scripts in ${ROOT}"
 
 # This host's own settings, kept out of the checkout: the inventory names the fleet and the

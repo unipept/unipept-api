@@ -4,9 +4,9 @@ use axum::{
     body::Body,
     http::{Request, StatusCode}
 };
-use httpmock::{Method::HEAD, MockServer};
+use httpmock::MockServer;
 
-use crate::common::{offline_state, request_raw, test_state};
+use crate::common::{offline_state, request_raw, search, test_state};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn it_answers_empty_whenever_the_process_is_serving() {
@@ -38,12 +38,12 @@ async fn database_health_is_unavailable_when_opensearch_is_unreachable() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn database_health_is_ok_when_opensearch_answers() {
+async fn database_health_is_ok_when_the_index_of_the_version_answers() {
     let server = MockServer::start_async().await;
     server
         .mock_async(|when, then| {
-            when.method(HEAD).path("/");
-            then.status(200);
+            when.path(search()).query_param("size", "0").query_param("terminate_after", "1");
+            then.status(200).json_body(serde_json::json!({ "hits": { "hits": [] } }));
         })
         .await;
 
@@ -52,5 +52,31 @@ async fn database_health_is_ok_when_opensearch_answers() {
     drop(dir);
 
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, "");
+}
+
+/// A cluster that is up but lacks the index, as on a host whose release was never loaded: every
+/// protein query would fail, so the server must not be routed database traffic.
+#[tokio::test(flavor = "multi_thread")]
+async fn database_health_is_unavailable_when_the_index_of_the_version_is_missing() {
+    let server = MockServer::start_async().await;
+    server
+        .mock_async(|when, then| {
+            when.path("/");
+            then.status(200);
+        })
+        .await;
+    server
+        .mock_async(|when, then| {
+            when.path(search());
+            then.status(404).json_body(serde_json::json!({ "error": { "type": "index_not_found_exception" } }));
+        })
+        .await;
+
+    let (dir, state) = test_state(&server.base_url());
+    let (status, body) = request_raw(state, Request::get("/health/database").body(Body::empty()).unwrap()).await;
+    drop(dir);
+
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(body, "");
 }

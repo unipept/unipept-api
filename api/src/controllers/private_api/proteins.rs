@@ -23,12 +23,10 @@ async fn handler(
     State(AppState { database, .. }): State<AppState>,
     Parameters { accessions }: Parameters
 ) -> Result<Vec<Protein>, ApiError> {
-    let connection = database.get_conn();
-
     // Each accession once, in first-appearance order, which is the order the answer takes.
     let accessions: Vec<String> = accessions.into_iter().unique().collect();
 
-    let entries = get_accessions(connection, &accessions).await?;
+    let entries = get_accessions(&database, &accessions).await?;
 
     Ok(entries
         .into_iter()

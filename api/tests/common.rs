@@ -23,6 +23,21 @@ use tempfile::TempDir;
 use tower::ServiceExt;
 use unipept_api::{AppState, middleware::normalize_path::NormalizePath, routes::create_app};
 
+/// The `_mget` path of the index the fixture's `.version` names, which every OpenSearch mock
+/// answers on.
+pub fn mget() -> String {
+    format!("/{}/_mget", fixture_index())
+}
+
+/// The `_search` path of that index.
+pub fn search() -> String {
+    format!("/{}/_search", fixture_index())
+}
+
+fn fixture_index() -> String {
+    database::index_name(fixtures::VERSION).expect("the fixture version names an index")
+}
+
 /// 50 MiB, the ceiling `create_router` installs.
 pub const BODY_LIMIT: usize = 50 * 1024 * 1024;
 
@@ -55,7 +70,7 @@ pub fn test_state(database_url: &str) -> (TempDir, AppState) {
     )
     .expect("the corpus index should load");
 
-    let database = database::Database::try_from_url(database_url).expect("the url should parse");
+    let database = database::Database::try_from_url(database_url, datastore.version()).expect("the url should parse");
 
     (dir, AppState {
         datastore: Arc::new(datastore),

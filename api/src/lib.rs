@@ -51,8 +51,6 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
     let mappings = format!("{}/mapping.bin", index_location);
     let kmer_table = format!("{}/kmer_table.bin", index_location);
 
-    let database = Database::try_from_url(database_address)?;
-
     let datastore = DataStore::try_from_files(
         &version,
         &sampledata,
@@ -63,6 +61,12 @@ pub async fn start(index_location: &str, database_address: &str, port: u32) -> R
         &lineages,
         &taxons
     )?;
+
+    // Right after the datastore, whose `.version` names the index, and before the suffix array: a
+    // version that names no index stops the process in milliseconds rather than after the minutes
+    // a preloaded index takes to read.
+    let database = Database::try_from_url(database_address, datastore.version())?;
+    tracing::info!(index = database.index(), "querying opensearch");
 
     let index = Index::try_from_files(&sa, &proteins, &mappings, &kmer_table)?;
 

@@ -41,7 +41,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 
-# shellcheck source-path=SCRIPTDIR source=lib.sh
+# shellcheck source=lib.sh
 source "${HERE}/lib.sh"
 
 readonly HAPROXY="${HERE}/loadbalancer/haproxy.sh"
@@ -69,7 +69,7 @@ READY_TIMEOUT=$DEFAULT_READY_TIMEOUT
 # and then in HAProxy. Separate from READY_TIMEOUT, which covers a service reading its index. By here
 # it is already answering, and this is only the time to confirm it.
 HEALTH_TIMEOUT=60
-LOCK_FILE=/tmp/unipept-rollout.lock
+LOCK_FILE=$DEFAULT_ROLLOUT_LOCK
 # What the run in progress is doing, for `status` to read and `abort` to signal. Beside the lock
 # rather than in it: the lock is opened with `exec 9>`, which truncates, and rewriting through a
 # held descriptor needs seeking this has no reason to do.
@@ -234,21 +234,11 @@ require_cmd curl sha256sum socat ssh scp flock logger
 # during a rollout, which is the one time it is worth running — and the message below said to run
 # it.
 #
-# Opened for reading, which is all flock needs and is what makes the lock usable by both the
-# operator and root. Opened for writing, a file root created is refused to the operator — and bash
-# reports that itself and carries on with the descriptor unopened, so `flock` then failed on a bad
-# descriptor and this said another rollout was holding a lock that nobody held.
+# loadbalancer/install.sh takes it too while it replaces the scripts, so a run never loads a mix of
+# two releases.
 case $COMMAND in
     status | abort) ;;
-    *)
-        if [ ! -e "$LOCK_FILE" ]; then
-            : > "$LOCK_FILE" 2>/dev/null ||
-                die "cannot create ${LOCK_FILE}; set LOCK_FILE in rollout.conf to a path this account can write"
-        fi
-        exec 9< "$LOCK_FILE" ||
-            die "cannot read ${LOCK_FILE}, which belongs to $(stat -c %U "$LOCK_FILE" 2>/dev/null || echo someone)"
-        flock -n 9 || die "another rollout holds ${LOCK_FILE}; wait for it, or run 'rollout.sh status'"
-        ;;
+    *) take_rollout_lock "$LOCK_FILE" || die "$(rollout_lock_refused $? "$LOCK_FILE")" ;;
 esac
 
 # One server per line: name host port haproxy_backends haproxy_server
@@ -919,7 +909,7 @@ do_status() {
             log "started $(env_value started "$RUN_STATE") by $(env_value by "$RUN_STATE"), pid $(env_value pid "$RUN_STATE")"
             log "to stop it: ${HERE}/rollout.sh abort"
         else
-            log "a rollout holds ${LOCK_FILE} but wrote no state file"
+            log "${LOCK_FILE} is held, but no state file says by what: a rollout starting, or loadbalancer/install.sh replacing these scripts"
         fi
     else
         # Leftovers from a run that was killed uncatchably. Said rather than deleted: it names what

@@ -34,7 +34,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 readonly SOURCE="${HERE}/.."
 
-# shellcheck source-path=SCRIPTDIR source=../lib.sh
+# shellcheck source=../lib.sh
 source "${SOURCE}/lib.sh"
 
 # What `die` raises when it is called from inside a subshell.
@@ -49,6 +49,16 @@ readonly FRAGMENT=/tmp/unipept-haproxy-fragment.cfg
 require_cmd chown curl getent install sha256sum socat ssh scp flock logger usermod
 [ "$(id -u)" -eq 0 ] || die "run this as root. Rollouts themselves run as ${OPERATOR}."
 id "$OPERATOR" >/dev/null 2>&1 || die "there is no ${OPERATOR} account on this host"
+
+# This runs as root, and sources rollout.conf: for the lock, and for the audit. One that another user
+# could write would hand that user root, whoever owns it now, so it is refused rather than taken back
+# and read. The same rule as unipept-database's opensearch/install.sh for its deploy.conf.
+if [ -e "${CONFIG}/rollout.conf" ]; then
+    case "$(stat -c '%U %A' "${CONFIG}/rollout.conf")" in
+        "root -rw-r--r--" | "root -rw-------" | "root -r--r--r--" | "root -r--------") ;;
+        *) die "${CONFIG}/rollout.conf can be written by someone other than root, and this runs as root and reads it. Make it root's, mode 0644, after checking what is in it." ;;
+    esac
+fi
 
 # The configuration to add when a backend is missing. Written out, never applied: haproxy.cfg holds
 # the TLS certificates, the rate limiting and the ACLs, and the operator is the one who edits it.
@@ -111,28 +121,7 @@ conf_value() {
     )
 }
 
-# A rollout running while this replaces its files could load a new lib.sh into an old rollout.sh,
-# which misses what moved out of lib.sh, or the other way round. So this takes the rollout's own
-# lock for as long as it runs, and refuses while a rollout holds it. The path is rollout.sh's
-# default unless rollout.conf moves it. Created here where no run has made it yet, as rollout.sh
-# would; readable is all a later rollout needs, so the file being root's does not stop one.
-lock_file=$(conf_value LOCK_FILE)
-lock_file=${lock_file:-/tmp/unipept-rollout.lock}
-[ -e "$lock_file" ] || : > "$lock_file"
-exec 9< "$lock_file"
-flock -n 9 || die "a rollout holds ${lock_file}; install once it has finished, or see '${ROOT}/rollout.sh status'"
-
-
-# The same shape as the checkout, because rollout.sh resolves haproxy.sh as loadbalancer/haproxy.sh
-# relative to itself. Flattening it here left the installed rollout unable to find it at all.
-# The parts of lib.sh before lib.sh, and lib.sh before the scripts that load it, so a rollout
-# started meanwhile finds what the files beside it load.
 install -d -m 0755 "$ROOT" "${ROOT}/lib" "${ROOT}/loadbalancer" "$CONFIG"
-install -m 0644 "${SOURCE}/lib/"*.sh "${ROOT}/lib/"
-install -m 0644 "${SOURCE}/lib.sh" "${ROOT}/lib.sh"
-install -m 0755 "${SOURCE}/rollout.sh" "${ROOT}/rollout.sh"
-install -m 0755 "${HERE}/haproxy.sh" "${ROOT}/loadbalancer/haproxy.sh"
-log "installed the scripts in ${ROOT}"
 
 # This host's own settings, kept out of the checkout: the inventory names the fleet and the
 # configuration names where failures are emailed, neither of which belongs in a repository.
@@ -145,8 +134,8 @@ install_config() {
     local example=$1 target=$2 owner=$3
 
     if [ -f "$target" ]; then
-        # Its contents are this host's, but the owner is ours to correct on a file written before
-        # rollout.conf became root's.
+        # Its contents are this host's. A rollout.conf root does not own was refused above, so this
+        # only ever hands servers.conf back to the operator.
         chown "${owner}:${owner}" "$target"
         log "keeping ${target}"
         return 0
@@ -157,6 +146,26 @@ install_config() {
 
 install_config "${SOURCE}/rollout.conf.example" "${CONFIG}/rollout.conf" root
 install_config "${SOURCE}/servers.example.conf" "${CONFIG}/servers.conf" "$OPERATOR"
+
+# A rollout running while this replaces its files could load a new lib.sh into an old rollout.sh,
+# which misses what moved out of lib.sh, or the other way round. So this takes the rollout's own
+# lock, where rollout.conf puts it, for as long as it runs, and refuses while a rollout holds it.
+# Reading it sources it, as root, which is safe only because a rollout.conf root alone can write was
+# required above.
+lock_file=$(conf_value LOCK_FILE)
+lock_file=${lock_file:-$DEFAULT_ROLLOUT_LOCK}
+take_rollout_lock "$lock_file" || die "$(rollout_lock_refused $? "$lock_file"). Install once it has finished."
+
+# The same shape as the checkout, because rollout.sh resolves haproxy.sh as loadbalancer/haproxy.sh
+# relative to itself. Flattening it here left the installed rollout unable to find it at all.
+# The parts of lib.sh before lib.sh, and lib.sh before the scripts that load it, so a rollout
+# started meanwhile finds what the files beside it load.
+install -m 0644 "${SOURCE}/lib/"*.sh "${ROOT}/lib/"
+install -m 0644 "${SOURCE}/lib.sh" "${ROOT}/lib.sh"
+install -m 0755 "${SOURCE}/rollout.sh" "${ROOT}/rollout.sh"
+install -m 0755 "${HERE}/haproxy.sh" "${ROOT}/loadbalancer/haproxy.sh"
+log "installed the scripts in ${ROOT}"
+
 
 # The socket is the one thing a rollout cannot do without, and the only privilege it needs.
 if getent group haproxy >/dev/null 2>&1; then

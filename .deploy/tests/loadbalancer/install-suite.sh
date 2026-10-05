@@ -7,7 +7,7 @@
 set -uo pipefail
 
 # The container path; shellcheck is pointed at the checkout instead.
-# shellcheck source-path=SCRIPTDIR source=../lib.sh
+# shellcheck source=../lib.sh
 source /deploy/tests/lib.sh
 
 printf '127.0.0.1 patty selma rick\n' >> /etc/hosts
@@ -61,15 +61,24 @@ echo "# edited by hand" >> /etc/unipept-rollout/servers.conf
 check "kept the edit"  "$(grep -c 'edited by hand' /etc/unipept-rollout/servers.conf)" "1"
 check "said it kept it" "$(grep -c 'keeping /etc/unipept-rollout/servers.conf' /tmp/i2.log)" "1"
 
-section "a rollout.conf from before is taken back"
-# A load balancer installed earlier has an operator-owned rollout.conf, and the audit sources it.
-# Re-running the install is what corrects that, so the file has to keep its contents and change
-# hands.
+section "a rollout.conf another user can write is refused, not read"
+# A load balancer installed earlier has an operator-owned rollout.conf. The install runs as root and
+# sources it, so what the operator wrote there would run as root: it stops before reading a line.
+cp /etc/unipept-rollout/rollout.conf /tmp/rollout.conf.root
 chown unipept:unipept /etc/unipept-rollout/rollout.conf
-echo "# edited by hand" >> /etc/unipept-rollout/rollout.conf
+echo "touch /tmp/ran-as-root" >> /etc/unipept-rollout/rollout.conf
+rm -f /tmp/ran-as-root
 /deploy/loadbalancer/install.sh >/tmp/i2b.log 2>&1
-check "now owned by root" "$(stat -c %U /etc/unipept-rollout/rollout.conf)" "root"
-check "kept the edit"     "$(grep -c 'edited by hand' /etc/unipept-rollout/rollout.conf)" "1"
+check "refused"                "$?" "1"
+check "and says why"           "$(grep -c 'can be written by someone other than root' /tmp/i2b.log)" "1"
+check "nothing in it ran"      "$([ -e /tmp/ran-as-root ] && echo ran || echo not)" "not"
+check "and it is left as it was" "$(stat -c %U /etc/unipept-rollout/rollout.conf)" "unipept"
+cp /tmp/rollout.conf.root /etc/unipept-rollout/rollout.conf
+chown root:root /etc/unipept-rollout/rollout.conf
+chmod 0666 /etc/unipept-rollout/rollout.conf
+/deploy/loadbalancer/install.sh >/tmp/i2b.log 2>&1
+check "as is one root owns that anyone can write" "$?" "1"
+chmod 0644 /etc/unipept-rollout/rollout.conf
 
 section "the audit reads HAProxy, not just the file"
 # The test config has both backends and all three servers.
@@ -158,6 +167,8 @@ section "the installed rollout can find haproxy.sh"
 # sort the backup as a primary.
 check "installed in place"   "$([ -x /opt/unipept-rollout/loadbalancer/haproxy.sh ] && echo yes)" "yes"
 check "and every part of lib.sh" "$(ls /opt/unipept-rollout/lib)" "$(ls /deploy/lib)"
+check "all of them root's, as the scripts that load them are" \
+    "$(stat -c '%U' /opt/unipept-rollout/lib /opt/unipept-rollout/lib.sh /opt/unipept-rollout/lib/*.sh | sort -u)" "root"
 echo ok > /tmp/fake-ssh-mode
 cat > /etc/unipept-rollout/servers.conf <<EOF
 patty  patty 9101 all_handlers,db_handlers patty
@@ -173,14 +184,15 @@ section "no install while a rollout runs"
 # A rollout holds its lock for the whole run. Replacing its files under it could pair a new lib.sh
 # with the old rollout.sh, which misses what moved out of lib.sh.
 # Held for a few seconds, then let go by itself: killing flock would leave its sleep holding the lock.
+# Waited for until it is held, so the install cannot get there first.
 flock /tmp/unipept-rollout.lock sleep 5 &
 holder=$!
-sleep 1
+for _ in $(seq 50); do flock -n /tmp/unipept-rollout.lock true 2>/dev/null || break; sleep 0.1; done
 before=$(stat -c %Y /opt/unipept-rollout/rollout.sh)
 touch -d '2000-01-01' /opt/unipept-rollout/rollout.sh
 /deploy/loadbalancer/install.sh >/tmp/i-lock.log 2>&1
 check "refused"                  "$?" "1"
-check "and says a rollout holds it" "$(grep -c 'a rollout holds /tmp/unipept-rollout.lock' /tmp/i-lock.log)" "1"
+check "and says a rollout holds it" "$(grep -c 'another rollout holds /tmp/unipept-rollout.lock.*Install once it has finished' /tmp/i-lock.log)" "1"
 check "nothing was replaced"     "$(stat -c %Y /opt/unipept-rollout/rollout.sh)" "$(date -d '2000-01-01' +%s)"
 wait "$holder"
 touch -d "@${before}" /opt/unipept-rollout/rollout.sh

@@ -165,7 +165,7 @@ check_env_file() {
 # The index, which is the setting most often wrong and the slowest to find out about: without these
 # the service simply never answers and the deploy waits out its whole timeout.
 check_index_dir() {
-    [ -d "$1" ] && [ -r "$1" ] || { log "check: ${1} is not a readable directory"; return 1; }
+    { [ -d "$1" ] && [ -r "$1" ]; } || { log "check: ${1} is not a readable directory"; return 1; }
 }
 
 # ProtectHome=yes hides /home from the unit, so an index there is readable now and gone the moment

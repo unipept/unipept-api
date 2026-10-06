@@ -173,6 +173,11 @@ check "exit 0" "$?" "0"
 check "the index as configured" "$(sed -n 's/^index_location=//p' /tmp/f3.log)" "/srv/nowhere"
 check "no version" "$(sed -n 's/^index_version=//p' /tmp/f3.log)" "-"
 check "no OpenSearch index" "$(sed -n 's/^opensearch_index=//p' /tmp/f3.log)" "-"
+mkdir -p /srv/nowhere && printf '2026.09\nversion=9.9.9\n' > /srv/nowhere/.version
+as_user "/opt/unipept-api/lib/deploy.sh status" >/tmp/f4.log 2>&1
+check "a .version of two lines: no version" "$(sed -n 's/^index_version=//p' /tmp/f4.log)" "-"
+check "and adds no line" "$(grep -c '^version=' /tmp/f4.log)" "1"
+rm -rf /srv/nowhere
 sed -i 's#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/index#' /opt/unipept-api/etc/unipept-api.env
 
 section "a restart that fails rolls back rather than aborting"

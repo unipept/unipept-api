@@ -367,6 +367,8 @@ do_check() {
                 if check_index_version "$index" "$index_version"; then
                     opensearch_index=$(index_name "$index_version")
                 else
+                    # Not printed below: it may hold anything, a line of its own included.
+                    index_version='-'
                     problems=$((problems + 1))
                 fi
             else
@@ -607,7 +609,7 @@ reported_version() {
 # meaning or goes, and a caller refuses a format it does not know. A line added keeps it.
 #
 # The index's version and its OpenSearch index are `-` where its .version cannot be read or names no
-# index; `check` says why.
+# index, so a .version of several lines never adds one here; `check` says why.
 do_status() {
     local index index_version='-' opensearch_index='-'
 
@@ -616,7 +618,7 @@ do_status() {
     index=$(env_value INDEX_LOCATION "$ENV_FILE" || true)
     if [ -n "$index" ] && [ -f "${index}/.version" ] && [ -r "${index}/.version" ]; then
         index_version=$(version_in "${index}/.version")
-        opensearch_index=$(index_name "$index_version") || opensearch_index='-'
+        opensearch_index=$(index_name "$index_version") || { index_version='-'; opensearch_index='-'; }
     fi
 
     printf 'status_format=1\n'

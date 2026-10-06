@@ -235,11 +235,11 @@ both_ways check_env_file "check_env_file /opt/unipept-api/etc/unipept-api.env ''
 both_ways check_index_dir "check_index_dir /srv/index" "check_index_dir /srv/no-index" "is not a readable directory"
 both_ways check_index_not_home "check_index_not_home /srv/index" "check_index_not_home /home/unipept/index" "under /home"
 both_ways check_index_files "check_index_files /srv/index" "check_index_files /tmp/bad-index" "sa.bin is missing or unreadable"
-both_ways check_index_kmer_table "check_index_kmer_table /srv/index" "check_index_kmer_table /tmp/bad-index" "searches are slower"
+both_ways check_index_optional_files "check_index_optional_files /srv/index" "check_index_optional_files /tmp/bad-index" "searches are slower"
 both_ways check_index_version "check_index_version /srv/index" "check_index_version /tmp/odd-index" "names no OpenSearch index"
 both_ways check_memory_fits "check_memory_fits preloaded /srv/index" "check_memory_fits preloaded /tmp/too-big" "MiB in total"
 both_ways check_memory_free "check_memory_free preloaded /srv/index" "check_memory_free preloaded /tmp/tight" "MiB is available"
-both_ways check_opensearch_answers "check_opensearch_answers http://localhost:9200" "check_opensearch_answers http://localhost:1" "does not answer"
+both_ways check_opensearch_answers "check_opensearch_answers http://localhost:9200 2026.09-test" "check_opensearch_answers http://localhost:1 2026.09-test" "does not answer"
 both_ways check_opensearch_index "check_opensearch_index http://localhost:9200 2026.09-test" "check_opensearch_index http://localhost:9200 2026.10-never" "is not in OpenSearch"
 both_ways check_bin_writable check_bin_writable "ROOT=/tmp/locked check_bin_writable" "bin is not writable"
 both_ways check_bin_room "check_bin_room ''" "BINARY=/tmp/huge-binary check_bin_room ''" "MiB free"
@@ -279,6 +279,10 @@ available=$(awk '$1 == "MemAvailable:" { print $2 * 1024 }' /proc/meminfo)
 truncate -s $(((available + total) / 2)) /tmp/tight-index/proteins.bin
 as_user "/opt/unipept-api/lib/deploy.sh check --index /tmp/tight-index" >/tmp/c-all.log 2>&1
 check_says "a variant that needs more than is free" "MiB is available"
+truncate -s $((total + 1024 * 1024)) /tmp/tight-index/proteins.bin
+as_user "/opt/unipept-api/lib/deploy.sh check --index /tmp/tight-index" >/tmp/c-all.log 2>&1
+check_says "one that needs more than the host has" "MiB in total"
+check "is that problem alone, not a warning as well" "$(grep -c 'MiB is available' /tmp/c-all.log)" "0"
 chmod 555 /opt/unipept-api/bin
 as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/c-all.log 2>&1
 check_says "a binary directory it cannot write" "bin is not writable"

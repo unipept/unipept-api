@@ -308,8 +308,12 @@ clear_start_limit() {
     systemctl --user reset-failed "$SERVICE" 2>/dev/null || true
 }
 
+# Whether the last do_check reached OpenSearch, for `start`, which will not start without it.
+OPENSEARCH_ANSWERED=false
+
 # Everything that has to be true before this host is asked to install anything: the checks in
 # checks.sh, each in turn, counting the ones that found a problem and the ones that warned.
+# problems= is that count of checks, so several missing files are one problem; each is printed.
 #
 # Run by the rollout on every server before it drains the first one, by `deploy` on itself, and by an
 # operator who wants to know. Runs every check rather than stopping at the first, because the point
@@ -346,7 +350,7 @@ do_check() {
     if [ -n "$index" ]; then
         if check_index_dir "$index"; then
             check_index_not_home "$index" || problems=$((problems + 1))
-            check_index_kmer_table "$index" || warnings=$((warnings + 1))
+            check_index_optional_files "$index" || warnings=$((warnings + 1))
             if check_index_files "$index"; then
                 index_version=$(version_in "${index}/.version")
                 if check_index_version "$index"; then
@@ -358,8 +362,11 @@ do_check() {
                 problems=$((problems + 1))
             fi
             if [ -n "$variant" ]; then
-                check_memory_fits "$variant" "$index" || problems=$((problems + 1))
-                check_memory_free "$variant" "$index" || warnings=$((warnings + 1))
+                if check_memory_fits "$variant" "$index"; then
+                    check_memory_free "$variant" "$index" || warnings=$((warnings + 1))
+                else
+                    problems=$((problems + 1))
+                fi
             fi
         else
             problems=$((problems + 1))
@@ -367,7 +374,8 @@ do_check() {
     fi
 
     if [ "$opensearch_index" != '-' ] && [ -n "$database" ]; then
-        if check_opensearch_answers "$database"; then
+        if check_opensearch_answers "$database" "$index_version"; then
+            OPENSEARCH_ANSWERED=true
             check_opensearch_index "$database" "$index_version" || problems=$((problems + 1))
         else
             warnings=$((warnings + 1))
@@ -541,7 +549,7 @@ do_start() {
     # Before the start, so a host whose index is missing or does not fit says so without a start
     # that fails. The proteins have to answer: a start without them serves /health and nothing else.
     do_check >/dev/null || die "this host is not ready; run 'deploy.sh check' to see why"
-    check_opensearch_answers "$(env_value DATABASE_ADDRESS "$ENV_FILE")" || die "OpenSearch does not answer; start it first"
+    [ "$OPENSEARCH_ANSWERED" = true ] || die "OpenSearch does not answer; start it first"
 
     log "starting ${SERVICE}"
     clear_start_limit

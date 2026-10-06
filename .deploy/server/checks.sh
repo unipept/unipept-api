@@ -170,7 +170,7 @@ check_index_files() {
 }
 
 # A warning: the service runs without it.
-check_index_kmer_table() {
+check_index_optional_files() {
     local index=$1 relative status=0
 
     for relative in $OPTIONAL_INDEX_FILES; do
@@ -200,7 +200,8 @@ check_memory_fits() {
         || { log "check: ${variant} needs $((needed / 1024 / 1024)) MiB resident, and this host has $((total / 1024 / 1024)) MiB in total"; return 1; }
 }
 
-# A warning: page cache is reclaimable, so more than is available now must not block a deploy.
+# A warning: page cache is reclaimable, so more than is available now must not block a deploy. Only
+# asked of a variant that fits at all, which check_memory_fits reports otherwise.
 check_memory_free() {
     local variant=$1 index=$2 needed available
     needed=$(resident_bytes "$variant" "$index")
@@ -209,26 +210,36 @@ check_memory_free() {
         || { log "check: ${variant} needs $((needed / 1024 / 1024)) MiB resident and $((available / 1024 / 1024)) MiB is available; the kernel has to reclaim first"; return 1; }
 }
 
-# A warning, so a binary can still be deployed during an outage; `start` refuses it.
-check_opensearch_answers() {
-    local database=$1 answered
+# The status OpenSearch answers a search of a version's index with, as /health/database searches
+# it, so a closed index answers too: 000 when nothing answers. Fails for a version that names no
+# index, which check_index_version reports.
+search_status() {
+    local database=$1 index answered
+    index=$(index_name "$2") || return 1
     # curl exits non-zero when nothing listens, and prints 000, or nothing at all.
-    answered=$(curl -s -o /dev/null -w '%{http_code}' --max-time "$OPENSEARCH_TIMEOUT" "${database%/}/") || true
-    [ "${answered:-000}" != 000 ] \
-        || { log "check: OpenSearch at ${database} does not answer, so whether the index of the version is there is unknown"; return 1; }
-}
-
-# The proteins of the version, in an index of their own, searched as /health/database does, so a
-# closed index fails here too.
-check_opensearch_index() {
-    local database=$1 version=$2 index answered
-    index=$(index_name "$version")
     answered=$(curl -s -o /dev/null -w '%{http_code}' --max-time "$OPENSEARCH_TIMEOUT" \
         "${database%/}/${index}/_search?size=0&terminate_after=1") || true
-    case ${answered:-000} in
-        200) ;;
+    printf '%s\n' "${answered:-000}"
+}
+
+# A warning, so a binary can still be deployed during an outage; `start` refuses it.
+check_opensearch_answers() {
+    local database=$1 version=$2 status
+    status=$(search_status "$database" "$version") || return 0
+    [ "$status" != 000 ] \
+        || { log "check: OpenSearch at ${database} does not answer, so whether $(index_name "$version") is there is unknown"; return 1; }
+}
+
+# The proteins of the version, in an index of their own. Nothing answering is
+# check_opensearch_answers's to report.
+check_opensearch_index() {
+    local database=$1 version=$2 index status
+    index=$(index_name "$version") || return 0
+    status=$(search_status "$database" "$version")
+    case $status in
+        200 | 000) ;;
         404) log "check: ${index} is not in OpenSearch; load its proteins with unipept-database's load.sh$(load_hint "$version")"; return 1 ;;
-        *) log "check: ${index} does not answer a search (HTTP ${answered:-000}); is it closed?"; return 1 ;;
+        *) log "check: ${index} does not answer a search (HTTP ${status}); is it closed?"; return 1 ;;
     esac
 }
 
@@ -283,7 +294,7 @@ check_binary() {
     # Beside the binary rather than in /tmp: /tmp is mounted noexec on a hardened host, and the probe
     # would then fail for every architecture, reporting a good build as unrunnable.
     probe="${ROOT}/bin/.probe.$$"
-    install -m 0755 "$from" "$probe"
+    install -m 0755 "$from" "$probe" || { log "check: cannot place a copy of ${from} in ${ROOT}/bin to try it"; return 1; }
     if ! "$probe" --version > /dev/null 2>&1; then
         rm -f "$probe"
         log "check: ${from} does not run on this host; wrong architecture or a missing library"

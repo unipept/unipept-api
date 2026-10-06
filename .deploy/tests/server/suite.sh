@@ -16,6 +16,7 @@ check "linger on"      "$(loginctl show-user unipept -p Linger --value)" "yes"
 check "bin dir owned"  "$(stat -c %U /opt/unipept-api/bin)" "unipept"
 check "unit installed" "$([ -f /home/unipept/.config/systemd/user/unipept-api.service ] && echo yes)" "yes"
 check "deploy.sh there" "$(stat -c '%U %a' /opt/unipept-api/lib/deploy.sh)" "unipept 755"
+check "and the checks it makes" "$(stat -c '%U %a' /opt/unipept-api/lib/checks.sh)" "unipept 644"
 check "and every part of lib.sh beside it" "$(ls /opt/unipept-api/lib/lib)" "$(ls /deploy/lib)"
 check "all of them the service user's" \
     "$(stat -c '%U' /opt/unipept-api/lib/lib /opt/unipept-api/lib/lib.sh /opt/unipept-api/lib/lib/*.sh | sort -u)" "unipept"
@@ -197,6 +198,110 @@ as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/c0.log 2>&1
 check "exit 0"            "$?" "0"
 check "index_version"     "$(sed -n 's/^index_version=//p' /tmp/c0.log)" "2026.09-test"
 check "no problems"       "$(sed -n 's/^problems=//p' /tmp/c0.log)" "0"
+
+section "each check on its own, on the good host and on a bad one"
+# The installed checks.sh, as deploy.sh sources it: with lib.sh, and deploy.sh's settings, which a
+# case may change before the check. As the service user unless the case is about the user. Exits
+# with the check's own status.
+one_check() {
+  as_user "source /opt/unipept-api/lib/lib.sh
+SERVICE_USER=unipept ROOT=/opt/unipept-api BINARY=/opt/unipept-api/bin/unipept-api OPENSEARCH_TIMEOUT=5
+source /opt/unipept-api/lib/checks.sh
+$1 || exit 1" >/tmp/one-check.log 2>&1
+}
+# Passes on the host case above found ready, and fails on a host or an input made bad for it, saying
+# what is wrong.
+both_ways() {
+  local name=$1 good=$2 bad=$3 says=$4
+  one_check "$good"; check "${name} passes" "$?" "0"
+  one_check "$bad"; check "${name} fails" "$?" "1"
+  check "and says so" "$(grep -c -- "$says" /tmp/one-check.log)" "1"
+}
+mkdir -p /tmp/bad-index && chmod 755 /tmp/bad-index
+printf 'PORT=eighty\nVARIANT=mmap\n' > /tmp/bad.env && chmod 644 /tmp/bad.env
+total=$(awk '$1 == "MemTotal:" { print $2 * 1024 }' /proc/meminfo)
+available=$(awk '$1 == "MemAvailable:" { print $2 * 1024 }' /proc/meminfo)
+# Larger than the room left beside the binary, as a sparse file, which takes none of it. Also used
+# through `check` below.
+truncate -s $((($(df -Pk /opt/unipept-api/bin | awk 'NR == 2 { print $4 }') + 1048576) * 1024)) /tmp/huge-binary
+mkdir -p /tmp/locked/bin && chmod 755 /tmp/locked /tmp/locked/bin
+
+both_ways check_commands check_commands "PATH=/nonexistent check_commands" "curl is not installed"
+both_ways check_lingering check_lingering "XDG_RUNTIME_DIR=/nonexistent check_lingering" "enable lingering"
+both_ways check_env_file "check_env_file /opt/unipept-api/etc/unipept-api.env ''" "check_env_file /tmp/bad.env ''" "PORT is 'eighty'"
+both_ways check_index_dir "check_index_dir /srv/index" "check_index_dir /srv/no-index" "is not a readable directory"
+both_ways check_index_not_home "check_index_not_home /srv/index" "check_index_not_home /home/unipept/index" "under /home"
+both_ways check_index_files "check_index_files /srv/index" "check_index_files /tmp/bad-index" "sa.bin is missing or unreadable"
+both_ways check_index_optional_files "check_index_optional_files /srv/index" "check_index_optional_files /tmp/bad-index" "searches are slower"
+both_ways check_index_version "check_index_version /srv/index 2026.09-test" "check_index_version /srv/index 'not a version!'" "names no OpenSearch index"
+both_ways check_memory_fits "check_memory_fits preloaded 1048576" "check_memory_fits preloaded $((total + 1048576))" "MiB in total"
+both_ways check_memory_free "check_memory_free preloaded 1048576" "check_memory_free preloaded $(((available + total) / 2))" "MiB is available"
+both_ways check_opensearch_answers \
+  "check_opensearch_answers http://localhost:9200 uniprot_entries-2026-09-test \$(search_status http://localhost:9200 uniprot_entries-2026-09-test)" \
+  "check_opensearch_answers http://localhost:1 uniprot_entries-2026-09-test \$(search_status http://localhost:1 uniprot_entries-2026-09-test)" \
+  "does not answer"
+both_ways check_opensearch_index \
+  "check_opensearch_index uniprot_entries-2026-09-test 2026.09-test \$(search_status http://localhost:9200 uniprot_entries-2026-09-test)" \
+  "check_opensearch_index uniprot_entries-2026-10-never 2026.10-never \$(search_status http://localhost:9200 uniprot_entries-2026-10-never)" \
+  "is not in OpenSearch"
+both_ways check_bin_writable check_bin_writable "ROOT=/tmp/locked check_bin_writable" "bin is not writable"
+both_ways check_bin_room "check_bin_room ''" "BINARY=/tmp/huge-binary check_bin_room ''" "MiB free"
+both_ways check_binary "check_binary $d1/unipept-api-2.6.0-x86_64-linux-gnu-hybrid" "check_binary /tmp/no-binary" "no binary at"
+# Failing, it is the redirect cases further down.
+one_check "check_ports_redirect 8099"; check "check_ports_redirect passes" "$?" "0"
+# Run as root, which is the case it is about.
+bash -c "source /opt/unipept-api/lib/lib.sh; SERVICE_USER=unipept; source /opt/unipept-api/lib/checks.sh; check_user || exit 1" >/tmp/one-check.log 2>&1
+check "check_user fails for another user" "$?" "1"
+check "and says so" "$(grep -c 'running as root, not unipept' /tmp/one-check.log)" "1"
+one_check check_user; check "check_user passes for the service user" "$?" "0"
+rm -rf /tmp/bad-index /tmp/locked /tmp/bad.env
+
+
+section "deploy.sh check runs every one of them"
+# Each check above tested on its own, here through `check`, so one left out of it fails a case.
+check_says() {
+  local name=$1 says=$2
+  check "${name}" "$(grep -c -- "$says" /tmp/c-all.log)" "1"
+}
+mkdir -p /tmp/no-sha256sum
+for tool in /usr/bin/* /bin/*; do ln -sf "$tool" /tmp/no-sha256sum/ 2>/dev/null; done
+rm -f /tmp/no-sha256sum/sha256sum
+setpriv --reuid unipept --regid unipept --init-groups env XDG_RUNTIME_DIR=/run/user/"$UID_N" HOME=/home/unipept \
+  PATH=/tmp/no-sha256sum /opt/unipept-api/lib/deploy.sh check >/tmp/c-all.log 2>&1
+check_says "a command missing" "sha256sum is not installed"
+/opt/unipept-api/lib/deploy.sh check >/tmp/c-all.log 2>&1
+check_says "another user" "running as root, not unipept"
+setpriv --reuid unipept --regid unipept --init-groups env XDG_RUNTIME_DIR=/nonexistent HOME=/home/unipept \
+  /opt/unipept-api/lib/deploy.sh check >/tmp/c-all.log 2>&1
+check_says "no lingering" "no /nonexistent; enable lingering"
+as_user "/opt/unipept-api/lib/deploy.sh check --index /srv/no-index" >/tmp/c-all.log 2>&1
+check_says "an index that is not there" "/srv/no-index is not a readable directory"
+mkdir -p /tmp/tight-index && cp -r /srv/index/. /tmp/tight-index/ && chmod -R a+rX /tmp/tight-index
+truncate -s $(((available + total) / 2)) /tmp/tight-index/proteins.bin
+as_user "/opt/unipept-api/lib/deploy.sh check --index /tmp/tight-index" >/tmp/c-all.log 2>&1
+check_says "a variant that needs more than is free" "MiB is available"
+truncate -s $((total + 1024 * 1024)) /tmp/tight-index/proteins.bin
+as_user "/opt/unipept-api/lib/deploy.sh check --index /tmp/tight-index" >/tmp/c-all.log 2>&1
+check_says "one that needs more than the host has" "MiB in total"
+check "is that problem alone, not a warning as well" "$(grep -c 'MiB is available' /tmp/c-all.log)" "0"
+chmod 555 /opt/unipept-api/bin
+as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/c-all.log 2>&1
+check_says "a binary directory it cannot write" "bin is not writable"
+chmod 755 /opt/unipept-api/bin
+chmod a+r /tmp/huge-binary
+as_user "/opt/unipept-api/lib/deploy.sh check --from /tmp/huge-binary" >/tmp/c-all.log 2>&1
+check_says "a binary with no room beside it" "MiB free"
+rm -rf /tmp/no-sha256sum /tmp/tight-index /tmp/huge-binary
+
+
+section "a deploy.sh copied without its checks says what to run"
+mkdir -p /tmp/lone && cp /opt/unipept-api/lib/deploy.sh /opt/unipept-api/lib/lib.sh /tmp/lone/ && cp -r /opt/unipept-api/lib/lib /tmp/lone/
+chmod -R a+rX /tmp/lone
+as_user "/tmp/lone/deploy.sh status" >/tmp/lone.log 2>&1
+check "it stops" "$?" "2"
+check "and names install.sh" "$(grep -c 'there is no checks.sh beside /tmp/lone/deploy.sh; run server/install.sh again' /tmp/lone.log)" "1"
+rm -rf /tmp/lone
+
 
 section "a missing k-mer table is a warning"
 mv /srv/index/kmer_table.bin /srv/kmer_table.bin.away

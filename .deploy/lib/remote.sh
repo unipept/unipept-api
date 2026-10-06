@@ -22,9 +22,10 @@ readonly DEFAULT_READY_TIMEOUT=900
 # shellcheck disable=SC2034  # read by the scripts that source this file.
 readonly SSH_CONNECTION_BOUNDS=(-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
-# The status a URL answers with, or 000 when it does not answer at all.
+# The status a URL answers with, or 000 when it does not answer at all, waiting at most the seconds
+# given, or 5.
 http_code() {
-    curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$1"
+    curl -s -o /dev/null -w '%{http_code}' --max-time "${2:-5}" "$1"
 }
 
 # Polls until the URL answers 200. Returns 1 when the timeout runs out.

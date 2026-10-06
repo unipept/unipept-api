@@ -461,6 +461,8 @@ holder=$!
 for _ in $(seq 50); do ( flock -n 7 ) 7<"$LOCK" || break; sleep 0.1; done
 running=$(/opt/unipept-api/bin/unipept-api --version)
 d_locked=$(stage 6.6.6 yes)
+# Where the deploy that holds the lock stages its binary: nothing refused or merely reading clears it.
+printf 'staged\n' > /opt/unipept-api/bin/unipept-api.new; chown unipept: /opt/unipept-api/bin/unipept-api.new
 for command in "deploy --from $d_locked/unipept-api-6.6.6-x86_64-linux-gnu-hybrid --timeout 30" \
     "rollback --timeout 30" stop "start --timeout 30"; do
   as_user "/opt/unipept-api/lib/deploy.sh $command" >/tmp/l1.log 2>&1
@@ -473,6 +475,8 @@ as_user "/opt/unipept-api/lib/deploy.sh check" >/dev/null 2>&1
 check "check answers meanwhile" "$?" "0"
 as_user "/opt/unipept-api/lib/deploy.sh status" >/tmp/l2.log 2>&1
 check "status answers meanwhile" "$(sed -n 's/^active=//p' /tmp/l2.log)" "active"
+check "the holder's staged binary left alone" "$(cat /opt/unipept-api/bin/unipept-api.new 2>/dev/null)" "staged"
+rm -f /opt/unipept-api/bin/unipept-api.new
 kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
 
 section "the API lock: a caller that holds it hands it down on descriptor 7"

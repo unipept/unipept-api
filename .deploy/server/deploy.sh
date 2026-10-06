@@ -276,6 +276,11 @@ download_asset() {
 # Whether the binary in place is the new one, which decides what an interrupt has to undo.
 swapped=false
 
+# Whether the staged file is this run's to clear: only a deploy's, once it holds the API lock. Every
+# deploy.sh on this host stages at the same path, and one refused the lock, or a check or a status
+# run meanwhile, must not clear the file of the deploy that holds it.
+staging=false
+
 # Runs on every exit, including a signal.
 #
 # HUP is in the list because the rollout invokes this over ssh: interrupting the rollout closes the
@@ -299,7 +304,7 @@ on_signal() {
 }
 
 clean_staging() {
-    rm -f "$STAGED"
+    [ "$staging" = false ] || rm -f "$STAGED"
     [ -n "${DOWNLOAD_DIR:-}" ] && rm -rf "$DOWNLOAD_DIR"
     return 0
 }
@@ -433,6 +438,7 @@ do_deploy() {
     # nothing would roll it back.
     timeout=$(resolve_timeout "$timeout")
     take_api_lock || die "$(api_lock_refused $?)"
+    staging=true
 
     do_check ${from:+--from "$from"} >/dev/null || die "this host is not ready; run 'deploy.sh check' to see why"
     prepare_user_manager

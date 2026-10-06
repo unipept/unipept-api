@@ -83,8 +83,14 @@ Whatever changes the index a host serves has to keep a deploy out between its `s
 `start`. It takes the lock itself, on file descriptor 7, and runs `deploy.sh` with that descriptor
 still open; `deploy.sh` then takes the lock through it instead of being refused:
 
+The file is in `/run/lock`, which is emptied at boot, so it may not be there yet: make it, 0644 so
+every account can open it, then open it for reading. Opened to write, or to create once it is
+there, another account's file in sticky `/run/lock` is refused.
+
 ```bash
-exec 7</run/lock/unipept-api.lock && flock -n 7 || exit 1
+lock=/run/lock/unipept-api.lock
+[ -e "$lock" ] || (umask 022 && : > "$lock") 2>/dev/null
+exec 7<"$lock" && flock -n 7 || exit 1
 /opt/unipept-api/lib/deploy.sh stop
 # … point INDEX_LOCATION at the new files …
 /opt/unipept-api/lib/deploy.sh start

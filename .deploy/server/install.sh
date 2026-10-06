@@ -15,12 +15,13 @@
 #   4. Write etc/unipept-api.env from the example, or keep the file already there.
 #   5. Take the API lock, so no deploy runs from the files while they are replaced, and install
 #      deploy.sh, the checks it makes and lib.sh in lib/, the path the rollout calls over ssh, and
-#      the parts lib.sh loads in lib/lib/. Let go of the lock again.
+#      the parts lib.sh loads in lib/lib/.
 #   6. Install the port redirect script and its system unit, both owned by root.
 #   7. Install the service unit in the service user's ~/.config/systemd/user.
 #   8. Enable and restart unipept-api-ports, so port 80 reaches the port the service binds.
 #   9. Enable lingering for the service user, and wait for its runtime directory to appear.
 #  10. Enable the user unit as that user. It is not started: there is no binary until a deploy.
+#      Let go of the API lock.
 #  11. Print what is left to do by hand on this host.
 #  12. Run `deploy.sh check`, and report what is still wrong now rather than at the first deploy.
 
@@ -90,10 +91,6 @@ install -m 0644 -o "$USER" -g "$USER" "${HERE}/checks.sh" "${ROOT}/lib/checks.sh
 install -m 0755 -o "$USER" -g "$USER" "${HERE}/deploy.sh" "${ROOT}/lib/deploy.sh"
 log "installed ${ROOT}/lib/deploy.sh"
 
-# Let go here rather than at the exit, so neither the services this restarts nor the check at the
-# end inherit the lock.
-exec 7<&-
-
 # The service cannot bind port 80 itself, so a netfilter rule sends 80 to the port it does bind.
 # Root-owned, because only root can change netfilter and nothing about a deploy should be able to.
 install -m 0755 "${HERE}/unipept-api-ports.sh" "${ROOT}/lib/unipept-api-ports.sh"
@@ -129,6 +126,10 @@ as_user() {
 as_user systemctl --user daemon-reload
 as_user systemctl --user enable "$SERVICE"
 log "enabled ${SERVICE}, not started: it has no binary until deploy.sh runs"
+
+# Held until here, so no deploy restarts the service on a unit or a port redirect being replaced. Let
+# go before what is left, which changes nothing, so the check at the end does not hold it.
+exec 7<&-
 
 cat >&2 <<EOF
 

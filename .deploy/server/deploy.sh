@@ -52,8 +52,9 @@
 #   INDEX_LOCATION, before anything points the service at it. Print key=value for a caller to read,
 #   and exit 1 if anything is wrong.
 #
-#   status: print the installed version, the previous one, the variant, the port, and whether the
-#   unit is active.
+#   status: print the format of what follows, the installed version, the previous one, the variant,
+#   the port, whether the unit is active, the index it serves with that index's version and
+#   OpenSearch index, and the path of the API lock.
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
@@ -593,16 +594,35 @@ reported_version() {
     printf '%s\n' "${reported:-unknown}"
 }
 
-# key=value lines, so the rollout can read them.
+# key=value lines, for the rollout and for whatever changes the index this host serves, so neither
+# reads this host's files itself.
+#
+# status_format comes first and says how to read the rest: it is raised only where a line changes
+# meaning or goes, and a caller refuses a format it does not know. A line added keeps it.
+#
+# The index's version and its OpenSearch index are `-` where its .version cannot be read or names no
+# index; `check` says why.
 do_status() {
+    local index index_version='-' opensearch_index='-'
+
     prepare_user_manager
 
+    index=$(env_value INDEX_LOCATION "$ENV_FILE" || true)
+    if [ -n "$index" ] && [ -f "${index}/.version" ] && [ -r "${index}/.version" ]; then
+        index_version=$(version_in "${index}/.version")
+        opensearch_index=$(index_name "$index_version") || opensearch_index='-'
+    fi
+
+    printf 'status_format=1\n'
     printf 'version=%s\n' "$(reported_version "$BINARY")"
     printf 'previous=%s\n' "$(reported_version "$PREVIOUS")"
     printf 'variant=%s\n' "$(env_value VARIANT "$ENV_FILE" || true)"
     printf 'port=%s\n' "$(env_value PORT "$ENV_FILE" || true)"
-
     printf 'active=%s\n' "$(systemctl --user is-active "$SERVICE" || true)"
+    printf 'index_location=%s\n' "$index"
+    printf 'index_version=%s\n' "${index_version:--}"
+    printf 'opensearch_index=%s\n' "$opensearch_index"
+    printf 'api_lock=%s\n' "$API_LOCK"
 }
 
 [ $# -gt 0 ] || usage

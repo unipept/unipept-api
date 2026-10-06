@@ -101,6 +101,12 @@ as_user "/opt/unipept-api/lib/deploy.sh status" > /tmp/st.txt 2>/dev/null
 check "version line" "$(sed -n 's/^version=//p' /tmp/st.txt)" "2.6.0"
 check "variant line" "$(sed -n 's/^variant=//p' /tmp/st.txt)" "hybrid"
 check "active line"  "$(sed -n 's/^active=//p' /tmp/st.txt)" "active"
+check "the format first" "$(head -1 /tmp/st.txt)" "status_format=1"
+check "the index it serves" "$(sed -n 's/^index_location=//p' /tmp/st.txt)" "/srv/index"
+check "that index's version" "$(sed -n 's/^index_version=//p' /tmp/st.txt)" "2026.09-test"
+check "and its OpenSearch index" "$(sed -n 's/^opensearch_index=//p' /tmp/st.txt)" "uniprot_entries-2026-09-test"
+check "the API lock" "$(sed -n 's/^api_lock=//p' /tmp/st.txt)" "/run/lock/unipept-api.lock"
+check "the lock install.sh made, which any account can open" "$(stat -c '%a' /run/lock/unipept-api.lock)" "644"
 
 section "upgrade keeps the old binary"
 d2=$(stage 2.7.0 yes)
@@ -159,6 +165,15 @@ check "exit 0"          "$?" "0"
 check "says unknown"    "$(sed -n 's/^version=//p' /tmp/f2.log)" "unknown"
 check "still reports variant" "$(sed -n 's/^variant=//p' /tmp/f2.log)" "hybrid"
 cp /tmp/keep-real /opt/unipept-api/bin/unipept-api
+
+section "status names no index version where the index has none"
+sed -i 's#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/nowhere#' /opt/unipept-api/etc/unipept-api.env
+as_user "/opt/unipept-api/lib/deploy.sh status" >/tmp/f3.log 2>&1
+check "exit 0" "$?" "0"
+check "the index as configured" "$(sed -n 's/^index_location=//p' /tmp/f3.log)" "/srv/nowhere"
+check "no version" "$(sed -n 's/^index_version=//p' /tmp/f3.log)" "-"
+check "no OpenSearch index" "$(sed -n 's/^opensearch_index=//p' /tmp/f3.log)" "-"
+sed -i 's#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/index#' /opt/unipept-api/etc/unipept-api.env
 
 section "a restart that fails rolls back rather than aborting"
 cp /opt/unipept-api/bin/unipept-api /opt/unipept-api/bin/unipept-api.previous

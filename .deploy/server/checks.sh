@@ -292,7 +292,11 @@ check_binary() {
     # Beside the binary rather than in /tmp: /tmp is mounted noexec on a hardened host, and the probe
     # would then fail for every architecture, reporting a good build as unrunnable.
     probe="${ROOT}/bin/.probe.$$"
-    install -m 0755 "$from" "$probe" || { log "check: cannot place a copy of ${from} in ${ROOT}/bin to try it"; return 1; }
+    if ! install -m 0755 "$from" "$probe"; then
+        rm -f "$probe"
+        log "check: cannot place a copy of ${from} in ${ROOT}/bin to try it"
+        return 1
+    fi
     if ! "$probe" --version > /dev/null 2>&1; then
         rm -f "$probe"
         log "check: ${from} does not run on this host; wrong architecture or a missing library"

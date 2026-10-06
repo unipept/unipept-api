@@ -60,7 +60,9 @@ if [ -f "${HERE}/lib.sh" ]; then
 else
     source "${HERE}/../lib.sh"
 fi
-# The checks a server is held to, beside this script in a checkout and on a server alike.
+# The checks a server is held to, beside this script in a checkout and on a server alike. Missing
+# only where this script was copied on its own, which install.sh never does.
+[ -f "${HERE}/checks.sh" ] || die "there is no checks.sh beside ${HERE}/deploy.sh; run server/install.sh again"
 # shellcheck source=checks.sh
 source "${HERE}/checks.sh"
 

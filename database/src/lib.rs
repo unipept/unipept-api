@@ -49,8 +49,9 @@ impl Database {
 /// `uniprot_entries-2026-03` for the `2026.03` a `.version` file holds.
 ///
 /// Refuses a version that would not make a valid index name, so a malformed `.version` stops the
-/// process at startup rather than turning every protein query into an error. `deploy.sh check`
-/// applies the same rule before a start; change both together.
+/// process at startup rather than turning every protein query into an error. `index_name` in
+/// `.deploy/server/checks.sh`, which `deploy.sh check` runs before a start, applies the same rule;
+/// change both together.
 pub fn index_name(uniprot_version: &str) -> Result<String, DatabaseError> {
     let version = uniprot_version.trim();
     let valid = version.starts_with(|c: char| c.is_ascii_digit())

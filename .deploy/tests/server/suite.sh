@@ -300,6 +300,15 @@ check_says "a binary with no room beside it" "MiB free"
 rm -rf /tmp/no-sha256sum /tmp/tight-index /tmp/huge-binary
 
 
+section "a deploy.sh copied without its checks says what to run"
+mkdir -p /tmp/lone && cp /opt/unipept-api/lib/deploy.sh /opt/unipept-api/lib/lib.sh /tmp/lone/ && cp -r /opt/unipept-api/lib/lib /tmp/lone/
+chmod -R a+rX /tmp/lone
+as_user "/tmp/lone/deploy.sh status" >/tmp/lone.log 2>&1
+check "it stops" "$?" "2"
+check "and names install.sh" "$(grep -c 'there is no checks.sh beside /tmp/lone/deploy.sh; run server/install.sh again' /tmp/lone.log)" "1"
+rm -rf /tmp/lone
+
+
 section "a missing k-mer table is a warning"
 mv /srv/index/kmer_table.bin /srv/kmer_table.bin.away
 as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/c1k.log 2>&1

@@ -29,17 +29,13 @@
 #      deploy.sh installed, and `deploy.sh check` passing there.
 #  10. Count what steps 5 to 9 reported. Nothing: say the host is ready. Otherwise exit non-zero.
 
-set -euo pipefail
-
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 readonly SOURCE="${HERE}/.."
 
+# Sets the shell options and the traps every script here runs with: see lib/core.sh.
 # shellcheck source=../lib.sh
 source "${SOURCE}/lib.sh"
-
-# What `die` raises when it is called from inside a subshell.
-trap 'exit 1' USR1
 
 readonly ROOT=/opt/unipept-rollout
 readonly CONFIG=/etc/unipept-rollout
@@ -47,7 +43,7 @@ readonly OPERATOR=${OPERATOR:-unipept}
 readonly HAPROXY_CONFIG=/etc/haproxy/haproxy.cfg
 readonly FRAGMENT=/tmp/unipept-haproxy-fragment.cfg
 
-require_cmd chown curl getent install sha256sum socat ssh scp flock logger usermod
+require chown curl getent install sha256sum socat ssh scp flock logger usermod
 [ "$(id -u)" -eq 0 ] || die "run this as root. Rollouts themselves run as ${OPERATOR}."
 id "$OPERATOR" >/dev/null 2>&1 || die "there is no ${OPERATOR} account on this host"
 

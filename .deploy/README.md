@@ -24,7 +24,7 @@ it uses of the others.
 
 | Part | What it holds |
 | --- | --- |
-| `lib/core.sh` | `log`, `die`, `require_cmd` |
+| `lib/core.sh` | the shell options, `log`, `die`, `require`, `need_value`, the error trap |
 | `lib/config.sh` | reading `key=value` settings, from a file or from `deploy.sh status` |
 | `lib/locks.sh` | the rollout lock |
 | `lib/release.sh` | where a release is published, its file names, the download, checksums |

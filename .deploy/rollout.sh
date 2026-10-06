@@ -36,11 +36,10 @@
 #      of the pool — a server this run drained and never put back included, which is what an
 #      interrupted install leaves behind.
 
-set -euo pipefail
-
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 
+# Sets the shell options and the traps every script here runs with: see lib/core.sh.
 # shellcheck source=lib.sh
 source "${HERE}/lib.sh"
 
@@ -84,9 +83,6 @@ fi
 
 # After the configuration, so a LOCK_FILE set there takes its state file with it.
 [ -n "$RUN_STATE" ] || RUN_STATE="${LOCK_FILE%.lock}.state"
-
-# What `die` raises when it is called from inside a subshell.
-trap 'exit 1' USR1
 
 export HAPROXY_SOCKET NOTIFY_TO NOTIFY_SMTP
 
@@ -219,7 +215,7 @@ done
 # Only a rollout needs a release. The subcommands read the fleet, or act on what a run left.
 [ -n "$COMMAND" ] || [ -n "$VERSION" ] || usage
 [ -f "$INVENTORY" ] || die "no inventory at $INVENTORY"
-require_cmd curl sha256sum socat ssh scp flock logger
+require curl sha256sum socat ssh scp flock logger
 
 # One rollout at a time. Two runs would each read capacity before the other drained, so both would
 # believe the backend could spare a server and between them empty it. `ready` takes it too, because
@@ -524,7 +520,8 @@ update_server() {
         exit 130
     }
     trap restore_on_failure INT TERM
-    trap 'restore_target "$target"' ERR
+    # A failure exits 2, as on_error does: haproxy.sh has already said what failed.
+    trap 'restore_target "$target"; exit 2' ERR
 
     "$HAPROXY" drain "$target"
     "$HAPROXY" wait-empty "$target" "$DRAIN_TIMEOUT"
@@ -533,9 +530,9 @@ update_server() {
     "$HAPROXY" maint "$target"
 
     # Back to the global handlers rather than to none: `trap -` would leave the rest of the run with
-    # no INT or TERM handler at all, so a signal would reach `finish` with a zero status and the
-    # journal would record an aborted rollout as a clean one.
-    trap - ERR
+    # no error trap, and with no INT or TERM handler at all, so a signal would reach `finish` with a
+    # zero status and the journal would record an aborted rollout as a clean one.
+    trap on_error ERR
     trap 'exit 130' INT TERM
 
     if install_on "$name" "$host" "$port" "$asset"; then
@@ -918,7 +915,7 @@ do_status() {
     fi
     printf '\n' >&2
 
-    inventory=$(read_inventory) || exit 1
+    inventory=$(read_inventory) || exit 2
 
     printf '%-10s %-22s %-28s %-10s %-10s %s\n' SERVER ADDRESS HAPROXY VERSION VARIANT INDEX
     while read -r name host port backends server; do
@@ -985,7 +982,7 @@ do_abort() {
 do_ready() {
     local wanted=("$@") inventory name host port backends server chosen=0 restored=0 refused=0
 
-    inventory=$(read_inventory) || exit 1
+    inventory=$(read_inventory) || exit 2
     while read -r name host port backends server; do
         [ -n "$name" ] || continue
 
@@ -1018,7 +1015,7 @@ do_ready() {
 main() {
     # Read once and passed around, rather than re-read by each phase that wants it.
     local inventory
-    inventory=$(read_inventory) || exit 1
+    inventory=$(read_inventory) || exit 2
     validate_inventory "$inventory"
 
     local -a servers=()

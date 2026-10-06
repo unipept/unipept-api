@@ -354,7 +354,7 @@ check "names the operator"     "$(grep -c "by=$(id -un)" /tmp/logged.txt)" "4"
 reset_fleet; rm -rf /tmp/staged-*; : > /tmp/logged.txt
 FAKE_CHECK_FAILS=x $R --version v2.6.0 --allow-downtime >/tmp/r15.txt 2>&1
 check "after a failure: staging gone" "$(ls -d /tmp/staged-* 2>/dev/null | wc -l | tr -d ' ')" "0"
-check "recorded a non-zero exit"      "$(grep -c 'exit=1' /tmp/logged.txt)" "1"
+check "recorded the error's exit"     "$(grep -c 'exit=2' /tmp/logged.txt)" "1"
 
 reset_fleet; rm -rf /tmp/staged-*
 $R --version v2.6.0 --allow-downtime >/dev/null 2>&1 &
@@ -938,6 +938,25 @@ check_absent "no closing mail"   'deployed on' /tmp/mail.txt
 check_absent "and rick was left" '^Subject:.*rick is on' /tmp/mail.txt
 rm -f /tmp/unhealthy
 cp /tmp/ssh.keep /usr/local/bin/ssh
+
+section "34. a drain that fails puts the server back, and stops the run as an error"
+# The drain has an error trap of its own, which restores the server, and the global one has to be
+# back once it is done.
+reset_fleet
+mv "$H" /work/loadbalancer/haproxy.real
+cat > "$H" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = wait-empty ] && { echo "Error: the stand-in did not empty" >&2; exit 2; }
+exec /work/loadbalancer/haproxy.real "$@"
+EOF
+chmod +x "$H"
+: > /tmp/ssh.log
+$R --version v2.6.0 --allow-downtime >/tmp/r41.txt 2>&1
+check "the run stops with status 2" "$?" "2"
+check "every server is in the pool" \
+    "$(for srv in patty selma rick; do $H state "all_handlers/$srv" | cut -d' ' -f1; done | sort -u)" "UP"
+check_absent "and nothing was deployed" 'deploy --from' /tmp/ssh.log
+mv /work/loadbalancer/haproxy.real "$H"
 
 # The fake backends hold stdout open; without this a pipe on the outside never sees EOF.
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1

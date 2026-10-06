@@ -49,22 +49,18 @@
 #   status: print the installed version, the previous one, the variant, the port, and whether the
 #   unit is active.
 
-set -euo pipefail
-
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 
 # Beside this script once install.sh has placed both in /opt/unipept-api/lib, one level up in a
-# repository checkout.
+# repository checkout. Sets the shell options and the traps every script here runs with: see
+# lib/core.sh.
 # shellcheck source=../lib.sh
 if [ -f "${HERE}/lib.sh" ]; then
     source "${HERE}/lib.sh"
 else
     source "${HERE}/../lib.sh"
 fi
-
-# What `die` raises when it is called from inside a subshell.
-trap 'exit 1' USR1
 
 # Every path `start` in api/src/lib.rs needs, relative to INDEX_LOCATION. The service cannot come up
 # without all of them, so a deploy that does not check them first trades a clear message for a

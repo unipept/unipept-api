@@ -13,13 +13,9 @@
 # The socket is srw------- root:haproxy. Either run as root, or give the socket `mode 660` in
 # haproxy.cfg and put the operator in the haproxy group.
 
-set -euo pipefail
-
+# Sets the shell options and the traps every script here runs with: see lib/core.sh.
 # shellcheck source=../lib.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
-
-# What `die` raises when it is called from inside a subshell.
-trap 'exit 1' USR1
 
 : "${HAPROXY_SOCKET:=/run/haproxy/haproxy.sock}"
 
@@ -56,7 +52,7 @@ EOF
 # The bound is here so it does not rest on the shape of the caller. Ten seconds is far above what
 # answering `show stat` takes on a healthy HAProxy.
 runtime() {
-    require_cmd socat
+    require socat
     [ -S "$HAPROXY_SOCKET" ] || die "no HAProxy socket at $HAPROXY_SOCKET"
 
     printf '%s\n' "$1" | socat -T 10 "$HAPROXY_SOCKET" stdio 2>/dev/null ||

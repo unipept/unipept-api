@@ -27,7 +27,7 @@ it uses of the others.
 | --- | --- |
 | `lib/core.sh` | the shell options, `log`, `die`, `require`, `need_value`, the error trap |
 | `lib/config.sh` | reading `key=value` settings, from a file or from `deploy.sh status` |
-| `lib/locks.sh` | the rollout lock |
+| `lib/locks.sh` | the rollout lock and the API lock, both at fixed paths in `/run/lock` |
 | `lib/release.sh` | where a release is published, its file names, the download, checksums |
 | `lib/remote.sh` | the bounds on a connection to a server, and polling its health |
 
@@ -72,6 +72,41 @@ changed `INDEX_LOCATION`.
 
 `check` on its own only warns when OpenSearch does not answer, so a binary can still be deployed
 during an outage. `/health/database` reports the outage itself.
+
+### The API lock
+
+`deploy`, `rollback`, `stop` and `start` hold `/run/lock/unipept-api.lock` while they run, and are
+refused rather than kept waiting while something else holds it; `server/install.sh` holds it while it
+replaces the scripts. `check` and `status` take none, so both answer meanwhile.
+
+Whatever changes the index a host serves has to keep a deploy out between its `stop` and its
+`start`. It takes the lock itself, on file descriptor 7, and runs `deploy.sh` with that descriptor
+still open; `deploy.sh` then takes the lock through it instead of being refused:
+
+```bash
+exec 7</run/lock/unipept-api.lock && flock -n 7 || exit 1
+/opt/unipept-api/lib/deploy.sh stop
+# … point INDEX_LOCATION at the new files …
+/opt/unipept-api/lib/deploy.sh start
+```
+
+### What `status` reports
+
+`deploy.sh status` prints `key=value` lines, so nothing has to read this host's files to know what
+it runs. `status_format` comes first and is raised only when a line changes meaning or goes; a
+caller refuses one it does not know.
+
+| Key | Value |
+| --- | --- |
+| `status_format` | `1` |
+| `version` | the installed binary's version, `unknown` where it cannot say, `-` where there is none |
+| `previous` | the binary `rollback` puts back, the same way |
+| `variant`, `port` | from the environment file |
+| `active` | what systemd says of the unit |
+| `index_location` | `INDEX_LOCATION` as configured |
+| `index_version` | the `.version` there, or `-` where it cannot be read |
+| `opensearch_index` | the OpenSearch index of that version, or `-` |
+| `api_lock` | the path of the API lock |
 
 On the load balancer, once:
 
@@ -162,8 +197,9 @@ journalctl -t unipept-rollout            # who deployed what, when
 ## One caution
 
 `set server ... state` is a runtime change and this HAProxy has no `server-state-file`, so **reloading
-or restarting HAProxy during a rollout returns a draining server to rotation** mid-restart. The lock
-file is the signal that a run is in progress.
+or restarting HAProxy during a rollout returns a draining server to rotation** mid-restart. The lock,
+held on `/run/lock/unipept-rollout.lock`, is the signal that a run is in progress: `./rollout.sh status`
+reads it.
 
 ## A user unit, so a deploy needs no privilege
 

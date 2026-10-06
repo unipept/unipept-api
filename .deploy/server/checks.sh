@@ -54,7 +54,8 @@ meminfo() {
     printf '%s\n' $((value * 1024))
 }
 
-# The bytes a variant holds resident for an index, or 0 for one that holds nothing.
+# The bytes a variant holds resident for an index, or 0 for one that holds nothing, for the two
+# memory checks.
 resident_bytes() {
     local variant=$1 index=$2 needed=0 relative size
 
@@ -88,6 +89,21 @@ index_name() {
 load_hint() {
     [[ $1 =~ ^[0-9]{4}\.[0-9]{2}$ ]] && printf ' --uniprot-version %s' "${1//./-}"
     return 0
+}
+
+# The status OpenSearch answers a search of an index with, as /health/database searches it, so a
+# closed index answers too: 000 when nothing answers. For check_opensearch_answers and
+# check_opensearch_index, which judge the one answer.
+search_status() {
+    local status
+    # curl exits non-zero when nothing listens, and prints 000, or nothing at all.
+    status=$(http_code "${1%/}/${2}/_search?size=0&terminate_after=1" "$OPENSEARCH_TIMEOUT") || true
+    printf '%s\n' "${status:-000}"
+}
+
+# Whether a variant is one the service is built in.
+valid_variant() {
+    case $1 in mmap | preloaded | hybrid) ;; *) return 1 ;; esac
 }
 
 # Every command an update reaches for, not only the three a deploy used to name. A missing `install`
@@ -130,11 +146,11 @@ check_env_file() {
     esac
 
     value=$(env_value VARIANT "$file")
-    case $value in
-        mmap | preloaded | hybrid) ;;
-        '') log "check: VARIANT is not set; expected mmap, preloaded or hybrid"; status=1 ;;
-        *) log "check: VARIANT is '${value}'; expected mmap, preloaded or hybrid"; status=1 ;;
-    esac
+    if [ -z "$value" ]; then
+        log "check: VARIANT is not set; expected mmap, preloaded or hybrid"; status=1
+    elif ! valid_variant "$value"; then
+        log "check: VARIANT is '${value}'; expected mmap, preloaded or hybrid"; status=1
+    fi
 
     # Optional, so only a value that is set and wrong is a problem. Checked because `ready_timeout`
     # falls back rather than refusing, and a host that silently kept the shared 900 is the failure
@@ -182,20 +198,18 @@ check_index_optional_files() {
     return "$status"
 }
 
-# .version names an index the service can serve.
+# The version an index's .version holds names an index the service can serve.
 check_index_version() {
-    local index=$1 version
-    version=$(version_in "${index}/.version")
+    local index=$1 version=$2
     index_name "$version" > /dev/null \
         || { log "check: ${index}/.version holds '${version}', which names no OpenSearch index; the service will not start"; return 1; }
 }
 
-# The backend is compiled in, so a host that cannot hold its variant cannot be corrected by a restart,
-# only by deploying a different build. Above MemTotal is arithmetic: the variant cannot fit, ever.
+# Given a variant and the bytes it holds resident. The backend is compiled in, so a host that cannot
+# hold its variant cannot be corrected by a restart, only by deploying a different build. Above
+# MemTotal is arithmetic: the variant cannot fit, ever.
 check_memory_fits() {
-    local variant=$1 index=$2 needed total
-    needed=$(resident_bytes "$variant" "$index")
-    [ "$needed" -gt 0 ] || return 0
+    local variant=$1 needed=$2 total
     total=$(meminfo MemTotal)
     [ "$needed" -le "$total" ] \
         || { log "check: ${variant} needs $((needed / 1024 / 1024)) MiB resident, and this host has $((total / 1024 / 1024)) MiB in total"; return 1; }
@@ -204,22 +218,10 @@ check_memory_fits() {
 # A warning: page cache is reclaimable, so more than is available now must not block a deploy. Only
 # asked of a variant that fits at all, which check_memory_fits reports otherwise.
 check_memory_free() {
-    local variant=$1 index=$2 needed available
-    needed=$(resident_bytes "$variant" "$index")
-    [ "$needed" -gt 0 ] || return 0
+    local variant=$1 needed=$2 available
     available=$(meminfo MemAvailable)
     [ "$needed" -le "$available" ] \
         || { log "check: ${variant} needs $((needed / 1024 / 1024)) MiB resident and $((available / 1024 / 1024)) MiB is available; the kernel has to reclaim first"; return 1; }
-}
-
-# The status OpenSearch answers a search of an index with, as /health/database searches it, so a
-# closed index answers too: 000 when nothing answers. For the two checks below, which judge it.
-search_status() {
-    local database=$1 index=$2 answered
-    # curl exits non-zero when nothing listens, and prints 000, or nothing at all.
-    answered=$(curl -s -o /dev/null -w '%{http_code}' --max-time "$OPENSEARCH_TIMEOUT" \
-        "${database%/}/${index}/_search?size=0&terminate_after=1") || true
-    printf '%s\n' "${answered:-000}"
 }
 
 # A warning, given the status a search got: nothing answered. A binary can still be deployed during
@@ -284,7 +286,7 @@ check_bin_room() {
 # matches its checksum and still cannot execute, and finding that out during a rollout means a
 # server already drained.
 check_binary() {
-    local from=$1 probe
+    local from=$1 probe runs
 
     [ -f "$from" ] || { log "check: no binary at ${from}"; return 1; }
     sha256_matches "$from" "$(dirname "$from")/SHA256SUMS" || { log "check: ${from} does not match its checksum"; return 1; }
@@ -292,15 +294,10 @@ check_binary() {
     # Beside the binary rather than in /tmp: /tmp is mounted noexec on a hardened host, and the probe
     # would then fail for every architecture, reporting a good build as unrunnable.
     probe="${ROOT}/bin/.probe.$$"
-    if ! install -m 0755 "$from" "$probe"; then
-        rm -f "$probe"
-        log "check: cannot place a copy of ${from} in ${ROOT}/bin to try it"
-        return 1
-    fi
-    if ! "$probe" --version > /dev/null 2>&1; then
-        rm -f "$probe"
-        log "check: ${from} does not run on this host; wrong architecture or a missing library"
-        return 1
-    fi
+    install -m 0755 "$from" "$probe" \
+        || { rm -f "$probe"; log "check: cannot place a copy of ${from} in ${ROOT}/bin to try it"; return 1; }
+    runs=true
+    "$probe" --version > /dev/null 2>&1 || runs=false
     rm -f "$probe"
+    [ "$runs" = true ] || { log "check: ${from} does not run on this host; wrong architecture or a missing library"; return 1; }
 }

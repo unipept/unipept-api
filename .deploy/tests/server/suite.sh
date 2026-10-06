@@ -217,15 +217,12 @@ both_ways() {
   one_check "$bad"; check "${name} fails" "$?" "1"
   check "and says so" "$(grep -c -- "$says" /tmp/one-check.log)" "1"
 }
-mkdir -p /tmp/bad-index /tmp/odd-index && chmod 755 /tmp/bad-index /tmp/odd-index
-cp -r /srv/index/. /tmp/odd-index/ && echo 'not a version!' > /tmp/odd-index/.version && chmod -R a+rX /tmp/odd-index
+mkdir -p /tmp/bad-index && chmod 755 /tmp/bad-index
 printf 'PORT=eighty\nVARIANT=mmap\n' > /tmp/bad.env && chmod 644 /tmp/bad.env
 total=$(awk '$1 == "MemTotal:" { print $2 * 1024 }' /proc/meminfo)
 available=$(awk '$1 == "MemAvailable:" { print $2 * 1024 }' /proc/meminfo)
-mkdir -p /tmp/too-big /tmp/tight && chmod 755 /tmp/too-big /tmp/tight
-truncate -s $((total + 1024 * 1024)) /tmp/too-big/sa.bin
-truncate -s $(((available + total) / 2)) /tmp/tight/sa.bin
-# Larger than the room left beside the binary, as a sparse file, which takes none of it.
+# Larger than the room left beside the binary, as a sparse file, which takes none of it. Also used
+# through `check` below.
 truncate -s $((($(df -Pk /opt/unipept-api/bin | awk 'NR == 2 { print $4 }') + 1048576) * 1024)) /tmp/huge-binary
 mkdir -p /tmp/locked/bin && chmod 755 /tmp/locked /tmp/locked/bin
 
@@ -236,9 +233,9 @@ both_ways check_index_dir "check_index_dir /srv/index" "check_index_dir /srv/no-
 both_ways check_index_not_home "check_index_not_home /srv/index" "check_index_not_home /home/unipept/index" "under /home"
 both_ways check_index_files "check_index_files /srv/index" "check_index_files /tmp/bad-index" "sa.bin is missing or unreadable"
 both_ways check_index_optional_files "check_index_optional_files /srv/index" "check_index_optional_files /tmp/bad-index" "searches are slower"
-both_ways check_index_version "check_index_version /srv/index" "check_index_version /tmp/odd-index" "names no OpenSearch index"
-both_ways check_memory_fits "check_memory_fits preloaded /srv/index" "check_memory_fits preloaded /tmp/too-big" "MiB in total"
-both_ways check_memory_free "check_memory_free preloaded /srv/index" "check_memory_free preloaded /tmp/tight" "MiB is available"
+both_ways check_index_version "check_index_version /srv/index 2026.09-test" "check_index_version /srv/index 'not a version!'" "names no OpenSearch index"
+both_ways check_memory_fits "check_memory_fits preloaded 1048576" "check_memory_fits preloaded $((total + 1048576))" "MiB in total"
+both_ways check_memory_free "check_memory_free preloaded 1048576" "check_memory_free preloaded $(((available + total) / 2))" "MiB is available"
 both_ways check_opensearch_answers \
   "check_opensearch_answers http://localhost:9200 uniprot_entries-2026-09-test \$(search_status http://localhost:9200 uniprot_entries-2026-09-test)" \
   "check_opensearch_answers http://localhost:1 uniprot_entries-2026-09-test \$(search_status http://localhost:1 uniprot_entries-2026-09-test)" \
@@ -257,7 +254,7 @@ bash -c "source /opt/unipept-api/lib/lib.sh; SERVICE_USER=unipept; source /opt/u
 check "check_user fails for another user" "$?" "1"
 check "and says so" "$(grep -c 'running as root, not unipept' /tmp/one-check.log)" "1"
 one_check check_user; check "check_user passes for the service user" "$?" "0"
-rm -rf /tmp/bad-index /tmp/odd-index /tmp/too-big /tmp/tight /tmp/huge-binary /tmp/locked /tmp/bad.env
+rm -rf /tmp/bad-index /tmp/locked /tmp/bad.env
 
 
 section "deploy.sh check runs every one of them"
@@ -280,8 +277,6 @@ check_says "no lingering" "no /nonexistent; enable lingering"
 as_user "/opt/unipept-api/lib/deploy.sh check --index /srv/no-index" >/tmp/c-all.log 2>&1
 check_says "an index that is not there" "/srv/no-index is not a readable directory"
 mkdir -p /tmp/tight-index && cp -r /srv/index/. /tmp/tight-index/ && chmod -R a+rX /tmp/tight-index
-total=$(awk '$1 == "MemTotal:" { print $2 * 1024 }' /proc/meminfo)
-available=$(awk '$1 == "MemAvailable:" { print $2 * 1024 }' /proc/meminfo)
 truncate -s $(((available + total) / 2)) /tmp/tight-index/proteins.bin
 as_user "/opt/unipept-api/lib/deploy.sh check --index /tmp/tight-index" >/tmp/c-all.log 2>&1
 check_says "a variant that needs more than is free" "MiB is available"
@@ -293,7 +288,6 @@ chmod 555 /opt/unipept-api/bin
 as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/c-all.log 2>&1
 check_says "a binary directory it cannot write" "bin is not writable"
 chmod 755 /opt/unipept-api/bin
-truncate -s $((($(df -Pk /opt/unipept-api/bin | awk 'NR == 2 { print $4 }') + 1048576) * 1024)) /tmp/huge-binary
 chmod a+r /tmp/huge-binary
 as_user "/opt/unipept-api/lib/deploy.sh check --from /tmp/huge-binary" >/tmp/c-all.log 2>&1
 check_says "a binary with no room beside it" "MiB free"

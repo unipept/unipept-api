@@ -310,9 +310,6 @@ clear_start_limit() {
     systemctl --user reset-failed "$SERVICE" 2>/dev/null || true
 }
 
-# Whether the last do_check reached OpenSearch, for `start`, which will not start without it.
-OPENSEARCH_ANSWERED=false
-
 # Everything that has to be true before this host is asked to install anything: the checks in
 # checks.sh, each in turn, counting the ones that found a problem and the ones that warned.
 # problems= is that count of checks, so several missing files are one problem; each is printed.
@@ -347,14 +344,15 @@ do_check() {
     fi
     # A directory about to be served is checked by the same rules before anything points at it.
     [ -z "$index_override" ] || index=$index_override
-    case $variant in mmap | preloaded | hybrid) ;; *) variant='' ;; esac
+    valid_variant "$variant" || variant=''
+
 
     if [ -n "$index" ]; then
         if check_index_dir "$index"; then
             check_index_not_home "$index" || problems=$((problems + 1))
             if check_index_files "$index"; then
                 index_version=$(version_in "${index}/.version")
-                if check_index_version "$index"; then
+                if check_index_version "$index" "$index_version"; then
                     opensearch_index=$(index_name "$index_version")
                 else
                     problems=$((problems + 1))
@@ -367,9 +365,11 @@ do_check() {
             problems=$((problems + 1))
         fi
         # A directory its files can be measured in, even one that cannot be listed.
-        if [ -n "$variant" ] && [ -d "$index" ]; then
-            if check_memory_fits "$variant" "$index"; then
-                check_memory_free "$variant" "$index" || warnings=$((warnings + 1))
+        local resident=0
+        [ -z "$variant" ] || [ ! -d "$index" ] || resident=$(resident_bytes "$variant" "$index")
+        if [ "$resident" -gt 0 ]; then
+            if check_memory_fits "$variant" "$resident"; then
+                check_memory_free "$variant" "$resident" || warnings=$((warnings + 1))
             else
                 problems=$((problems + 1))
             fi
@@ -377,7 +377,7 @@ do_check() {
     fi
 
     # One search, whose answer both checks judge: nothing answering is a warning, an answer other
-    # than 200 a problem.
+    # than 200 a problem. Whether it answered is kept for `start`, which will not start without it.
     OPENSEARCH_ANSWERED=false
     if [ "$opensearch_index" != '-' ] && [ -n "$database" ]; then
         local status

@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 #
-# The cases for lib/core.sh: the shell options, logging, die, require, need_value and the error
-# trap, through scripts that source lib.sh as the deploy scripts do. Needs LIB, the path of the
+# The cases for lib/core.sh: the shell options, logging, die, require, need_value, unknown_option
+# and the error trap, through scripts that source lib.sh as the deploy scripts do. Needs LIB, the path of the
 # lib.sh to test, and TEMP_DIR, a directory to write those scripts in, and the assertions. Sourced
 # by the lib suite, never run. Byte for byte the same as its copy in the other repository that
 # deploys Unipept, as core.sh is.
@@ -98,6 +98,15 @@ check "a flag with nothing after it stops the script" "$?" "2"
 check "and says so" "$output" "Error: --flag requires a value."
 "$script" --other-flag > /dev/null 2>&1
 check "as does a flag with another flag after it" "$?" "2"
+
+
+section "core.sh: unknown_option"
+
+script=$(core_script unknown-option.sh 'unknown_option --no-such-option
+echo "went on"')
+output=$("$script" 2>&1)
+check "an option the script does not take stops it with status 2" "$?" "2"
+check "and says where to look" "$output" "Error: unknown option '--no-such-option'. Run with --help for the options."
 
 
 section "core.sh: the error trap"

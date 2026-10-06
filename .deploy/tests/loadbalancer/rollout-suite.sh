@@ -861,7 +861,10 @@ section "30. a state file a run creates is usable by the other account"
 # The normal path, and what stops case 29 from being reached a second time. The run clears its own
 # state when it ends, so the mode has to be read while it is still going.
 reset_fleet
-rm -f /run/lock/unipept-rollout.state
+# Left by the operator's run, killed before it could clear it. In sticky /run/lock, root cannot write
+# to it whatever its mode, so root's run has to replace it.
+printf 'pid=1\nversion=v0.0.0\nphase=stale\n' > /run/lock/unipept-rollout.state
+chown op: /run/lock/unipept-rollout.state; chmod 666 /run/lock/unipept-rollout.state
 cat > /usr/local/bin/ssh <<'EOF'
 #!/usr/bin/env bash
 args=("$@"); cmd=""
@@ -879,10 +882,11 @@ chmod +x /usr/local/bin/ssh
 $R --version v2.6.0 --only patty --allow-downtime >/dev/null 2>&1 &
 runner=$!
 waited=0
-until [ -e /run/lock/unipept-rollout.state ]; do
+until grep -q '^version=v2.6.0' /run/lock/unipept-rollout.state 2>/dev/null; do
   sleep 1; waited=$((waited + 1)); [ "$waited" -lt 60 ] || break
 done
-check "the run wrote its state" "$([ -e /run/lock/unipept-rollout.state ] && echo yes)" "yes"
+check "the run wrote its state" "$(sed -n 's/^version=//p' /run/lock/unipept-rollout.state)" "v2.6.0"
+check "over the operator's leftover, which it replaced" "$(stat -c %U /run/lock/unipept-rollout.state)" "root"
 check "world-writable, so either account can rewrite it" "$(stat -c %a /run/lock/unipept-rollout.state)" "666"
 $R abort >/dev/null 2>&1
 wait $runner 2>/dev/null

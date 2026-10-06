@@ -838,6 +838,12 @@ record_run() {
 # write so a rollout is never lost to one, which is exactly why it has to be settled here instead —
 # a silent failure there leaves `status` and `abort` reading a phase that has moved on.
 prepare_run_state() {
+    # Another account's file is replaced where this one may remove it, which root may: in sticky
+    # /run/lock, root's write to the operator's file is refused even where its mode allows it, and
+    # the failure would be silent. This run holds the lock, so no other run is using the file.
+    if [ -e "$RUN_STATE" ] && [ ! -O "$RUN_STATE" ]; then
+        rm -f "$RUN_STATE" 2>/dev/null || true
+    fi
     if [ -e "$RUN_STATE" ] && [ ! -w "$RUN_STATE" ]; then
         # Naming the owner because they are the only one who can clear it: /run/lock is sticky, so this
         # account cannot remove a file it does not own however writable the directory looks.

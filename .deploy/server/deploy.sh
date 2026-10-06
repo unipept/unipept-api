@@ -787,7 +787,9 @@ trap 'on_signal HUP' HUP
 trap clean_staging EXIT
 
 case $command in
-    check) do_check "$@" ;;
+    # A host with problems is a check's "no", exit 1. Said here, since do_check also answers the
+    # callers that test it, and a function that returns 1 at the top level would trip the error trap.
+    check) do_check "$@" || exit 1 ;;
     deploy) do_deploy "$@" ;;
     rollback) do_rollback "$@" ;;
     stop) do_stop "$@" ;;

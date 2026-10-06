@@ -256,7 +256,10 @@ patty   patty 9101 all_handlers,db_handlers patty
 selma   selma 9102 all_handlers,db_handlers selma
 EOF
 check "is-backup: rick"  "$(/work/loadbalancer/haproxy.sh is-backup all_handlers/rick && echo yes)" "yes"
-check "is-backup: patty" "$(/work/loadbalancer/haproxy.sh is-backup all_handlers/patty && echo yes || echo no)" "no"
+check "is-backup: patty" "$(/work/loadbalancer/haproxy.sh is-backup all_handlers/patty 2>/tmp/is-backup.err && echo yes || echo no)" "no"
+/work/loadbalancer/haproxy.sh is-backup all_handlers/patty 2>/dev/null
+check "a no is exit 1"          "$?" "1"
+check "and says nothing"        "$(cat /tmp/is-backup.err)" ""
 $R --version v2.6.0 --dry-run >/tmp/order.txt 2>&1
 check "rick is listed last" "$(grep -oE '^(rick|patty|selma)' /tmp/order.txt | tail -1)" "rick"
 
@@ -355,6 +358,7 @@ reset_fleet; rm -rf /tmp/staged-*; : > /tmp/logged.txt
 FAKE_CHECK_FAILS=x $R --version v2.6.0 --allow-downtime >/tmp/r15.txt 2>&1
 check "after a failure: staging gone" "$(ls -d /tmp/staged-* 2>/dev/null | wc -l | tr -d ' ')" "0"
 check "recorded the error's exit"     "$(grep -c 'exit=2' /tmp/logged.txt)" "1"
+check_absent "reported by die alone"  'stopped:' /tmp/r15.txt
 
 reset_fleet; rm -rf /tmp/staged-*
 $R --version v2.6.0 --allow-downtime >/dev/null 2>&1 &
@@ -764,7 +768,8 @@ exec "$(dirname "${BASH_SOURCE[0]}")/haproxy-real.sh" "$@"
 EOF
 chmod +x /work/loadbalancer/haproxy.sh
 $R ready selma >/tmp/r38.txt 2>&1
-check "ready exited non-zero"   "$([ $? -ne 0 ] && echo yes)" "yes"
+check "ready exited 1, its no"   "$?" "1"
+check_absent "and not an error"  'stopped:' /tmp/r38.txt
 mv /work/loadbalancer/haproxy-real.sh /work/loadbalancer/haproxy.sh
 check "says the pool refused it" "$(grep -c 'did not take it back' /tmp/r38.txt)" "1"
 check "counted as still out"     "$(grep -c '0 server(s) returned to the pool, 1 still out' /tmp/r38.txt)" "1"

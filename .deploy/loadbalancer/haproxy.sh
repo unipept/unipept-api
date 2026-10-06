@@ -225,7 +225,8 @@ is_backup() {
         END { print found + 0 }
     ')
 
-    [ "$backup" = "1" ]
+    # Not a backup is this command's "no", exit 1, rather than a failed test the error trap reports.
+    [ "$backup" = "1" ] || exit 1
 }
 
 # "backend=status" per backend, for a caller that wants to report rather than wait.

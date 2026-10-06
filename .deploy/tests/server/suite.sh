@@ -336,7 +336,8 @@ section "each failure on its own"
 # A missing index file.
 mv /srv/index/mapping.bin /srv/mapping.bin.away
 as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/c1.log 2>&1
-check "missing file: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "missing file: a check's no" "$?" "1"
+check_absent "and not an error"  'stopped:' /tmp/c1.log
 check "names the file"         "$(grep -c 'mapping.bin is missing' /tmp/c1.log)" "1"
 mv /srv/mapping.bin.away /srv/index/mapping.bin
 

@@ -34,8 +34,7 @@ it uses of the others.
 the service user's like `deploy.sh` beside them. `loadbalancer/install.sh` installs them as
 `/opt/unipept-rollout/lib.sh` and `/opt/unipept-rollout/lib/`, root's like `rollout.sh`.
 
-`lib/core.sh` is the same file in every repository that deploys Unipept, and CI checks that it
-stays so. Its header lists what a script's exit status means, which is the same for every script.
+`lib/core.sh` is the same file in every repository that deploys Unipept. Its header lists what a script's exit status means, which is the same for every script.
 
 ## Deploying
 

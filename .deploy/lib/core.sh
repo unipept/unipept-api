@@ -2,8 +2,8 @@
 #
 # What every deploy script runs on: the shell options, logging, stopping, the commands a script
 # needs, and the trap that reports a command that failed. Needs nothing else. Sourced through
-# .deploy/lib.sh, never run. CI checks that this file is byte for byte the same as its copy in the
-# other repository that deploys Unipept, so a change here is made there in the same release.
+# .deploy/lib.sh, never run. Byte for byte the same as its copy in the other repository that
+# deploys Unipept, so a change here is made there in the same release.
 #
 # What a script's exit status means, for every script that sources this:
 #   0    done, or yes

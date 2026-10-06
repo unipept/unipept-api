@@ -44,12 +44,10 @@
 #   the OpenSearch index of their version, the port redirect, free space, and with --from the
 #   checksum and that the binary runs here. --index checks another directory in place of
 #   INDEX_LOCATION, before anything points the service at it. Print key=value for a caller to read,
-#   and exit non-zero if anything is wrong.
+#   and exit 1 if anything is wrong.
 #
 #   status: print the installed version, the previous one, the variant, the port, and whether the
 #   unit is active.
-
-set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
@@ -62,9 +60,6 @@ if [ -f "${HERE}/lib.sh" ]; then
 else
     source "${HERE}/../lib.sh"
 fi
-
-# What `die` raises when it is called from inside a subshell.
-trap 'exit 1' USR1
 
 # Every path `start` in api/src/lib.rs needs, relative to INDEX_LOCATION. The service cannot come up
 # without all of them, so a deploy that does not check them first trades a clear message for a
@@ -792,7 +787,9 @@ trap 'on_signal HUP' HUP
 trap clean_staging EXIT
 
 case $command in
-    check) do_check "$@" ;;
+    # A host with problems is a check's "no", exit 1. Said here, since do_check also answers the
+    # callers that test it, and a function that returns 1 at the top level would trip the error trap.
+    check) do_check "$@" || exit 1 ;;
     deploy) do_deploy "$@" ;;
     rollback) do_rollback "$@" ;;
     stop) do_stop "$@" ;;

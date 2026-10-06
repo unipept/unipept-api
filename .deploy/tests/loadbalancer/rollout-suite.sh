@@ -256,7 +256,10 @@ patty   patty 9101 all_handlers,db_handlers patty
 selma   selma 9102 all_handlers,db_handlers selma
 EOF
 check "is-backup: rick"  "$(/work/loadbalancer/haproxy.sh is-backup all_handlers/rick && echo yes)" "yes"
-check "is-backup: patty" "$(/work/loadbalancer/haproxy.sh is-backup all_handlers/patty && echo yes || echo no)" "no"
+check "is-backup: patty" "$(/work/loadbalancer/haproxy.sh is-backup all_handlers/patty 2>/tmp/is-backup.err && echo yes || echo no)" "no"
+/work/loadbalancer/haproxy.sh is-backup all_handlers/patty 2>/dev/null
+check "a no is exit 1"          "$?" "1"
+check "and says nothing"        "$(cat /tmp/is-backup.err)" ""
 $R --version v2.6.0 --dry-run >/tmp/order.txt 2>&1
 check "rick is listed last" "$(grep -oE '^(rick|patty|selma)' /tmp/order.txt | tail -1)" "rick"
 
@@ -354,7 +357,8 @@ check "names the operator"     "$(grep -c "by=$(id -un)" /tmp/logged.txt)" "4"
 reset_fleet; rm -rf /tmp/staged-*; : > /tmp/logged.txt
 FAKE_CHECK_FAILS=x $R --version v2.6.0 --allow-downtime >/tmp/r15.txt 2>&1
 check "after a failure: staging gone" "$(ls -d /tmp/staged-* 2>/dev/null | wc -l | tr -d ' ')" "0"
-check "recorded a non-zero exit"      "$(grep -c 'exit=1' /tmp/logged.txt)" "1"
+check "recorded the error's exit"     "$(grep -c 'exit=2' /tmp/logged.txt)" "1"
+check_absent "reported by die alone"  'stopped:' /tmp/r15.txt
 
 reset_fleet; rm -rf /tmp/staged-*
 $R --version v2.6.0 --allow-downtime >/dev/null 2>&1 &
@@ -764,7 +768,8 @@ exec "$(dirname "${BASH_SOURCE[0]}")/haproxy-real.sh" "$@"
 EOF
 chmod +x /work/loadbalancer/haproxy.sh
 $R ready selma >/tmp/r38.txt 2>&1
-check "ready exited non-zero"   "$([ $? -ne 0 ] && echo yes)" "yes"
+check "ready exited 1, its no"   "$?" "1"
+check_absent "and not an error"  'stopped:' /tmp/r38.txt
 mv /work/loadbalancer/haproxy-real.sh /work/loadbalancer/haproxy.sh
 check "says the pool refused it" "$(grep -c 'did not take it back' /tmp/r38.txt)" "1"
 check "counted as still out"     "$(grep -c '0 server(s) returned to the pool, 1 still out' /tmp/r38.txt)" "1"
@@ -938,6 +943,25 @@ check_absent "no closing mail"   'deployed on' /tmp/mail.txt
 check_absent "and rick was left" '^Subject:.*rick is on' /tmp/mail.txt
 rm -f /tmp/unhealthy
 cp /tmp/ssh.keep /usr/local/bin/ssh
+
+section "34. a drain that fails puts the server back, and stops the run as an error"
+# The drain has an error trap of its own, which restores the server, and the global one has to be
+# back once it is done.
+reset_fleet
+mv "$H" /work/loadbalancer/haproxy.real
+cat > "$H" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = wait-empty ] && { echo "Error: the stand-in did not empty" >&2; exit 2; }
+exec /work/loadbalancer/haproxy.real "$@"
+EOF
+chmod +x "$H"
+: > /tmp/ssh.log
+$R --version v2.6.0 --allow-downtime >/tmp/r41.txt 2>&1
+check "the run stops with status 2" "$?" "2"
+check "every server is in the pool" \
+    "$(for srv in patty selma rick; do $H state "all_handlers/$srv" | cut -d' ' -f1; done | sort -u)" "UP"
+check_absent "and nothing was deployed" 'deploy --from' /tmp/ssh.log
+mv /work/loadbalancer/haproxy.real "$H"
 
 # The fake backends hold stdout open; without this a pipe on the outside never sees EOF.
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1

@@ -3,6 +3,7 @@
 # Runs the deploy suites. From anywhere: `.deploy/tests/run-tests.sh`
 #
 #   run-tests.sh                  every suite
+#   run-tests.sh lib              the parts of lib.sh, function by function, with no container
 #   run-tests.sh server           install.sh and deploy.sh, against a real systemd user manager
 #   run-tests.sh haproxy          haproxy.sh, against a real HAProxy
 #   run-tests.sh rollout          rollout.sh, against a real HAProxy with two backends
@@ -12,7 +13,8 @@
 # too: `systemctl --user` without an init, a `show stat` field layout, a status that reads "UP 1/100"
 # while a server is being checked back in. Both images are built from the versions production runs.
 #
-# Needs Docker, and the server suite needs to run a container with --privileged so systemd can boot.
+# Every suite but lib needs Docker, and the server suite needs to run a container with --privileged
+# so systemd can boot.
 
 set -euo pipefail
 
@@ -25,7 +27,8 @@ readonly CONTAINER=unipept-deploy-test
 
 log() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 
-command -v docker >/dev/null || { echo "docker is not installed" >&2; exit 1; }
+# Every suite but lib runs in a container.
+[ "${1:-all}" = lib ] || command -v docker >/dev/null || { echo "docker is not installed" >&2; exit 1; }
 
 # The systemd container is long-lived: booting it takes a few seconds, and every server case runs
 # against the same one, reset between suites rather than rebuilt.
@@ -40,6 +43,11 @@ start_server_container() {
         waited=$((waited + 1))
         [ "$waited" -lt 60 ] || { echo "systemd did not come up in the container" >&2; exit 1; }
     done
+}
+
+run_lib_suite() {
+    log "Library suite: the parts of lib.sh"
+    "${HERE}/lib-suite.sh"
 }
 
 run_server_suite() {
@@ -74,17 +82,19 @@ cleanup() { docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 case "${1:-all}" in
+    lib)     run_lib_suite ;;
     server)  run_server_suite ;;
     haproxy) run_lb_suite haproxy-suite.sh "HAProxy suite: haproxy.sh" ;;
     rollout) run_lb_suite rollout-suite.sh "Rollout suite: rollout.sh" ;;
     lb-install) run_lb_suite install-suite.sh "Load balancer install suite" ;;
     all)
+        run_lib_suite
         run_server_suite
         run_lb_suite haproxy-suite.sh "HAProxy suite: haproxy.sh"
         run_lb_suite rollout-suite.sh "Rollout suite: rollout.sh"
         run_lb_suite install-suite.sh "Load balancer install suite"
         ;;
-    *) sed -n '2,12p' "${BASH_SOURCE[0]}" >&2; exit 2 ;;
+    *) sed -n '2,13p' "${BASH_SOURCE[0]}" >&2; exit 2 ;;
 esac
 
 log "Every suite passed"

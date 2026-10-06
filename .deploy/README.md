@@ -24,7 +24,7 @@ it uses of the others.
 
 | Part | What it holds |
 | --- | --- |
-| `lib/core.sh` | `log`, `die`, `require_cmd` |
+| `lib/core.sh` | the shell options, `log`, `die`, `require`, `need_value`, the error trap |
 | `lib/config.sh` | reading `key=value` settings, from a file or from `deploy.sh status` |
 | `lib/locks.sh` | the rollout lock |
 | `lib/release.sh` | where a release is published, its file names, the download, checksums |
@@ -33,6 +33,8 @@ it uses of the others.
 `server/install.sh` installs them as `/opt/unipept-api/lib/lib.sh` and `/opt/unipept-api/lib/lib/`,
 the service user's like `deploy.sh` beside them. `loadbalancer/install.sh` installs them as
 `/opt/unipept-rollout/lib.sh` and `/opt/unipept-rollout/lib/`, root's like `rollout.sh`.
+
+`lib/core.sh` is the same file in every repository that deploys Unipept. Its header lists what a script's exit status means, which is the same for every script.
 
 ## Deploying
 

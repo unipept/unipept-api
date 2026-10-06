@@ -69,7 +69,7 @@ chown unipept:unipept /etc/unipept-rollout/rollout.conf
 echo "touch /tmp/ran-as-root" >> /etc/unipept-rollout/rollout.conf
 rm -f /tmp/ran-as-root
 /deploy/loadbalancer/install.sh >/tmp/i2b.log 2>&1
-check "refused"                "$?" "1"
+check "refused"                "$?" "2"
 check "and says why"           "$(grep -c 'can be written by someone other than root' /tmp/i2b.log)" "1"
 check "nothing in it ran"      "$([ -e /tmp/ran-as-root ] && echo ran || echo not)" "not"
 check "and it is left as it was" "$(stat -c %U /etc/unipept-rollout/rollout.conf)" "unipept"
@@ -77,7 +77,7 @@ cp /tmp/rollout.conf.root /etc/unipept-rollout/rollout.conf
 chown root:root /etc/unipept-rollout/rollout.conf
 chmod 0666 /etc/unipept-rollout/rollout.conf
 /deploy/loadbalancer/install.sh >/tmp/i2b.log 2>&1
-check "as is one root owns that anyone can write" "$?" "1"
+check "as is one root owns that anyone can write" "$?" "2"
 chmod 0644 /etc/unipept-rollout/rollout.conf
 
 section "the audit reads HAProxy, not just the file"
@@ -191,7 +191,7 @@ for _ in $(seq 50); do flock -n /tmp/unipept-rollout.lock true 2>/dev/null || br
 before=$(stat -c %Y /opt/unipept-rollout/rollout.sh)
 touch -d '2000-01-01' /opt/unipept-rollout/rollout.sh
 /deploy/loadbalancer/install.sh >/tmp/i-lock.log 2>&1
-check "refused"                  "$?" "1"
+check "refused"                  "$?" "2"
 check "and says a rollout holds it" "$(grep -c 'another rollout holds /tmp/unipept-rollout.lock.*Install once it has finished' /tmp/i-lock.log)" "1"
 check "nothing was replaced"     "$(stat -c %Y /opt/unipept-rollout/rollout.sh)" "$(date -d '2000-01-01' +%s)"
 wait "$holder"

@@ -336,7 +336,8 @@ section "each failure on its own"
 # A missing index file.
 mv /srv/index/mapping.bin /srv/mapping.bin.away
 as_user "/opt/unipept-api/lib/deploy.sh check" >/tmp/c1.log 2>&1
-check "missing file: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "missing file: a check's no" "$?" "1"
+check_absent "and not an error"  'stopped:' /tmp/c1.log
 check "names the file"         "$(grep -c 'mapping.bin is missing' /tmp/c1.log)" "1"
 mv /srv/mapping.bin.away /srv/index/mapping.bin
 
@@ -584,11 +585,19 @@ section "a release download is bounded by throughput, not left to hang"
 # This asserts the option set reaches the download. That a stall then aborts is curl's own behaviour,
 # and exercising it here would cost the suite two minutes of real waiting: the bound is 30 seconds of
 # silence and `--retry 3` spends it four times.
+#
+# The stand-in answers a release download with an empty file, so the deploy goes on to the second
+# download, and then stops at the checksum. Anything else it fails, as an unreachable host would.
 mkdir -p /tmp/curlbin
 cat > /tmp/curlbin/curl <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> /tmp/curl-args.log
-exit 1
+case "$*" in *releases/download*) ;; *) exit 1 ;; esac
+while [ "$#" -gt 0 ]; do
+  [ "$1" = -o ] && : > "$2"
+  shift
+done
+exit 0
 EOF
 chmod +x /tmp/curlbin/curl
 # Writable by the service user, which is who runs the deploy: root owns this file otherwise and the
@@ -610,6 +619,20 @@ check "retries are still asked"   "$(grep 'releases/download' /tmp/curl-args.log
 # The health probe must keep its own short bound rather than inherit the download's. Selected by its
 # route, since check's search of the OpenSearch index shares that bound.
 check "the probe is unchanged"    "$(grep -- '/health' /tmp/curl-args.log | grep -c -- '--max-time 5')" "1"
+
+# A download that fails stops the deploy before the next one.
+cat > /tmp/curlbin/curl <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> /tmp/curl-args.log
+exit 22
+EOF
+: > /tmp/curl-args.log
+setpriv --reuid unipept --regid unipept --init-groups \
+  env XDG_RUNTIME_DIR=/run/user/"$UID_N" HOME=/home/unipept PATH=/tmp/curlbin:/usr/bin:/bin \
+  /opt/unipept-api/lib/deploy.sh deploy --version v9.9.9 --timeout 10 >/tmp/t7b.log 2>&1
+check "a failed download stops the deploy" "$?" "2"
+check "before the next download"  "$(grep -c 'releases/download' /tmp/curl-args.log)" "1"
+check "and says which command failed" "$(grep -c "failed with exit status 22" /tmp/t7b.log)" "1"
 rm -rf /tmp/curlbin
 
 section "READY_TIMEOUT belongs to the host"

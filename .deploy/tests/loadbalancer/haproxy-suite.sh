@@ -35,7 +35,7 @@ check "up-count counts 3"  "$($H up-count all_handlers)" "3"
 section "2. an unknown server is refused, not silently wrong"
 $H state all_handlers/nosuch >/tmp/e1 2>&1; check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says not in config" "$(grep -c 'is not in every one of' /tmp/e1)" "1"
-$H state bogus >/tmp/e2 2>&1; check "bad target exit 1" "$([ $? -ne 0 ] && echo yes)" "yes"
+$H state bogus >/tmp/e2 2>&1; check "bad target: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says expected form" "$(grep -c 'expected <backend' /tmp/e2)" "1"
 
 section "3. drain, then maint, then ready"

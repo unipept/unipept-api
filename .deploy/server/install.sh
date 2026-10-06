@@ -23,23 +23,18 @@
 #  11. Print what is left to do by hand on this host.
 #  12. Run `deploy.sh check`, and report what is still wrong now rather than at the first deploy.
 
-set -euo pipefail
-
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 
 # shellcheck source=../lib.sh
 source "${HERE}/../lib.sh"
 
-# What `die` raises when it is called from inside a subshell.
-trap 'exit 1' USR1
-
 readonly SERVICE=unipept-api
 readonly USER=unipept
 readonly ROOT=/opt/unipept-api
 readonly ENV_FILE="${ROOT}/etc/unipept-api.env"
 
-require_cmd getent install iptables loginctl setpriv systemctl useradd usermod
+require getent install iptables loginctl setpriv systemctl useradd usermod
 [ "$(id -u)" -eq 0 ] || die "run this as root. It is the only step that needs it."
 
 # A home directory, because a user unit lives in it. A real shell, because the rollout runs

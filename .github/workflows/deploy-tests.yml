@@ -61,7 +61,7 @@ jobs:
           BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
           ref=main
-          if git ls-remote --exit-code --heads "https://github.com/${OTHER}" "$BRANCH" > /dev/null; then
+          if git ls-remote --exit-code "https://github.com/${OTHER}" "refs/heads/${BRANCH}" > /dev/null; then
             ref=$BRANCH
           fi
           echo "Comparing with ${OTHER} at ${ref}"

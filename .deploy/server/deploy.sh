@@ -60,51 +60,9 @@ if [ -f "${HERE}/lib.sh" ]; then
 else
     source "${HERE}/../lib.sh"
 fi
-
-# Every path `start` in api/src/lib.rs needs, relative to INDEX_LOCATION. The service cannot come up
-# without all of them, so a deploy that does not check them first trades a clear message for a
-# timeout. The database build writes these files and checks the same list, so a change here needs
-# the same change there.
-readonly INDEX_FILES="
-.version
-sa.bin
-proteins.bin
-mapping.bin
-datastore/sampledata.json
-datastore/ec_numbers.tsv
-datastore/go_terms.tsv
-datastore/interpro_entries.tsv
-datastore/proteomes.tsv
-datastore/lineages.tsv
-datastore/taxons.tsv
-"
-
-# Index files the service opens when they exist and runs without. Searches without them are slower.
-readonly OPTIONAL_INDEX_FILES="
-kmer_table.bin
-"
-
-# The index files each storage backend reads into memory, by variant. The choice is compiled in, so
-# a host given the wrong build cannot correct it with a restart.
-#
-# mmap maps everything; preloaded holds all of it; hybrid maps only the suffix array, which is by far
-# the largest part, and holds the rest.
-files_resident_for() {
-    case $1 in
-        preloaded) printf 'sa.bin proteins.bin mapping.bin kmer_table.bin\n' ;;
-        hybrid) printf 'proteins.bin mapping.bin kmer_table.bin\n' ;;
-        mmap) printf '\n' ;;
-        *) die "unknown variant '$1'; expected mmap, preloaded or hybrid" ;;
-    esac
-}
-
-# A field from /proc/meminfo, in bytes. It reports kB.
-meminfo() {
-    local field=$1 value
-    value=$(awk -v f="${field}:" '$1 == f { print $2 }' /proc/meminfo)
-    [ -n "$value" ] || die "no ${field} in /proc/meminfo"
-    printf '%s\n' $((value * 1024))
-}
+# The checks a server is held to, beside this script in a checkout and on a server alike.
+# shellcheck source=checks.sh
+source "${HERE}/checks.sh"
 
 readonly SERVICE=unipept-api
 readonly SERVICE_USER=unipept
@@ -350,41 +308,14 @@ clear_start_limit() {
     systemctl --user reset-failed "$SERVICE" 2>/dev/null || true
 }
 
-# What a .version file holds, with the whitespace around it removed and none inside: the binary reads
-# it the same way.
-version_in() {
-    local content
-    content=$(<"$1")
-    content="${content#"${content%%[![:space:]]*}"}"
-    printf '%s\n' "${content%"${content##*[![:space:]]}"}"
-}
-
-# The OpenSearch index a version is served from: uniprot_entries-2026-03 for 2026.03. Fails for a
-# version that makes no valid index name. The same rule as `index_name` in the binary's database
-# crate, which refuses such a version at startup; change both together.
-index_name() {
-    case $1 in
-        '' | [!0-9]* | *[!a-z0-9.-]*) return 1 ;;
-    esac
-    printf 'uniprot_entries-%s\n' "${1//./-}"
-}
-
-# The --uniprot-version to load a version with, for a release version, which is all load.sh takes.
-load_hint() {
-    [[ $1 =~ ^[0-9]{4}\.[0-9]{2}$ ]] && printf ' --uniprot-version %s' "${1//./-}"
-    return 0
-}
-
-# Whether the last `check` reached OpenSearch at all, for `start`, which will not start without it.
-OPENSEARCH_ANSWERED=false
-
-# Everything that has to be true before this host is asked to install anything.
+# Everything that has to be true before this host is asked to install anything: the checks in
+# checks.sh, each in turn, counting the ones that found a problem and the ones that warned.
 #
 # Run by the rollout on every server before it drains the first one, by `deploy` on itself, and by an
-# operator who wants to know. Collects every problem rather than stopping at the first, because the
-# point is to learn the whole story in one pass.
+# operator who wants to know. Runs every check rather than stopping at the first, because the point
+# is to learn the whole story in one pass.
 #
-# Prints key=value for a caller to read, and exits non-zero if anything is wrong.
+# Prints key=value for a caller to read, and returns 1 if any check found a problem.
 do_check() {
     local from='' index_override='' problems=0 warnings=0
 
@@ -396,186 +327,57 @@ do_check() {
         esac
     done
 
-    fail() { log "check: $*"; problems=$((problems + 1)); }
-    warn() { log "check: $*"; warnings=$((warnings + 1)); }
+    check_commands || problems=$((problems + 1))
+    check_user || problems=$((problems + 1))
+    check_lingering || problems=$((problems + 1))
+    check_env_file "$ENV_FILE" "$index_override" || problems=$((problems + 1))
 
-    # Every command the update reaches for, not only the three the deploy used to name. A missing
-    # `install` or `ln` would otherwise surface with the binary half replaced.
-    local cmd
-    for cmd in curl sha256sum install mktemp systemctl awk sed ln mv df; do
-        command -v "$cmd" >/dev/null || fail "${cmd} is not installed"
-    done
-
-    [ "$(id -un)" = "$SERVICE_USER" ] || fail "running as $(id -un), not ${SERVICE_USER}"
-
-    # systemctl --user talks to the user manager through this, and a non-interactive ssh command does
-    # not always have it set. Lingering is what keeps it in place.
-    local runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-    [ -d "$runtime" ] || fail "no ${runtime}; enable lingering for ${SERVICE_USER}"
-
-    local index='' variant='' port='' database=''
+    local index='' variant='' port='' database='' index_version='-' opensearch_index='-'
     if [ -r "$ENV_FILE" ]; then
         index=$(env_value INDEX_LOCATION "$ENV_FILE")
         variant=$(env_value VARIANT "$ENV_FILE")
         port=$(env_value PORT "$ENV_FILE")
         database=$(env_value DATABASE_ADDRESS "$ENV_FILE")
-
-        [ -n "$index" ] || [ -n "$index_override" ] || fail "INDEX_LOCATION is not set in ${ENV_FILE}"
-        [ -n "$database" ] || fail "DATABASE_ADDRESS is not set"
-        case $port in
-            '') fail "PORT is not set" ;;
-            *[!0-9]*) fail "PORT is '${port}', which is not a number" ;;
-        esac
-        case $variant in
-            mmap | preloaded | hybrid) ;;
-            '') fail "VARIANT is not set; expected mmap, preloaded or hybrid" ;;
-            *) fail "VARIANT is '${variant}'; expected mmap, preloaded or hybrid" ;;
-        esac
-
-        # Optional, so only a value that is set and wrong is a problem. Reported here because
-        # `ready_timeout` falls back rather than refusing, and a host that silently kept the shared
-        # 900 is the failure this whole setting exists to avoid.
-        local configured_timeout
-        configured_timeout=$(env_value READY_TIMEOUT "$ENV_FILE")
-        case $configured_timeout in
-            '') ;;
-            *[!0-9]*) fail "READY_TIMEOUT is '${configured_timeout}', which is not a number of seconds" ;;
-        esac
-    else
-        fail "cannot read ${ENV_FILE}"
     fi
-
-    # A directory about to be served, checked by the same rules before anything points at it.
+    # A directory about to be served is checked by the same rules before anything points at it.
     [ -z "$index_override" ] || index=$index_override
-
-    # The index, which is the setting most often wrong and the slowest to find out about: without
-    # this the service simply never answers and the deploy waits out its whole timeout.
-    local index_version='-'
-    if [ -n "$index" ]; then
-        if [ -d "$index" ] && [ -r "$index" ]; then
-            # ProtectHome=yes hides /home from the unit, so an index there is readable now and gone
-            # the moment systemd starts the service.
-            case $index in
-                /home/*) fail "INDEX_LOCATION is under /home, which ProtectHome=yes hides from the service" ;;
-            esac
-
-            local relative missing=0
-            for relative in $INDEX_FILES; do
-                [ -r "${index}/${relative}" ] || { fail "${index}/${relative} is missing or unreadable"; missing=1; }
-            done
-            for relative in $OPTIONAL_INDEX_FILES; do
-                [ -r "${index}/${relative}" ] || warn "${index}/${relative} is missing or unreadable; the service runs without it, but searches are slower"
-            done
-            [ "$missing" -eq 0 ] && index_version=$(version_in "${index}/.version")
-        else
-            fail "${index} is not a readable directory"
-        fi
-    fi
-
-    # The backend is compiled in, so a host that cannot hold its variant cannot be corrected by a
-    # restart — only by deploying a different build.
     case $variant in mmap | preloaded | hybrid) ;; *) variant='' ;; esac
-    if [ -n "$variant" ] && [ -n "$index" ] && [ -d "$index" ]; then
-        local needed=0 relative size
-        for relative in $(files_resident_for "$variant"); do
-            size=$(stat -c %s "${index}/${relative}" 2>/dev/null || echo 0)
-            needed=$((needed + size))
-        done
 
-        if [ "$needed" -gt 0 ]; then
-            local total available
-            total=$(meminfo MemTotal)
-            available=$(meminfo MemAvailable)
-
-            # Above MemTotal is arithmetic: the variant cannot fit, ever. Above MemAvailable is a
-            # guess, because page cache is reclaimable, so it must not block a legitimate deploy.
-            if [ "$needed" -gt "$total" ]; then
-                fail "${variant} needs $((needed / 1024 / 1024)) MiB resident, and this host has $((total / 1024 / 1024)) MiB in total"
-            elif [ "$needed" -gt "$available" ]; then
-                warn "${variant} needs $((needed / 1024 / 1024)) MiB resident and $((available / 1024 / 1024)) MiB is available; the kernel has to reclaim first"
+    if [ -n "$index" ]; then
+        if check_index_dir "$index"; then
+            check_index_not_home "$index" || problems=$((problems + 1))
+            check_index_kmer_table "$index" || warnings=$((warnings + 1))
+            if check_index_files "$index"; then
+                index_version=$(version_in "${index}/.version")
+                if check_index_version "$index"; then
+                    opensearch_index=$(index_name "$index_version")
+                else
+                    problems=$((problems + 1))
+                fi
+            else
+                problems=$((problems + 1))
             fi
-        fi
-    fi
-
-    # The proteins of that version, in an index of their own, searched as /health/database does, so
-    # a closed index fails here too. OpenSearch not answering at all is only a warning, so a binary
-    # can still be deployed during an outage; `start` refuses it.
-    local opensearch_index='-' answered
-    OPENSEARCH_ANSWERED=false
-    if [ "$index_version" != '-' ] && ! opensearch_index=$(index_name "$index_version"); then
-        fail "${index}/.version holds '${index_version}', which names no OpenSearch index; the service will not start"
-        opensearch_index='-'
-    fi
-    if [ "$opensearch_index" != '-' ] && [ -n "$database" ]; then
-        # curl exits non-zero when nothing listens, and prints 000, or nothing at all.
-        answered=$(curl -s -o /dev/null -w '%{http_code}' --max-time "$OPENSEARCH_TIMEOUT" \
-            "${database%/}/${opensearch_index}/_search?size=0&terminate_after=1") || true
-        [ "${answered:-000}" = 000 ] || OPENSEARCH_ANSWERED=true
-        case ${answered:-000} in
-            200) ;;
-            000) warn "OpenSearch at ${database} does not answer, so whether ${opensearch_index} is there is unknown" ;;
-            404) fail "${opensearch_index} is not in OpenSearch; load its proteins with unipept-database's load.sh$(load_hint "$index_version")" ;;
-            *) fail "${opensearch_index} does not answer a search (HTTP ${answered}); is it closed?" ;;
-        esac
-    fi
-
-    # The service listens above 1024 and the load balancer reaches it on 80, so the redirect is as
-    # necessary as the binary. A host that lost it serves perfectly and is unreachable, which is
-    # exactly the failure this whole check exists to find before a server is drained.
-    case $(systemctl is-enabled unipept-api-ports 2>/dev/null) in
-        enabled) ;;
-        *) fail "unipept-api-ports is not enabled, so port 80 will not reach this service after a reboot" ;;
-    esac
-    case $(systemctl is-active unipept-api-ports 2>/dev/null) in
-        active) ;;
-        *) fail "unipept-api-ports is not active; run it as root to restore the port 80 redirect" ;;
-    esac
-
-    # And that it works, rather than only that systemd thinks it ran.
-    #
-    # Only meaningful while the service is answering on its own port: if it is not, nothing can be
-    # concluded about the redirect, and a deploy is exactly what someone runs to fix a service that
-    # is down. Refusing here would block the recovery.
-    if [ -n "$port" ] && [ "$(http_code "http://127.0.0.1:${port}/health")" = "200" ]; then
-        if [ "$(http_code "http://127.0.0.1:80/health")" != "200" ]; then
-            fail "the service answers on ${port} but port 80 does not reach it; check unipept-api-ports"
-        fi
-    fi
-
-    [ -w "${ROOT}/bin" ] || fail "${ROOT}/bin is not writable"
-
-    # Room for a second copy beside the one running, since both exist during a swap. Measured from
-    # the binary at hand rather than a guessed constant, with a little room to spare.
-    local free_kb binary_kb=0
-    free_kb=$(df -Pk "${ROOT}/bin" | awk 'NR == 2 { print $4 }')
-    if [ -n "$from" ] && [ -f "$from" ]; then
-        binary_kb=$(( $(stat -c %s "$from") / 1024 ))
-    elif [ -f "$BINARY" ]; then
-        binary_kb=$(( $(stat -c %s "$BINARY") / 1024 ))
-    fi
-    if [ "${free_kb:-0}" -lt $((binary_kb + 20480)) ]; then
-        fail "${ROOT}/bin has $(( ${free_kb:-0} / 1024 )) MiB free, and a swap needs about $(( (binary_kb + 20480) / 1024 )) MiB"
-    fi
-
-    # With --from, the delivered binary itself: the checksum, and that it runs here. A build for the
-    # wrong architecture matches its checksum and still cannot execute, and finding that out during
-    # the rollout means a server already drained.
-    if [ -n "$from" ]; then
-        if [ ! -f "$from" ]; then
-            fail "no binary at ${from}"
-        elif ! sha256_matches "$from" "$(dirname "$from")/SHA256SUMS"; then
-            fail "${from} does not match its checksum"
+            if [ -n "$variant" ]; then
+                check_memory_fits "$variant" "$index" || problems=$((problems + 1))
+                check_memory_free "$variant" "$index" || warnings=$((warnings + 1))
+            fi
         else
-            # Beside the binary rather than in /tmp: /tmp is mounted noexec on a hardened host, and
-            # the probe would then fail for every architecture, reporting a good build as unrunnable.
-            local probe="${ROOT}/bin/.probe.$$"
-            install -m 0755 "$from" "$probe"
-            if ! "$probe" --version >/dev/null 2>&1; then
-                fail "${from} does not run on this host; wrong architecture or a missing library"
-            fi
-            rm -f "$probe"
+            problems=$((problems + 1))
         fi
     fi
+
+    if [ "$opensearch_index" != '-' ] && [ -n "$database" ]; then
+        if check_opensearch_answers "$database"; then
+            check_opensearch_index "$database" "$index_version" || problems=$((problems + 1))
+        else
+            warnings=$((warnings + 1))
+        fi
+    fi
+
+    check_ports_redirect "$port" || problems=$((problems + 1))
+    check_bin_writable || problems=$((problems + 1))
+    check_bin_room "$from" || problems=$((problems + 1))
+    [ -z "$from" ] || check_binary "$from" || problems=$((problems + 1))
 
     printf 'variant=%s\n' "${variant:-unknown}"
     printf 'port=%s\n' "${port:-unknown}"
@@ -739,7 +541,7 @@ do_start() {
     # Before the start, so a host whose index is missing or does not fit says so without a start
     # that fails. The proteins have to answer: a start without them serves /health and nothing else.
     do_check >/dev/null || die "this host is not ready; run 'deploy.sh check' to see why"
-    [ "$OPENSEARCH_ANSWERED" = true ] || die "OpenSearch does not answer; start it first"
+    check_opensearch_answers "$(env_value DATABASE_ADDRESS "$ENV_FILE")" || die "OpenSearch does not answer; start it first"
 
     log "starting ${SERVICE}"
     clear_start_limit

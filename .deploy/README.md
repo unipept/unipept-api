@@ -16,6 +16,7 @@ holding copies.
 | `server/unipept-api.env.example` | per-host configuration, installed at `/opt/unipept-api/etc/unipept-api.env` |
 | `server/install.sh` | prepares a host once. The only step that needs root |
 | `server/deploy.sh` | installs or puts back a binary on one server, or restarts it on another database |
+| `server/checks.sh` | what a server has to be before `deploy.sh` runs, starts or installs anything: one function per check |
 
 ## The shared library
 

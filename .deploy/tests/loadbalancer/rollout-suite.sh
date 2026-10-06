@@ -127,7 +127,7 @@ stop_backend() { pkill -f "TCP-LISTEN:$1" >/dev/null 2>&1; sleep 1; }
 start_backend() { socat TCP-LISTEN:"$1",reuseaddr,fork SYSTEM:'cat /response.http' >/dev/null 2>&1 & sleep 1; }
 
 # The container path; shellcheck is pointed at the checkout instead.
-# shellcheck source-path=SCRIPTDIR source=../lib.sh
+# shellcheck source=../lib.sh
 source /deploy/tests/lib.sh
 
 section "1. --dry-run reads every server and changes nothing"

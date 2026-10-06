@@ -56,7 +56,7 @@ readonly HERE
 
 # Beside this script once install.sh has placed both in /opt/unipept-api/lib, one level up in a
 # repository checkout.
-# shellcheck source-path=SCRIPTDIR source=../lib.sh
+# shellcheck source=../lib.sh
 if [ -f "${HERE}/lib.sh" ]; then
     source "${HERE}/lib.sh"
 else
@@ -65,6 +65,51 @@ fi
 
 # What `die` raises when it is called from inside a subshell.
 trap 'exit 1' USR1
+
+# Every path `start` in api/src/lib.rs needs, relative to INDEX_LOCATION. The service cannot come up
+# without all of them, so a deploy that does not check them first trades a clear message for a
+# timeout. The database build writes these files and checks the same list, so a change here needs
+# the same change there.
+readonly INDEX_FILES="
+.version
+sa.bin
+proteins.bin
+mapping.bin
+datastore/sampledata.json
+datastore/ec_numbers.tsv
+datastore/go_terms.tsv
+datastore/interpro_entries.tsv
+datastore/proteomes.tsv
+datastore/lineages.tsv
+datastore/taxons.tsv
+"
+
+# Index files the service opens when they exist and runs without. Searches without them are slower.
+readonly OPTIONAL_INDEX_FILES="
+kmer_table.bin
+"
+
+# The index files each storage backend reads into memory, by variant. The choice is compiled in, so
+# a host given the wrong build cannot correct it with a restart.
+#
+# mmap maps everything; preloaded holds all of it; hybrid maps only the suffix array, which is by far
+# the largest part, and holds the rest.
+files_resident_for() {
+    case $1 in
+        preloaded) printf 'sa.bin proteins.bin mapping.bin kmer_table.bin\n' ;;
+        hybrid) printf 'proteins.bin mapping.bin kmer_table.bin\n' ;;
+        mmap) printf '\n' ;;
+        *) die "unknown variant '$1'; expected mmap, preloaded or hybrid" ;;
+    esac
+}
+
+# A field from /proc/meminfo, in bytes. It reports kB.
+meminfo() {
+    local field=$1 value
+    value=$(awk -v f="${field}:" '$1 == f { print $2 }' /proc/meminfo)
+    [ -n "$value" ] || die "no ${field} in /proc/meminfo"
+    printf '%s\n' $((value * 1024))
+}
 
 readonly SERVICE=unipept-api
 readonly SERVICE_USER=unipept

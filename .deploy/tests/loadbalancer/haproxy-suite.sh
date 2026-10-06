@@ -22,7 +22,7 @@ haproxy -f /etc/haproxy/haproxy.cfg -D
 sleep 3
 
 # The container path; shellcheck is pointed at the checkout instead.
-# shellcheck source-path=SCRIPTDIR source=../lib.sh
+# shellcheck source=../lib.sh
 source /deploy/tests/lib.sh
 
 echo "== haproxy version =="; haproxy -v | head -1

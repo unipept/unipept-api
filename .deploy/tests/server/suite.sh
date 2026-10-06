@@ -7,7 +7,7 @@ set -uo pipefail
 
 R=/deploy
 # The container path; shellcheck is pointed at the checkout instead.
-# shellcheck source-path=SCRIPTDIR source=../lib.sh
+# shellcheck source=../lib.sh
 source /deploy/tests/lib.sh
 
 section "install.sh (the one root step)"
@@ -16,6 +16,9 @@ check "linger on"      "$(loginctl show-user unipept -p Linger --value)" "yes"
 check "bin dir owned"  "$(stat -c %U /opt/unipept-api/bin)" "unipept"
 check "unit installed" "$([ -f /home/unipept/.config/systemd/user/unipept-api.service ] && echo yes)" "yes"
 check "deploy.sh there" "$(stat -c '%U %a' /opt/unipept-api/lib/deploy.sh)" "unipept 755"
+check "and every part of lib.sh beside it" "$(ls /opt/unipept-api/lib/lib)" "$(ls /deploy/lib)"
+check "all of them the service user's" \
+    "$(stat -c '%U' /opt/unipept-api/lib/lib /opt/unipept-api/lib/lib.sh /opt/unipept-api/lib/lib/*.sh | sort -u)" "unipept"
 
 # A fake index holding every file start() opens, since `check` now requires them and `deploy` runs
 # `check` first. Created before the first deploy, not half way down.

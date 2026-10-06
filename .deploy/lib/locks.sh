@@ -1,0 +1,38 @@
+# shellcheck shell=bash
+#
+# The locks that keep the deploy scripts on one host from working on the same thing at once: the
+# rollout's own, which rollout.sh holds for a run and loadbalancer/install.sh while it replaces the
+# scripts a run loads. Needs nothing else. Sourced through .deploy/lib.sh.
+
+# Where the rollout lock is, unless rollout.conf sets LOCK_FILE.
+# shellcheck disable=SC2034  # read by the scripts that source this file.
+readonly DEFAULT_ROLLOUT_LOCK=/tmp/unipept-rollout.lock
+
+# Takes the rollout lock on file descriptor 9, held until the script exits; flock lets go when the
+# process dies, however it dies, so nothing stale is left to clear by hand. Fails rather than waits:
+# 1 where another holds it, 2 where the file cannot be made, 3 where it cannot be read.
+#
+# Opened for reading, which is all flock needs, so the operator can take a lock root made, too.
+#
+# Made 0644 whoever makes it: root's umask may be 077, and the operator could then not read a lock
+# loadbalancer/install.sh left behind.
+take_rollout_lock() {
+    local lock=$1
+
+    if [ ! -e "$lock" ]; then
+        (umask 022 && : > "$lock") 2> /dev/null || return 2
+    fi
+    { exec 9< "$lock"; } 2> /dev/null || return 3
+    flock -n 9
+}
+
+# What a script that could not take the rollout lock says, by why.
+rollout_lock_refused() {
+    local status=$1 lock=$2
+
+    case $status in
+        1) echo "another rollout holds ${lock}; wait for it, or run 'rollout.sh status'" ;;
+        2) echo "cannot create ${lock}; set LOCK_FILE in rollout.conf to a path this account can write" ;;
+        *) echo "cannot read ${lock}, which belongs to $(stat -c %U "$lock" 2> /dev/null || echo someone)" ;;
+    esac
+}

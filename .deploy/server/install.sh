@@ -13,7 +13,8 @@
 #      runs the deploy over ssh, and sshd needs a shell to exec a remote command.
 #   3. Create /opt/unipept-api and its bin, etc and lib directories, owned by that user.
 #   4. Write etc/unipept-api.env from the example, or keep the file already there.
-#   5. Install deploy.sh and lib.sh in lib/, which is the path the rollout calls over ssh.
+#   5. Install deploy.sh and lib.sh in lib/, the path the rollout calls over ssh, and the parts
+#      lib.sh loads in lib/lib/.
 #   6. Install the port redirect script and its system unit, both owned by root.
 #   7. Install the service unit in the service user's ~/.config/systemd/user.
 #   8. Enable and restart unipept-api-ports, so port 80 reaches the port the service binds.
@@ -27,7 +28,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 
-# shellcheck source-path=SCRIPTDIR source=../lib.sh
+# shellcheck source=../lib.sh
 source "${HERE}/../lib.sh"
 
 # What `die` raises when it is called from inside a subshell.
@@ -77,8 +78,12 @@ fi
 
 # The rollout runs these over SSH as the service user, so they sit at a fixed path it owns.
 # Re-running install.sh is how they are updated.
-install -m 0755 -o "$USER" -g "$USER" "${HERE}/deploy.sh" "${ROOT}/lib/deploy.sh"
+# The parts of lib.sh before lib.sh, and lib.sh before deploy.sh, so a deploy started meanwhile
+# finds what the files beside it load.
+install -d -m 0755 -o "$USER" -g "$USER" "${ROOT}/lib/lib"
+install -m 0644 -o "$USER" -g "$USER" "${HERE}/../lib/"*.sh "${ROOT}/lib/lib/"
 install -m 0644 -o "$USER" -g "$USER" "${HERE}/../lib.sh" "${ROOT}/lib/lib.sh"
+install -m 0755 -o "$USER" -g "$USER" "${HERE}/deploy.sh" "${ROOT}/lib/deploy.sh"
 log "installed ${ROOT}/lib/deploy.sh"
 
 # The service cannot bind port 80 itself, so a netfilter rule sends 80 to the port it does bind.

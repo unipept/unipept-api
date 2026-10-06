@@ -116,6 +116,10 @@ check "a command that fails in a sourced file stops the script" "$?" "2"
 check "and names that file, not the script, as where" "$output" \
     "Error: fails-in-part.sh stopped: 'false' failed with exit status 1 at line 2 of ${TEMP_DIR}/part.sh."
 
+output=$(bash -c 'source "$1"; false' fails-in-bash-c "$LIB" 2>&1)
+check "a command that fails in code given to bash -c stops it with status 2" "$?" "2"
+check "and names it" "$output" "Error: fails-in-bash-c stopped: 'false' failed with exit status 1 at line 1 of fails-in-bash-c."
+
 script=$(core_script fails-in-pipeline.sh 'false | cat')
 "$script" > /dev/null 2>&1
 check "as does a command that fails in the middle of a pipeline" "$?" "2"

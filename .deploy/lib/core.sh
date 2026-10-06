@@ -60,7 +60,8 @@ need_value() {
 }
 
 # The ERR trap: a command that failed where nothing expected it to. Names the script, the command,
-# and the file and line it is on, which is a part of lib.sh where it failed in one. In a subshell,
+# and the file and line it is on, which is a part of lib.sh where it failed in one, or the script
+# itself for code given to `bash -c` or `bash -s`, which has no file. In a subshell,
 # such as a command substitution or a process substitution, it says nothing and passes the status
 # on: -E runs it there even where the shell that started the subshell expects the failure, as in
 # `x=$(...) || return 1`, and a subshell cannot tell. Where that shell acts on the status, as an
@@ -68,7 +69,7 @@ need_value() {
 # subshell. Where it does not, as in `echo "$(...)"`, nothing is reported, as set -e alone would not
 # stop there either.
 on_error() {
-    local status=$? line=${BASH_LINENO[0]} file=${BASH_SOURCE[1]} command=$BASH_COMMAND
+    local status=$? line=${BASH_LINENO[0]} file=${BASH_SOURCE[1]-$0} command=$BASH_COMMAND
 
     [ "$$" = "$BASHPID" ] || exit "$status"
     echo "Error: ${0##*/} stopped: '${command}' failed with exit status ${status} at line ${line} of ${file}." >&2

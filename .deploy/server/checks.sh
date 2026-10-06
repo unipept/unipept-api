@@ -111,7 +111,7 @@ valid_variant() {
 check_commands() {
     local cmd status=0
 
-    for cmd in curl sha256sum install mktemp systemctl awk sed ln mv df; do
+    for cmd in curl sha256sum install mktemp systemctl awk sed ln mv df flock; do
         command -v "$cmd" > /dev/null || { log "check: ${cmd} is not installed"; status=1; }
     done
     return "$status"

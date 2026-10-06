@@ -437,6 +437,55 @@ check "start clears it: exit 0" "$?" "0"
 check "back on the first" "$(as_user 'systemctl --user is-active unipept-api')" "active"
 rm -rf /srv/index-next
 
+section "the API lock: what changes the service is refused while another holds it"
+LOCK=/run/lock/unipept-api.lock
+# Held by another process, on a descriptor opened for reading as the scripts open it. `exec`, so the
+# kill below ends the process that holds it.
+( flock -n 7 && exec sleep 30 ) 7<"$LOCK" &
+holder=$!
+for _ in $(seq 50); do ( flock -n 7 ) 7<"$LOCK" || break; sleep 0.1; done
+running=$(/opt/unipept-api/bin/unipept-api --version)
+d_locked=$(stage 6.6.6 yes)
+for command in "deploy --from $d_locked/unipept-api-6.6.6-x86_64-linux-gnu-hybrid --timeout 30" \
+    "rollback --timeout 30" stop "start --timeout 30"; do
+  as_user "/opt/unipept-api/lib/deploy.sh $command" >/tmp/l1.log 2>&1
+  check "${command%% *}: exit 2" "$?" "2"
+  check "${command%% *}: says what holds it" "$(grep -c "holds ${LOCK}; wait for it to finish" /tmp/l1.log)" "1"
+done
+check "binary untouched" "$(/opt/unipept-api/bin/unipept-api --version)" "$running"
+check "still active" "$(as_user 'systemctl --user is-active unipept-api')" "active"
+as_user "/opt/unipept-api/lib/deploy.sh check" >/dev/null 2>&1
+check "check answers meanwhile" "$?" "0"
+as_user "/opt/unipept-api/lib/deploy.sh status" >/tmp/l2.log 2>&1
+check "status answers meanwhile" "$(sed -n 's/^active=//p' /tmp/l2.log)" "active"
+kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
+
+section "the API lock: a caller that holds it hands it down on descriptor 7"
+as_user "exec 7<${LOCK} && flock -n 7 && /opt/unipept-api/lib/deploy.sh stop && /opt/unipept-api/lib/deploy.sh start --timeout 30" >/tmp/l3.log 2>&1
+check "stop and start under it: exit 0" "$?" "0"
+check "started" "$(grep -c 'started$' /tmp/l3.log)" "1"
+check "active" "$(as_user 'systemctl --user is-active unipept-api')" "active"
+# The caller's lock still keeps out a deploy.sh it did not hand it to.
+as_user "exec 7<${LOCK} && flock -n 7 && /opt/unipept-api/lib/deploy.sh stop 7<&-" >/tmp/l4.log 2>&1
+check "one not handed it: exit 2" "$?" "2"
+check "is refused" "$(grep -c "holds ${LOCK}" /tmp/l4.log)" "1"
+check "still active" "$(as_user 'systemctl --user is-active unipept-api')" "active"
+
+section "the API lock: one that cannot be read or made is said so"
+mv "$LOCK" /tmp/api-lock.keep
+: > "$LOCK"; chmod 600 "$LOCK"
+as_user "/opt/unipept-api/lib/deploy.sh stop" >/tmp/l5.log 2>&1
+check "unreadable: exit 2" "$?" "2"
+check "names its owner" "$(grep -c "cannot read ${LOCK}, which belongs to root" /tmp/l5.log)" "1"
+rm -f "$LOCK"
+chmod 1755 /run/lock
+as_user "/opt/unipept-api/lib/deploy.sh stop" >/tmp/l6.log 2>&1
+check "cannot be made: exit 2" "$?" "2"
+check "says why" "$(grep -c "cannot create ${LOCK}" /tmp/l6.log)" "1"
+chmod 1777 /run/lock
+mv /tmp/api-lock.keep "$LOCK"
+check "still active" "$(as_user 'systemctl --user is-active unipept-api')" "active"
+
 section "each failure on its own"
 # A missing index file.
 mv /srv/index/mapping.bin /srv/mapping.bin.away

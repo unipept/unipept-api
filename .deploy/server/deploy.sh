@@ -15,10 +15,16 @@
 #   The first argument selects what runs. The signal handlers are installed before it is read, so an
 #   interrupt always clears the staged file, and one after the swap rolls back.
 #
+#   deploy, rollback, stop and start change the service, and take the API lock first, refusing
+#   rather than waiting where something else holds it. A caller that holds it already, for a change
+#   to the index this host serves, hands it down on descriptor 7 (see take_api_lock). check and
+#   status change nothing and take no lock, so both answer while something else holds it.
+#
 #   deploy:
 #     1. Parse the flags. --timeout defaults to READY_TIMEOUT in the environment file, so a host
 #        that loads slowly carries its own deadline; a value that is not seconds is refused.
-#     2. Run the same checks as `check`. A host that is not ready installs nothing.
+#     2. Take the API lock, then run the same checks as `check`. A host that is not ready installs
+#        nothing.
 #     3. Point `systemctl --user` at the user manager through XDG_RUNTIME_DIR.
 #     4. Take the binary: verify the checksum of the one at --from, or download the asset for this
 #        tag and variant into a temporary directory and verify that one.
@@ -425,6 +431,7 @@ do_deploy() {
     # Before anything else: a bad value is only used after the binary has been swapped, where
     # nothing would roll it back.
     timeout=$(resolve_timeout "$timeout")
+    take_api_lock || die "$(api_lock_refused $?)"
 
     do_check ${from:+--from "$from"} >/dev/null || die "this host is not ready; run 'deploy.sh check' to see why"
     prepare_user_manager
@@ -494,6 +501,8 @@ do_rollback() {
     done
 
     timeout=$(resolve_timeout "$timeout")
+    # Held already where a failed deploy rolls itself back, and taken again on the same descriptor.
+    take_api_lock || die "$(api_lock_refused $?)"
 
     prepare_user_manager
     [ -f "$PREVIOUS" ] || die "no previous binary at $PREVIOUS"
@@ -529,6 +538,7 @@ rollback_to_previous() {
 }
 
 do_stop() {
+    take_api_lock || die "$(api_lock_refused $?)"
     prepare_user_manager
     log "stopping ${SERVICE}"
     systemctl --user stop "$SERVICE"
@@ -547,6 +557,7 @@ do_start() {
     done
 
     timeout=$(resolve_timeout "$timeout")
+    take_api_lock || die "$(api_lock_refused $?)"
     prepare_user_manager
 
     # A running process would keep what it read when it started: `start` would change nothing.

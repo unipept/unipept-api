@@ -350,7 +350,6 @@ do_check() {
     if [ -n "$index" ]; then
         if check_index_dir "$index"; then
             check_index_not_home "$index" || problems=$((problems + 1))
-            check_index_optional_files "$index" || warnings=$((warnings + 1))
             if check_index_files "$index"; then
                 index_version=$(version_in "${index}/.version")
                 if check_index_version "$index"; then
@@ -361,22 +360,29 @@ do_check() {
             else
                 problems=$((problems + 1))
             fi
-            if [ -n "$variant" ]; then
-                if check_memory_fits "$variant" "$index"; then
-                    check_memory_free "$variant" "$index" || warnings=$((warnings + 1))
-                else
-                    problems=$((problems + 1))
-                fi
-            fi
+            check_index_optional_files "$index" || warnings=$((warnings + 1))
         else
             problems=$((problems + 1))
         fi
+        # A directory its files can be measured in, even one that cannot be listed.
+        if [ -n "$variant" ] && [ -d "$index" ]; then
+            if check_memory_fits "$variant" "$index"; then
+                check_memory_free "$variant" "$index" || warnings=$((warnings + 1))
+            else
+                problems=$((problems + 1))
+            fi
+        fi
     fi
 
+    # One search, whose answer both checks judge: nothing answering is a warning, an answer other
+    # than 200 a problem.
+    OPENSEARCH_ANSWERED=false
     if [ "$opensearch_index" != '-' ] && [ -n "$database" ]; then
-        if check_opensearch_answers "$database" "$index_version"; then
+        local status
+        status=$(search_status "$database" "$opensearch_index")
+        if check_opensearch_answers "$database" "$opensearch_index" "$status"; then
             OPENSEARCH_ANSWERED=true
-            check_opensearch_index "$database" "$index_version" || problems=$((problems + 1))
+            check_opensearch_index "$opensearch_index" "$index_version" "$status" || problems=$((problems + 1))
         else
             warnings=$((warnings + 1))
         fi

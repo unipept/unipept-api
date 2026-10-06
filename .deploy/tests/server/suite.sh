@@ -239,8 +239,14 @@ both_ways check_index_optional_files "check_index_optional_files /srv/index" "ch
 both_ways check_index_version "check_index_version /srv/index" "check_index_version /tmp/odd-index" "names no OpenSearch index"
 both_ways check_memory_fits "check_memory_fits preloaded /srv/index" "check_memory_fits preloaded /tmp/too-big" "MiB in total"
 both_ways check_memory_free "check_memory_free preloaded /srv/index" "check_memory_free preloaded /tmp/tight" "MiB is available"
-both_ways check_opensearch_answers "check_opensearch_answers http://localhost:9200 2026.09-test" "check_opensearch_answers http://localhost:1 2026.09-test" "does not answer"
-both_ways check_opensearch_index "check_opensearch_index http://localhost:9200 2026.09-test" "check_opensearch_index http://localhost:9200 2026.10-never" "is not in OpenSearch"
+both_ways check_opensearch_answers \
+  "check_opensearch_answers http://localhost:9200 uniprot_entries-2026-09-test \$(search_status http://localhost:9200 uniprot_entries-2026-09-test)" \
+  "check_opensearch_answers http://localhost:1 uniprot_entries-2026-09-test \$(search_status http://localhost:1 uniprot_entries-2026-09-test)" \
+  "does not answer"
+both_ways check_opensearch_index \
+  "check_opensearch_index uniprot_entries-2026-09-test 2026.09-test \$(search_status http://localhost:9200 uniprot_entries-2026-09-test)" \
+  "check_opensearch_index uniprot_entries-2026-10-never 2026.10-never \$(search_status http://localhost:9200 uniprot_entries-2026-10-never)" \
+  "is not in OpenSearch"
 both_ways check_bin_writable check_bin_writable "ROOT=/tmp/locked check_bin_writable" "bin is not writable"
 both_ways check_bin_room "check_bin_room ''" "BINARY=/tmp/huge-binary check_bin_room ''" "MiB free"
 both_ways check_binary "check_binary $d1/unipept-api-2.6.0-x86_64-linux-gnu-hybrid" "check_binary /tmp/no-binary" "no binary at"

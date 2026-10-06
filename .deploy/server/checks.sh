@@ -195,6 +195,7 @@ check_index_version() {
 check_memory_fits() {
     local variant=$1 index=$2 needed total
     needed=$(resident_bytes "$variant" "$index")
+    [ "$needed" -gt 0 ] || return 0
     total=$(meminfo MemTotal)
     [ "$needed" -le "$total" ] \
         || { log "check: ${variant} needs $((needed / 1024 / 1024)) MiB resident, and this host has $((total / 1024 / 1024)) MiB in total"; return 1; }
@@ -205,37 +206,34 @@ check_memory_fits() {
 check_memory_free() {
     local variant=$1 index=$2 needed available
     needed=$(resident_bytes "$variant" "$index")
+    [ "$needed" -gt 0 ] || return 0
     available=$(meminfo MemAvailable)
     [ "$needed" -le "$available" ] \
         || { log "check: ${variant} needs $((needed / 1024 / 1024)) MiB resident and $((available / 1024 / 1024)) MiB is available; the kernel has to reclaim first"; return 1; }
 }
 
-# The status OpenSearch answers a search of a version's index with, as /health/database searches
-# it, so a closed index answers too: 000 when nothing answers. Fails for a version that names no
-# index, which check_index_version reports.
+# The status OpenSearch answers a search of an index with, as /health/database searches it, so a
+# closed index answers too: 000 when nothing answers. For the two checks below, which judge it.
 search_status() {
-    local database=$1 index answered
-    index=$(index_name "$2") || return 1
+    local database=$1 index=$2 answered
     # curl exits non-zero when nothing listens, and prints 000, or nothing at all.
     answered=$(curl -s -o /dev/null -w '%{http_code}' --max-time "$OPENSEARCH_TIMEOUT" \
         "${database%/}/${index}/_search?size=0&terminate_after=1") || true
     printf '%s\n' "${answered:-000}"
 }
 
-# A warning, so a binary can still be deployed during an outage; `start` refuses it.
+# A warning, given the status a search got: nothing answered. A binary can still be deployed during
+# an outage; `start` refuses it.
 check_opensearch_answers() {
-    local database=$1 version=$2 status
-    status=$(search_status "$database" "$version") || return 0
+    local database=$1 index=$2 status=$3
     [ "$status" != 000 ] \
-        || { log "check: OpenSearch at ${database} does not answer, so whether $(index_name "$version") is there is unknown"; return 1; }
+        || { log "check: OpenSearch at ${database} does not answer, so whether ${index} is there is unknown"; return 1; }
 }
 
-# The proteins of the version, in an index of their own. Nothing answering is
-# check_opensearch_answers's to report.
+# Given the status a search of the version's index got: the proteins are there, in an index that
+# answers. 000, nothing answering, is check_opensearch_answers's to report.
 check_opensearch_index() {
-    local database=$1 version=$2 index status
-    index=$(index_name "$version") || return 0
-    status=$(search_status "$database" "$version")
+    local index=$1 version=$2 status=$3
     case $status in
         200 | 000) ;;
         404) log "check: ${index} is not in OpenSearch; load its proteins with unipept-database's load.sh$(load_hint "$version")"; return 1 ;;

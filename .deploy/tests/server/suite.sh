@@ -486,6 +486,20 @@ chmod 1777 /run/lock
 mv /tmp/api-lock.keep "$LOCK"
 check "still active" "$(as_user 'systemctl --user is-active unipept-api')" "active"
 
+section "the API lock: install.sh does not replace the scripts while another holds it"
+( flock -n 7 && exec sleep 30 ) 7<"$LOCK" &
+holder=$!
+for _ in $(seq 50); do ( flock -n 7 ) 7<"$LOCK" || break; sleep 0.1; done
+touch -d '2000-01-01' /opt/unipept-api/lib/deploy.sh
+$R/server/install.sh >/tmp/l7.log 2>&1
+check "exit 2" "$?" "2"
+check "says to wait" "$(grep -c "holds ${LOCK}; wait for it to finish. Install once it has finished." /tmp/l7.log)" "1"
+check "deploy.sh not replaced" "$(stat -c %Y /opt/unipept-api/lib/deploy.sh)" "$(date -d '2000-01-01' +%s)"
+kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
+$R/server/install.sh >/tmp/l8.log 2>&1
+check "once it is free: exit 0" "$?" "0"
+check "deploy.sh replaced" "$([ "$(stat -c %Y /opt/unipept-api/lib/deploy.sh)" != "$(date -d '2000-01-01' +%s)" ] && echo yes)" "yes"
+
 section "each failure on its own"
 # A missing index file.
 mv /srv/index/mapping.bin /srv/mapping.bin.away

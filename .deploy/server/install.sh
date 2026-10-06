@@ -13,8 +13,9 @@
 #      runs the deploy over ssh, and sshd needs a shell to exec a remote command.
 #   3. Create /opt/unipept-api and its bin, etc and lib directories, owned by that user.
 #   4. Write etc/unipept-api.env from the example, or keep the file already there.
-#   5. Install deploy.sh, the checks it makes and lib.sh in lib/, the path the rollout calls over
-#      ssh, and the parts lib.sh loads in lib/lib/.
+#   5. Take the API lock, so no deploy runs from the files while they are replaced, and install
+#      deploy.sh, the checks it makes and lib.sh in lib/, the path the rollout calls over ssh, and
+#      the parts lib.sh loads in lib/lib/. Let go of the lock again.
 #   6. Install the port redirect script and its system unit, both owned by root.
 #   7. Install the service unit in the service user's ~/.config/systemd/user.
 #   8. Enable and restart unipept-api-ports, so port 80 reaches the port the service binds.
@@ -34,7 +35,7 @@ readonly USER=unipept
 readonly ROOT=/opt/unipept-api
 readonly ENV_FILE="${ROOT}/etc/unipept-api.env"
 
-require getent install iptables loginctl setpriv systemctl useradd usermod
+require flock getent install iptables loginctl setpriv systemctl useradd usermod
 [ "$(id -u)" -eq 0 ] || die "run this as root. It is the only step that needs it."
 
 # A home directory, because a user unit lives in it. A real shell, because the rollout runs
@@ -73,14 +74,25 @@ fi
 
 # The rollout runs these over SSH as the service user, so they sit at a fixed path it owns.
 # Re-running install.sh is how they are updated.
-# The parts of lib.sh before lib.sh, and lib.sh and checks.sh before deploy.sh, so a deploy started
-# meanwhile finds what the files beside it load.
+#
+# A deploy, rollback, start or stop running while they are replaced could load one release's lib.sh
+# into another's deploy.sh. So this holds the API lock while it replaces them, and refuses while
+# anything else holds it. The service user can take the lock file this leaves: it is made 0644.
+take_api_lock || die "$(api_lock_refused $?). Install once it has finished."
+
+# The parts of lib.sh before lib.sh, and lib.sh and checks.sh before deploy.sh. A deploy started
+# meanwhile loads them before it asks for the lock, so it then finds what it loads and is refused
+# the lock, rather than failing on a part not there yet.
 install -d -m 0755 -o "$USER" -g "$USER" "${ROOT}/lib/lib"
 install -m 0644 -o "$USER" -g "$USER" "${HERE}/../lib/"*.sh "${ROOT}/lib/lib/"
 install -m 0644 -o "$USER" -g "$USER" "${HERE}/../lib.sh" "${ROOT}/lib/lib.sh"
 install -m 0644 -o "$USER" -g "$USER" "${HERE}/checks.sh" "${ROOT}/lib/checks.sh"
 install -m 0755 -o "$USER" -g "$USER" "${HERE}/deploy.sh" "${ROOT}/lib/deploy.sh"
 log "installed ${ROOT}/lib/deploy.sh"
+
+# Let go here rather than at the exit, so neither the services this restarts nor the check at the
+# end inherit the lock.
+exec 7<&-
 
 # The service cannot bind port 80 itself, so a netfilter rule sends 80 to the port it does bind.
 # Root-owned, because only root can change netfilter and nothing about a deploy should be able to.

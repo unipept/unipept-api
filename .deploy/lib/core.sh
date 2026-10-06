@@ -59,6 +59,11 @@ need_value() {
     { [ -n "$value" ] && [[ "$value" != --* ]]; } || die "${flag} requires a value."
 }
 
+# Stops on an option the script does not take.
+unknown_option() {
+    die "unknown option '$1'. Run with --help for the options."
+}
+
 # The ERR trap: a command that failed where nothing expected it to. Names the script, the command,
 # and the file and line it is on, which is a part of lib.sh where it failed in one, or the script
 # itself for code given to `bash -c` or `bash -s`, which has no file. In a subshell, such as a

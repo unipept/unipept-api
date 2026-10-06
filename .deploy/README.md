@@ -34,6 +34,17 @@ it uses of the others.
 the service user's like `deploy.sh` beside them. `loadbalancer/install.sh` installs them as
 `/opt/unipept-rollout/lib.sh` and `/opt/unipept-rollout/lib/`, root's like `rollout.sh`.
 
+`lib/core.sh` is the same file in every repository that deploys Unipept, and CI checks that it
+stays so. So is what a script's exit status means:
+
+| Status | Meaning |
+| --- | --- |
+| 0 | done, or yes |
+| 1 | a check found a problem, or no |
+| 2 | an error, or a usage error |
+| 3 | what was asked about is not there |
+| 130 | interrupted |
+
 ## Deploying
 
 One server, on that server, as the `unipept` user:

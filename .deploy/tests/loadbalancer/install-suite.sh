@@ -185,14 +185,14 @@ section "no install while a rollout runs"
 # lib.sh with another's rollout.sh.
 # Held for a few seconds, then let go by itself: killing flock would leave its sleep holding the lock.
 # Waited for until it is held, so the install cannot get there first.
-flock /tmp/unipept-rollout.lock sleep 5 &
+flock /run/lock/unipept-rollout.lock sleep 5 &
 holder=$!
-for _ in $(seq 50); do flock -n /tmp/unipept-rollout.lock true 2>/dev/null || break; sleep 0.1; done
+for _ in $(seq 50); do flock -n /run/lock/unipept-rollout.lock true 2>/dev/null || break; sleep 0.1; done
 before=$(stat -c %Y /opt/unipept-rollout/rollout.sh)
 touch -d '2000-01-01' /opt/unipept-rollout/rollout.sh
 /deploy/loadbalancer/install.sh >/tmp/i-lock.log 2>&1
 check "refused"                  "$?" "2"
-check "and says a rollout holds it" "$(grep -c 'another rollout holds /tmp/unipept-rollout.lock.*Install once it has finished' /tmp/i-lock.log)" "1"
+check "and says a rollout holds it" "$(grep -c 'another rollout holds /run/lock/unipept-rollout.lock.*Install once it has finished' /tmp/i-lock.log)" "1"
 check "nothing was replaced"     "$(stat -c %Y /opt/unipept-rollout/rollout.sh)" "$(date -d '2000-01-01' +%s)"
 wait "$holder"
 touch -d "@${before}" /opt/unipept-rollout/rollout.sh
@@ -203,13 +203,13 @@ check "and replaces the files" "$([ "$(stat -c %Y /opt/unipept-rollout/rollout.s
 section "a lock the install makes is one the operator can read"
 # Where no rollout has run yet, the install makes the lock, as root and with root's umask. A
 # hardened one would leave a file the operator's first rollout cannot open.
-rm -f /tmp/unipept-rollout.lock
+rm -f /run/lock/unipept-rollout.lock
 (umask 077 && /deploy/loadbalancer/install.sh) >/tmp/i-umask.log 2>&1
 check "the install succeeds"     "$?" "0"
-check "the lock is 0644"         "$(stat -c '%a' /tmp/unipept-rollout.lock)" "644"
+check "the lock is 0644"         "$(stat -c '%a' /run/lock/unipept-rollout.lock)" "644"
 su unipept -c "/opt/unipept-rollout/rollout.sh --version v2.6.0 --dry-run" >/tmp/i-umask-run.log 2>&1
 check "the operator's rollout runs" "$?" "0"
-check_absent "and is not refused the lock" 'cannot read /tmp/unipept-rollout.lock' /tmp/i-umask-run.log
+check_absent "and is not refused the lock" 'cannot read /run/lock/unipept-rollout.lock' /tmp/i-umask-run.log
 
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1
 kill "$(jobs -p)" >/dev/null 2>&1

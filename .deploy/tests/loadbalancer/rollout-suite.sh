@@ -106,7 +106,6 @@ cat > /work/rollout.conf <<EOF
 HAPROXY_SOCKET=/run/haproxy/haproxy.sock
 SSH_USER=unipept
 NOTIFY_TO=unipept@example.invalid
-LOCK_FILE=/tmp/unipept-rollout.lock
 EOF
 
 printf '127.0.0.1 patty selma rick\n' >> /etc/hosts
@@ -265,7 +264,7 @@ check "rick is listed last" "$(grep -oE '^(rick|patty|selma)' /tmp/order.txt | t
 
 reset_fleet
 section "10. one rollout at a time"
-( flock -n 9 || exit 1; sleep 25 ) 9>/tmp/unipept-rollout.lock &
+( flock -n 9 || exit 1; sleep 25 ) 9>/run/lock/unipept-rollout.lock &
 holder=$!
 sleep 1
 $R --version v2.6.0 --allow-downtime >/tmp/lock.txt 2>&1
@@ -694,7 +693,7 @@ check "naming the server"           "$(grep -c 'updating patty' /tmp/r29.txt)" "
 check "and who started it"          "$(grep -c "by $(id -un)" /tmp/r29.txt)" "1"
 # A second rollout is still refused, which is what the lock is for.
 $R --version v2.7.0 --allow-downtime >/tmp/r30.txt 2>&1
-check "a second rollout refused"    "$(grep -c 'holds /tmp/unipept-rollout.lock' /tmp/r30.txt)" "1"
+check "a second rollout refused"    "$(grep -c 'holds /run/lock/unipept-rollout.lock' /tmp/r30.txt)" "1"
 
 # No pkill first, unlike case 19: reaching the run's children is abort's own job, because a shell
 # runs a trap only when the command it is waiting on returns.
@@ -707,7 +706,7 @@ check "and did not sit on it"   "$([ $((SECONDS - began)) -lt 60 ] && echo yes)"
 wait $runner 2>/dev/null
 pkill -f 'sleep 971' >/dev/null 2>&1
 check "the server was put back" "$(grep -c 'left out of the pool by a run that did not finish' /tmp/r28.txt)" "1"
-check "the state file is gone"  "$([ -f /tmp/unipept-rollout.state ] && echo present || echo absent)" "absent"
+check "the state file is gone"  "$([ -f /run/lock/unipept-rollout.state ] && echo present || echo absent)" "absent"
 check "abort with nothing to do" "$($R abort >/tmp/r32.txt 2>&1; [ $? -ne 0 ] && echo yes)" "yes"
 check "and says so"              "$(grep -c 'no rollout is running' /tmp/r32.txt)" "1"
 
@@ -832,8 +831,8 @@ section "27. the lock is shared between the operator and root"
 useradd -m op 2>/dev/null
 chmod -R a+rX /work
 cp /tmp/ssh.keep /usr/local/bin/ssh
-rm -f /tmp/unipept-rollout.state
-: > /tmp/unipept-rollout.lock; chmod 644 /tmp/unipept-rollout.lock; chown root:root /tmp/unipept-rollout.lock
+rm -f /run/lock/unipept-rollout.state
+: > /run/lock/unipept-rollout.lock; chmod 644 /run/lock/unipept-rollout.lock; chown root:root /run/lock/unipept-rollout.lock
 su op -c "PATH=/usr/local/bin:\$PATH /work/rollout.sh ready patty" >/tmp/r40.txt 2>&1
 check_absent "no phantom holder" 'another rollout holds' /tmp/r40.txt
 check "it reached the fleet"  "$([ "$(grep -c 'already in the pool\|returned to the pool' /tmp/r40.txt)" -ge 1 ] && echo yes)" "yes"
@@ -841,28 +840,28 @@ check "it reached the fleet"  "$([ "$(grep -c 'already in the pool\|returned to 
 section "28. status does not leave a lock file behind"
 # flock creates the file it is given. A status run by root would leave one the operator's next
 # rollout has to work around, which is the failure case 27 is about.
-rm -f /tmp/unipept-rollout.lock
+rm -f /run/lock/unipept-rollout.lock
 $R status >/dev/null 2>&1
-check "no lock was created" "$([ -e /tmp/unipept-rollout.lock ] && echo present || echo absent)" "absent"
+check "no lock was created" "$([ -e /run/lock/unipept-rollout.lock ] && echo present || echo absent)" "absent"
 
 section "29. a state file the run cannot rewrite is named, not written past"
 # note_phase tolerates a failed write so a rollout is never lost to one, which is why this has to be
 # settled before the run starts: a silent failure there leaves status and abort reading a phase that
 # has moved on.
-printf 'pid=1\nversion=v0.0.0\nphase=stale\n' > /tmp/unipept-rollout.state
-chmod 600 /tmp/unipept-rollout.state; chown root:root /tmp/unipept-rollout.state
+printf 'pid=1\nversion=v0.0.0\nphase=stale\n' > /run/lock/unipept-rollout.state
+chmod 600 /run/lock/unipept-rollout.state; chown root:root /run/lock/unipept-rollout.state
 su op -c "PATH=/usr/local/bin:\$PATH /work/rollout.sh --version v2.6.0 --only patty --allow-downtime" >/tmp/r41.txt 2>&1
 check "names the owner"        "$(grep -c 'unipept-rollout.state belongs to root' /tmp/r41.txt)" "1"
 check "and who can clear it"   "$(grep -c 'who has to remove it' /tmp/r41.txt)" "1"
 check_absent "no raw rm error" 'Operation not permitted' /tmp/r41.txt
 check "nothing was drained"    "$(printf '%s' "$($H state all_handlers/patty)" | cut -d' ' -f1)" "UP"
-rm -f /tmp/unipept-rollout.state
+rm -f /run/lock/unipept-rollout.state
 
 section "30. a state file a run creates is usable by the other account"
 # The normal path, and what stops case 29 from being reached a second time. The run clears its own
 # state when it ends, so the mode has to be read while it is still going.
 reset_fleet
-rm -f /tmp/unipept-rollout.state
+rm -f /run/lock/unipept-rollout.state
 cat > /usr/local/bin/ssh <<'EOF'
 #!/usr/bin/env bash
 args=("$@"); cmd=""
@@ -880,11 +879,11 @@ chmod +x /usr/local/bin/ssh
 $R --version v2.6.0 --only patty --allow-downtime >/dev/null 2>&1 &
 runner=$!
 waited=0
-until [ -e /tmp/unipept-rollout.state ]; do
+until [ -e /run/lock/unipept-rollout.state ]; do
   sleep 1; waited=$((waited + 1)); [ "$waited" -lt 60 ] || break
 done
-check "the run wrote its state" "$([ -e /tmp/unipept-rollout.state ] && echo yes)" "yes"
-check "world-writable, so either account can rewrite it" "$(stat -c %a /tmp/unipept-rollout.state)" "666"
+check "the run wrote its state" "$([ -e /run/lock/unipept-rollout.state ] && echo yes)" "yes"
+check "world-writable, so either account can rewrite it" "$(stat -c %a /run/lock/unipept-rollout.state)" "666"
 $R abort >/dev/null 2>&1
 wait $runner 2>/dev/null
 pkill -f 'sleep 971' >/dev/null 2>&1

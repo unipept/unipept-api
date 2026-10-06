@@ -5,12 +5,11 @@
 # scripts a run loads; and the API's, which deploy.sh holds while it changes the service and
 # server/install.sh while it replaces deploy.sh. Needs nothing else. Sourced through .deploy/lib.sh.
 
-# Where the rollout lock is, unless rollout.conf sets LOCK_FILE.
+# Where the locks are: in /run/lock, which every account can make a file in and nothing ages out.
+# Fixed, so every script that takes one names the same file. The API lock is taken by more than this
+# repository's scripts, which find it in deploy.sh status.
 # shellcheck disable=SC2034  # read by the scripts that source this file.
-readonly DEFAULT_ROLLOUT_LOCK=/tmp/unipept-rollout.lock
-
-# Where the API lock is. In /run/lock, which every account can make a file in and nothing ages out.
-# Fixed, because more than this repository's scripts take it: deploy.sh status reports it.
+readonly ROLLOUT_LOCK=/run/lock/unipept-rollout.lock
 readonly API_LOCK=/run/lock/unipept-api.lock
 
 # Opens a lock file for flock on file descriptor 7 or 9, made first where no one has made it. Fails
@@ -38,18 +37,16 @@ open_lock() {
 # process dies, however it dies, so nothing stale is left to clear by hand. Fails rather than waits:
 # 1 where another holds it, 2 or 3 as open_lock.
 take_rollout_lock() {
-    open_lock 9 "$1" || return
+    open_lock 9 "$ROLLOUT_LOCK" || return
     flock -n 9
 }
 
 # What a script that could not take the rollout lock says, by why.
 rollout_lock_refused() {
-    local status=$1 lock=$2
-
-    case $status in
-        1) echo "another rollout holds ${lock}; wait for it, or run 'rollout.sh status'" ;;
-        2) echo "cannot create ${lock}; set LOCK_FILE in rollout.conf to a path this account can write" ;;
-        *) echo "cannot read ${lock}, which belongs to $(stat -c %U "$lock" 2> /dev/null || echo someone)" ;;
+    case $1 in
+        1) echo "another rollout holds ${ROLLOUT_LOCK}; wait for it, or run 'rollout.sh status'" ;;
+        2) echo "cannot create ${ROLLOUT_LOCK}; /run/lock has to let every account make a file in it" ;;
+        *) echo "cannot read ${ROLLOUT_LOCK}, which belongs to $(stat -c %U "$ROLLOUT_LOCK" 2> /dev/null || echo someone)" ;;
     esac
 }
 

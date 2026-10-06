@@ -46,7 +46,7 @@ require chown curl getent install sha256sum socat ssh scp flock logger usermod
 [ "$(id -u)" -eq 0 ] || die "run this as root. Rollouts themselves run as ${OPERATOR}."
 id "$OPERATOR" >/dev/null 2>&1 || die "there is no ${OPERATOR} account on this host"
 
-# This runs as root, and sources rollout.conf: for the lock, and for the audit. One that another user
+# This runs as root, and sources rollout.conf for the audit. One that another user
 # could write would hand that user root, whoever owns it now, so it is refused rather than taken back
 # and read.
 if [ -e "${CONFIG}/rollout.conf" ]; then
@@ -141,12 +141,9 @@ install_config "${SOURCE}/rollout.conf.example" "${CONFIG}/rollout.conf" root
 install_config "${SOURCE}/servers.example.conf" "${CONFIG}/servers.conf" "$OPERATOR"
 
 # A rollout running while this replaces its files could load one release's lib.sh into another's
-# rollout.sh. So this takes the rollout's own lock, where rollout.conf puts it, for as long as it
-# runs, and refuses while a rollout holds it. Reading it sources it, as root, which is safe only
-# because a rollout.conf root alone can write was required above.
-lock_file=$(conf_value LOCK_FILE)
-lock_file=${lock_file:-$DEFAULT_ROLLOUT_LOCK}
-take_rollout_lock "$lock_file" || die "$(rollout_lock_refused $? "$lock_file"). Install once it has finished."
+# rollout.sh. So this takes the rollout's own lock for as long as it runs, and refuses while a
+# rollout holds it.
+take_rollout_lock || die "$(rollout_lock_refused $?). Install once it has finished."
 
 # The same shape as the checkout, because rollout.sh resolves haproxy.sh as loadbalancer/haproxy.sh
 # relative to itself. The parts of lib.sh before lib.sh, and lib.sh before the scripts that load it,

@@ -67,10 +67,6 @@ READY_TIMEOUT=$DEFAULT_READY_TIMEOUT
 # and then in HAProxy. Separate from READY_TIMEOUT, which covers a service reading its index. By here
 # it is already answering, and this is only the time to confirm it.
 HEALTH_TIMEOUT=60
-LOCK_FILE=$DEFAULT_ROLLOUT_LOCK
-# What the run in progress is doing, for `status` to read and `abort` to signal. Beside the lock
-# rather than in it: the lock is opened for reading, so nothing can be written through it.
-RUN_STATE=
 # Empty means nobody is emailed; rollout.conf sets it.
 NOTIFY_TO=''
 NOTIFY_SMTP=127.0.0.1:25
@@ -80,8 +76,10 @@ if [ -f "${CONFIG_DIR}/rollout.conf" ]; then
     source "${CONFIG_DIR}/rollout.conf"
 fi
 
-# After the configuration, so a LOCK_FILE set there takes its state file with it.
-[ -n "$RUN_STATE" ] || RUN_STATE="${LOCK_FILE%.lock}.state"
+# What the run in progress is doing, for `status` to read and `abort` to signal. Beside the lock
+# rather than in it: the lock is opened for reading, so nothing can be written through it. Fixed, as
+# the lock is: set after the configuration, so nothing there changes it.
+readonly RUN_STATE="${ROLLOUT_LOCK%.lock}.state"
 
 export HAPROXY_SOCKET NOTIFY_TO NOTIFY_SMTP
 
@@ -232,7 +230,7 @@ require curl sha256sum socat ssh scp flock logger
 # two releases.
 case $COMMAND in
     status | abort) ;;
-    *) take_rollout_lock "$LOCK_FILE" || die "$(rollout_lock_refused $? "$LOCK_FILE")" ;;
+    *) take_rollout_lock || die "$(rollout_lock_refused $?)" ;;
 esac
 
 # One server per line: name host port haproxy_backends haproxy_server
@@ -749,7 +747,7 @@ finish() {
     # rollout that is still going. Quietly, because a file this run could not own is already
     # reported where it is prepared, and failing to clear it must not be the last word of a rollout
     # that worked.
-    if [ -n "$VERSION" ] && [ -n "$RUN_STATE" ]; then
+    if [ -n "$VERSION" ]; then
         rm -f "$RUN_STATE" 2>/dev/null || true
     fi
 
@@ -840,18 +838,16 @@ record_run() {
 # write so a rollout is never lost to one, which is exactly why it has to be settled here instead —
 # a silent failure there leaves `status` and `abort` reading a phase that has moved on.
 prepare_run_state() {
-    [ -n "$RUN_STATE" ] || return 0
-
     if [ -e "$RUN_STATE" ] && [ ! -w "$RUN_STATE" ]; then
-        # Naming the owner because they are the only one who can clear it: /tmp is sticky, so this
+        # Naming the owner because they are the only one who can clear it: /run/lock is sticky, so this
         # account cannot remove a file it does not own however writable the directory looks.
-        die "${RUN_STATE} belongs to $(stat -c %U "$RUN_STATE" 2>/dev/null || echo someone), who has to remove it, or set LOCK_FILE in rollout.conf to a path $(id -un) owns"
+        die "${RUN_STATE} belongs to $(stat -c %U "$RUN_STATE" 2>/dev/null || echo someone), who has to remove it"
     fi
     # 0666 on creation, because the next run is as likely to be the other account. The load balancer
-    # carries operator logins only, and /tmp is sticky, so nobody else can replace it.
+    # carries operator logins only, and /run/lock is sticky, so nobody else can replace it.
     if [ ! -e "$RUN_STATE" ]; then
         (umask 0 && : > "$RUN_STATE") 2>/dev/null ||
-            die "cannot create ${RUN_STATE}; set LOCK_FILE in rollout.conf to a path this account can write"
+            die "cannot create ${RUN_STATE}; /run/lock has to let every account make a file in it"
     fi
 }
 
@@ -862,7 +858,6 @@ prepare_run_state() {
 note_phase() {
     local phase=$1 server=${2:-}
 
-    [ -n "$RUN_STATE" ] || return 0
     {
         printf 'pid=%s\n' "$$"
         printf 'version=%s\n' "$VERSION"
@@ -881,15 +876,16 @@ note_phase() {
 a_run_is_in_progress() {
     # No lock file, no run — and said without creating one. `flock` would make it, and a file this
     # leaves behind as root is one the operator's next rollout has to work around.
-    [ -e "$LOCK_FILE" ] || return 1
+    [ -e "$ROLLOUT_LOCK" ] || return 1
 
-    # `flock <file> <command>` opens the file itself, so this needs no descriptor of its own. An
-    # `exec` to get one would redirect this shell for good rather than for the call: `exec 8> file
-    # 2>/dev/null` sends stderr to /dev/null permanently, and every message after it disappears.
+    # Opened for reading on a descriptor of its own for this one command, rather than by
+    # `flock <file>`, which opens it to create it: in sticky /run/lock that is refused on a file
+    # another account made, even to root. Not with `exec`, which would redirect this shell for good:
+    # `exec 8< file 2>/dev/null` sends stderr to /dev/null permanently.
     #
     # Taking the lock and letting go is the whole test. A failure for any other reason reads as a
     # run in progress, which is the answer that refuses to act.
-    ! flock -n "$LOCK_FILE" true
+    ! { flock -n 8; } 8< "$ROLLOUT_LOCK" 2>/dev/null
 }
 
 # Reads the fleet without changing any of it. What to reach for after a run stopped part way, or
@@ -906,7 +902,7 @@ do_status() {
             log "started $(env_value started "$RUN_STATE") by $(env_value by "$RUN_STATE"), pid $(env_value pid "$RUN_STATE")"
             log "to stop it: ${HERE}/rollout.sh abort"
         else
-            log "${LOCK_FILE} is held, but no state file says by what: a rollout starting, or loadbalancer/install.sh replacing these scripts"
+            log "${ROLLOUT_LOCK} is held, but no state file says by what: a rollout starting, or loadbalancer/install.sh replacing these scripts"
         fi
     else
         # Leftovers from a run that was killed uncatchably. Said rather than deleted: it names what
@@ -939,8 +935,8 @@ do_status() {
 do_abort() {
     local pid
 
-    a_run_is_in_progress || die "no rollout is running; ${LOCK_FILE} is free"
-    [ -f "$RUN_STATE" ] || die "a rollout holds ${LOCK_FILE} but wrote no ${RUN_STATE}; find it with 'ps'"
+    a_run_is_in_progress || die "no rollout is running; ${ROLLOUT_LOCK} is free"
+    [ -f "$RUN_STATE" ] || die "a rollout holds ${ROLLOUT_LOCK} but wrote no ${RUN_STATE}; find it with 'ps'"
 
     pid=$(env_value pid "$RUN_STATE")
     case ${pid:-} in

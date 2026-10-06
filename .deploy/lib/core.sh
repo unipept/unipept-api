@@ -61,9 +61,9 @@ need_value() {
 
 # The ERR trap: a command that failed where nothing expected it to. Names the script, the command,
 # and the file and line it is on, which is a part of lib.sh where it failed in one, or the script
-# itself for code given to `bash -c` or `bash -s`, which has no file. In a subshell,
-# such as a command substitution or a process substitution, it says nothing and passes the status
-# on: -E runs it there even where the shell that started the subshell expects the failure, as in
+# itself for code given to `bash -c` or `bash -s`, which has no file. In a subshell, such as a
+# command substitution or a process substitution, it says nothing and passes the status on: -E runs
+# it there even where the shell that started the subshell expects the failure, as in
 # `x=$(...) || return 1`, and a subshell cannot tell. Where that shell acts on the status, as an
 # assignment from $(...) does, its own trap reports the failure once, at the line that started the
 # subshell. Where it does not, as in `echo "$(...)"`, nothing is reported, as set -e alone would not

@@ -44,7 +44,7 @@
 #   the OpenSearch index of their version, the port redirect, free space, and with --from the
 #   checksum and that the binary runs here. --index checks another directory in place of
 #   INDEX_LOCATION, before anything points the service at it. Print key=value for a caller to read,
-#   and exit non-zero if anything is wrong.
+#   and exit 1 if anything is wrong.
 #
 #   status: print the installed version, the previous one, the variant, the port, and whether the
 #   unit is active.

@@ -620,8 +620,7 @@ check "retries are still asked"   "$(grep 'releases/download' /tmp/curl-args.log
 # route, since check's search of the OpenSearch index shares that bound.
 check "the probe is unchanged"    "$(grep -- '/health' /tmp/curl-args.log | grep -c -- '--max-time 5')" "1"
 
-# A download that fails stops the deploy there, rather than going on to the next with the binary
-# missing.
+# A download that fails stops the deploy before the next one.
 cat > /tmp/curlbin/curl <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> /tmp/curl-args.log

@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 #
-# What the suites share: for now only the assertions they make. Sourced, never run.
+# What the suites share. Sourced, never run.
 
 TESTS_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
 

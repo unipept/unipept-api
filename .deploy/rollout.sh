@@ -520,8 +520,8 @@ update_server() {
     }
     trap restore_on_failure INT TERM
     local drain_status
-    # A failure exits 2, as on_error does: haproxy.sh has already said what failed. In a subshell it
-    # only passes the status on, as on_error does, so the server is restored once, by this shell.
+    # A failure exits 2 once the server is restored; haproxy.sh has already said what failed. In a
+    # subshell it only passes the status on, so the server is restored once, by this shell.
     trap 'drain_status=$?; [ "$$" = "$BASHPID" ] || exit "$drain_status"; restore_target "$target"; exit 2' ERR
 
     "$HAPROXY" drain "$target"
@@ -807,8 +807,8 @@ Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
 
 Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
     fi
-    # No `return "$status"`: the script exits with its own status whatever this returns, and a
-    # non-zero return here would trip the error trap and turn every "no" into an error.
+    # Returns nothing of its own: the script exits with its own status whatever this returns, and a
+    # non-zero return would trip the error trap and turn every "no" into an error.
 }
 
 # One journal line per server, so "who deployed what, when" has an answer that outlives a terminal.

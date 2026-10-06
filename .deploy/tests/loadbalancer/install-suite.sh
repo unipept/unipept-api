@@ -200,6 +200,17 @@ touch -d "@${before}" /opt/unipept-rollout/rollout.sh
 check_absent "once it has finished, the install is not refused" 'a rollout holds' /tmp/i-lock.log
 check "and replaces the files" "$([ "$(stat -c %Y /opt/unipept-rollout/rollout.sh)" -gt "$(date -d '2000-01-01' +%s)" ] && echo yes)" "yes"
 
+section "a lock the install makes is one the operator can read"
+# Where no rollout has run yet, the install makes the lock, as root and with root's umask. A
+# hardened one would leave a file the operator's first rollout cannot open.
+rm -f /tmp/unipept-rollout.lock
+(umask 077 && /deploy/loadbalancer/install.sh) >/tmp/i-umask.log 2>&1
+check "the install succeeds"     "$?" "0"
+check "the lock is 0644"         "$(stat -c '%a' /tmp/unipept-rollout.lock)" "644"
+su unipept -c "/opt/unipept-rollout/rollout.sh --version v2.6.0 --dry-run" >/tmp/i-umask-run.log 2>&1
+check "the operator's rollout runs" "$?" "0"
+check_absent "and is not refused the lock" 'cannot read /tmp/unipept-rollout.lock' /tmp/i-umask-run.log
+
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1
 kill "$(jobs -p)" >/dev/null 2>&1
 summary

@@ -18,11 +18,14 @@ readonly DEFAULT_ROLLOUT_LOCK=/tmp/unipept-rollout.lock
 # operator and root. Opened for writing, a file root created is refused to the operator — and bash
 # reports that itself and carries on with the descriptor unopened, so `flock` then failed on a bad
 # descriptor and this said another rollout was holding a lock that nobody held.
+#
+# Made 0644 whoever makes it: root's umask may be 077, and the operator could then not read a lock
+# loadbalancer/install.sh left behind.
 take_rollout_lock() {
     local lock=$1
 
     if [ ! -e "$lock" ]; then
-        { : > "$lock"; } 2> /dev/null || return 2
+        (umask 022 && : > "$lock") 2> /dev/null || return 2
     fi
     { exec 9< "$lock"; } 2> /dev/null || return 3
     flock -n 9

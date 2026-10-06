@@ -20,8 +20,7 @@ holding copies.
 ## The shared library
 
 Every script sources `lib.sh`, which loads its parts from `lib/`. Each part says in its header what
-it uses of the others. unipept-database's `.deploy/lib.sh` has the same layout, and the parts both
-repositories have carry the same names: `core.sh`, `config.sh` and `locks.sh`.
+it uses of the others.
 
 | Part | What it holds |
 | --- | --- |

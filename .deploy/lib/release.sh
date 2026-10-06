@@ -3,6 +3,7 @@
 # A release of the API: where it is published, what its files are called, how it is downloaded, and
 # whether a file matches its checksum. Uses log and die from core.sh. Sourced through .deploy/lib.sh.
 
+# The GitHub repository the releases are published in.
 readonly REPOSITORY=unipept/unipept-api
 
 # What a release download may not do: wait forever.
@@ -24,6 +25,7 @@ asset_name() {
     printf 'unipept-api-%s-x86_64-linux-gnu-%s\n' "$version" "$variant"
 }
 
+# Where a file of a release, by its tag, is downloaded from.
 release_url() {
     local tag=$1 file=$2
     printf 'https://github.com/%s/releases/download/%s/%s\n' "$REPOSITORY" "$tag" "$file"

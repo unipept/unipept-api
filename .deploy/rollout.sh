@@ -71,8 +71,7 @@ READY_TIMEOUT=$DEFAULT_READY_TIMEOUT
 HEALTH_TIMEOUT=60
 LOCK_FILE=$DEFAULT_ROLLOUT_LOCK
 # What the run in progress is doing, for `status` to read and `abort` to signal. Beside the lock
-# rather than in it: the lock is opened with `exec 9>`, which truncates, and rewriting through a
-# held descriptor needs seeking this has no reason to do.
+# rather than in it: the lock is opened for reading, so nothing can be written through it.
 RUN_STATE=
 # Empty means nobody is emailed; rollout.conf sets it.
 NOTIFY_TO=''

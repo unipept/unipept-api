@@ -181,8 +181,8 @@ check "and reached HAProxy"      "$(grep -c 'all_handlers=UP' /tmp/installed.txt
 check "backup still sorted last" "$(grep -oE '^(patty|selma|rick)' /tmp/installed.txt | tail -1)" "rick"
 
 section "no install while a rollout runs"
-# A rollout holds its lock for the whole run. Replacing its files under it could pair a new lib.sh
-# with the old rollout.sh, which misses what moved out of lib.sh.
+# A rollout holds its lock for the whole run. Replacing its files under it could pair one release's
+# lib.sh with another's rollout.sh.
 # Held for a few seconds, then let go by itself: killing flock would leave its sleep holding the lock.
 # Waited for until it is held, so the install cannot get there first.
 flock /tmp/unipept-rollout.lock sleep 5 &

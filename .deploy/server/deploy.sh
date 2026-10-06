@@ -68,8 +68,8 @@ trap 'exit 1' USR1
 
 # Every path `start` in api/src/lib.rs needs, relative to INDEX_LOCATION. The service cannot come up
 # without all of them, so a deploy that does not check them first trades a clear message for a
-# timeout. unipept-database writes these files and checks the same list, as INDEX_FILES in its
-# .deploy/lib/database.sh, so a change here is a change there.
+# timeout. The database build writes these files and checks the same list, so a change here needs
+# the same change there.
 readonly INDEX_FILES="
 .version
 sa.bin

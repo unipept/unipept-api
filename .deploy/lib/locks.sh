@@ -1,10 +1,8 @@
 # shellcheck shell=bash
 #
-# The locks that keep the deploy scripts on one host from working on the same thing at once: for now
-# the rollout's own, which rollout.sh holds for a run and loadbalancer/install.sh while it replaces
-# the scripts a run loads. The API lock, which deploy.sh takes for a deploy, a rollback, a start and
-# a stop, comes here with the deploy.sh status contract. unipept-database has a part of the same name,
-# for its own locks. Needs nothing else. Sourced through .deploy/lib.sh.
+# The locks that keep the deploy scripts on one host from working on the same thing at once: the
+# rollout's own, which rollout.sh holds for a run and loadbalancer/install.sh while it replaces the
+# scripts a run loads. Needs nothing else. Sourced through .deploy/lib.sh.
 
 # Where the rollout lock is, unless rollout.conf sets LOCK_FILE.
 # shellcheck disable=SC2034  # read by the scripts that source this file.
@@ -14,10 +12,7 @@ readonly DEFAULT_ROLLOUT_LOCK=/tmp/unipept-rollout.lock
 # process dies, however it dies, so nothing stale is left to clear by hand. Fails rather than waits:
 # 1 where another holds it, 2 where the file cannot be made, 3 where it cannot be read.
 #
-# Opened for reading, which is all flock needs and is what makes the lock usable by both the
-# operator and root. Opened for writing, a file root created is refused to the operator — and bash
-# reports that itself and carries on with the descriptor unopened, so `flock` then failed on a bad
-# descriptor and this said another rollout was holding a lock that nobody held.
+# Opened for reading, which is all flock needs, so the operator can take a lock root made, too.
 #
 # Made 0644 whoever makes it: root's umask may be 077, and the operator could then not read a lock
 # loadbalancer/install.sh left behind.

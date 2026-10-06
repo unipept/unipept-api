@@ -7,6 +7,7 @@
 # inside one. Each script arms the trap that answers it.
 readonly MAIN_PID=$$
 
+# Prints a line on standard error, stamped with the time of day in UTC.
 log() {
     printf '%s  %s\n' "$(date -u '+%H:%M:%S')" "$*" >&2
 }
@@ -27,6 +28,7 @@ die() {
     exit 1
 }
 
+# Stops the run, naming the first one missing, unless every command given is installed.
 require_cmd() {
     local cmd
     for cmd in "$@"; do

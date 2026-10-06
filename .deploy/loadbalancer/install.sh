@@ -13,20 +13,21 @@
 # Flow:
 #   1. Check that every command it uses is installed, that this runs as root, and that the operator
 #      account exists.
-#   2. Take the rollout lock, so no rollout runs from the files while they are replaced. Install
+#   2. Refuse a rollout.conf anyone but root can write: this runs as root and sources it.
+#   3. Write /etc/unipept-rollout/rollout.conf and servers.conf from the examples, or keep the ones
+#      already there.
+#   4. Take the rollout lock, so no rollout runs from the files while they are replaced. Install
 #      rollout.sh, loadbalancer/haproxy.sh, lib.sh and the parts it loads from lib/ in
 #      /opt/unipept-rollout, in the shape of the checkout, because rollout.sh resolves haproxy.sh
 #      and lib.sh relative to itself.
-#   3. Write /etc/unipept-rollout/rollout.conf and servers.conf from the examples, or keep the ones
-#      already there.
-#   4. Put the operator in the haproxy group, which is what reaches the admin socket.
-#   5. Read the socket path out of haproxy.cfg, and check that its mode lets that group use it.
-#   6. Ask the socket what HAProxy is running. Report every server the inventory expects in a
+#   5. Put the operator in the haproxy group, which is what reaches the admin socket.
+#   6. Read the socket path out of haproxy.cfg, and check that its mode lets that group use it.
+#   7. Ask the socket what HAProxy is running. Report every server the inventory expects in a
 #      backend that is not there, and write the configuration to add to /tmp.
-#   7. Read haproxy.cfg for the health route each of the two backends checks.
-#   8. Reach every server in the inventory the way a rollout reaches it: ssh as the operator,
+#   8. Read haproxy.cfg for the health route each of the two backends checks.
+#   9. Reach every server in the inventory the way a rollout reaches it: ssh as the operator,
 #      deploy.sh installed, and `deploy.sh check` passing there.
-#   9. Count what steps 4 to 8 reported. Nothing: say the host is ready. Otherwise exit non-zero.
+#  10. Count what steps 5 to 9 reported. Nothing: say the host is ready. Otherwise exit non-zero.
 
 set -euo pipefail
 
@@ -52,7 +53,7 @@ id "$OPERATOR" >/dev/null 2>&1 || die "there is no ${OPERATOR} account on this h
 
 # This runs as root, and sources rollout.conf: for the lock, and for the audit. One that another user
 # could write would hand that user root, whoever owns it now, so it is refused rather than taken back
-# and read. The same rule as unipept-database's opensearch/install.sh for its deploy.conf.
+# and read.
 if [ -e "${CONFIG}/rollout.conf" ]; then
     case "$(stat -c '%U %A' "${CONFIG}/rollout.conf")" in
         "root -rw-r--r--" | "root -rw-------" | "root -r--r--r--" | "root -r--------") ;;
@@ -102,14 +103,11 @@ FRAGMENT
 problems=0
 note() { log "$*"; problems=$((problems + 1)); }
 
-# Read the way rollout.sh reads it, which is `source`. Matching the lines with sed instead meant
-# anything shell understands and a line-matcher does not became part of the value: the example file
-# comments half its settings, so `SSH_USER=unipept  # deploy account` is the natural thing for an
-# operator to write, and the audit then tried to reach `unipept  # deploy account@patty` and called
-# every server unreachable — while the rollout it is auditing read the same file and worked.
+# One setting of rollout.conf, read with `source` as rollout.sh reads it, so a value means the same
+# to the audit as to a rollout: `SSH_USER=unipept  # deploy account` is the user unipept to both.
 #
 # In a subshell, so a setting here cannot land in this script's own variables. It is still root
-# running what the file says, which is why install_config keeps rollout.conf root-owned.
+# running what the file says, which is why a rollout.conf others can write is refused above.
 conf_value() {
     (
         # The file names only what this host decides; the rest is unset, and reading one must not
@@ -147,25 +145,22 @@ install_config() {
 install_config "${SOURCE}/rollout.conf.example" "${CONFIG}/rollout.conf" root
 install_config "${SOURCE}/servers.example.conf" "${CONFIG}/servers.conf" "$OPERATOR"
 
-# A rollout running while this replaces its files could load a new lib.sh into an old rollout.sh,
-# which misses what moved out of lib.sh, or the other way round. So this takes the rollout's own
-# lock, where rollout.conf puts it, for as long as it runs, and refuses while a rollout holds it.
-# Reading it sources it, as root, which is safe only because a rollout.conf root alone can write was
-# required above.
+# A rollout running while this replaces its files could load one release's lib.sh into another's
+# rollout.sh. So this takes the rollout's own lock, where rollout.conf puts it, for as long as it
+# runs, and refuses while a rollout holds it. Reading it sources it, as root, which is safe only
+# because a rollout.conf root alone can write was required above.
 lock_file=$(conf_value LOCK_FILE)
 lock_file=${lock_file:-$DEFAULT_ROLLOUT_LOCK}
 take_rollout_lock "$lock_file" || die "$(rollout_lock_refused $? "$lock_file"). Install once it has finished."
 
 # The same shape as the checkout, because rollout.sh resolves haproxy.sh as loadbalancer/haproxy.sh
-# relative to itself. Flattening it here left the installed rollout unable to find it at all.
-# The parts of lib.sh before lib.sh, and lib.sh before the scripts that load it, so a rollout
-# started meanwhile finds what the files beside it load.
+# relative to itself. The parts of lib.sh before lib.sh, and lib.sh before the scripts that load it,
+# so a rollout started meanwhile finds what the files beside it load.
 install -m 0644 "${SOURCE}/lib/"*.sh "${ROOT}/lib/"
 install -m 0644 "${SOURCE}/lib.sh" "${ROOT}/lib.sh"
 install -m 0755 "${SOURCE}/rollout.sh" "${ROOT}/rollout.sh"
 install -m 0755 "${HERE}/haproxy.sh" "${ROOT}/loadbalancer/haproxy.sh"
 log "installed the scripts in ${ROOT}"
-
 
 # The socket is the one thing a rollout cannot do without, and the only privilege it needs.
 if getent group haproxy >/dev/null 2>&1; then

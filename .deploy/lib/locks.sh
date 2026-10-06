@@ -3,7 +3,7 @@
 # The locks that keep the deploy scripts on one host from working on the same thing at once: the
 # rollout's own, which rollout.sh holds for a run and loadbalancer/install.sh while it replaces the
 # scripts a run loads; and the API's, which deploy.sh holds while it changes the service and
-# server/install.sh while it replaces deploy.sh. Needs nothing else. Sourced through .deploy/lib.sh.
+# server/install.sh while it replaces deploy.sh. Uses die, from core.sh. Sourced through .deploy/lib.sh.
 
 # Where the locks are: in /run/lock, which every account can make a file in and nothing ages out.
 # Fixed, so every script that takes one names the same file. The API lock is taken by more than this
@@ -24,12 +24,15 @@ readonly API_LOCK=/run/lock/unipept-api.lock
 open_lock() {
     local fd=$1 lock=$2
 
+    # Made where missing, and there regardless where another account made it first: its open to
+    # create is then refused, in a sticky directory, though the file is there to take.
     if [ ! -e "$lock" ]; then
-        (umask 022 && : > "$lock") 2> /dev/null || return 2
+        (umask 022 && : > "$lock") 2> /dev/null || [ -e "$lock" ] || return 2
     fi
     case $fd in
         7) { exec 7< "$lock"; } 2> /dev/null || return 3 ;;
         9) { exec 9< "$lock"; } 2> /dev/null || return 3 ;;
+        *) die "open_lock takes descriptor 7 or 9, not ${fd}" ;;
     esac
 }
 

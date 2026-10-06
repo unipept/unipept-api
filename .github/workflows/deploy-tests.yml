@@ -7,9 +7,10 @@
 # or PRs that touch no deploy script would wait forever for a check that never starts. Same reason
 # as audit.yml.
 #
-# Two jobs rather than one, because only the server suite needs a privileged container: a failure
-# there says something different from a failure in the load balancer suites, and they are worth
-# having even on a runner where systemd in a container turns out not to work.
+# The server and load balancer suites are two jobs rather than one, because only the server suite
+# needs a privileged container: a failure there says something different from a failure in the load
+# balancer suites, and they are worth having even on a runner where systemd in a container turns
+# out not to work. The library suite and the comparison of the shared files need no container.
 name: Deploy tests
 
 on:
@@ -34,6 +35,57 @@ permissions:
   contents: read
 
 jobs:
+  lib:
+    # The parts of lib.sh, function by function. No container, and done in seconds.
+    name: Library suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Run the library suite
+        run: .deploy/tests/run-tests.sh lib
+
+  shared:
+    # lib/core.sh, the assertions and core.sh's cases are the same files in unipept-database, and
+    # are compared with its copies: on its branch of the same name where it has one, so two pull
+    # requests that change them together pass together, and on its main otherwise.
+    name: Shared deploy files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Compare with unipept-database
+        env:
+          OTHER: unipept/unipept-database
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          ref=main
+          if git ls-remote --exit-code --heads "https://github.com/${OTHER}" "$BRANCH" > /dev/null; then
+            ref=$BRANCH
+          fi
+          echo "Comparing with ${OTHER} at ${ref}"
+          status=0
+          while read -r here there; do
+            if ! curl -fsSL "https://raw.githubusercontent.com/${OTHER}/${ref}/${there}" -o theirs; then
+              echo "::error file=${here}::cannot fetch ${there} from ${OTHER} at ${ref}"
+              status=1
+            elif ! diff -u theirs "$here"; then
+              echo "::error file=${here}::differs from ${there} in ${OTHER} at ${ref}"
+              status=1
+            fi
+          done <<'FILES'
+          .deploy/lib/core.sh .deploy/lib/core.sh
+          .deploy/tests/assertions.sh tests/assertions.sh
+          .deploy/tests/core-cases.sh tests/deploy/core-cases.sh
+          FILES
+          exit "$status"
+
   server:
     # install.sh and deploy.sh against systemd 255 on Ubuntu 24.04, with a real user manager and
     # lingering. The container runs --privileged with the host's cgroups mounted, which is what

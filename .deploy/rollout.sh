@@ -39,7 +39,6 @@
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 
-# Sets the shell options and the traps every script here runs with: see lib/core.sh.
 # shellcheck source=lib.sh
 source "${HERE}/lib.sh"
 
@@ -915,7 +914,7 @@ do_status() {
     fi
     printf '\n' >&2
 
-    inventory=$(read_inventory) || exit 2
+    inventory=$(read_inventory)
 
     printf '%-10s %-22s %-28s %-10s %-10s %s\n' SERVER ADDRESS HAPROXY VERSION VARIANT INDEX
     while read -r name host port backends server; do
@@ -982,7 +981,7 @@ do_abort() {
 do_ready() {
     local wanted=("$@") inventory name host port backends server chosen=0 restored=0 refused=0
 
-    inventory=$(read_inventory) || exit 2
+    inventory=$(read_inventory)
     while read -r name host port backends server; do
         [ -n "$name" ] || continue
 
@@ -1015,7 +1014,7 @@ do_ready() {
 main() {
     # Read once and passed around, rather than re-read by each phase that wants it.
     local inventory
-    inventory=$(read_inventory) || exit 2
+    inventory=$(read_inventory)
     validate_inventory "$inventory"
 
     local -a servers=()

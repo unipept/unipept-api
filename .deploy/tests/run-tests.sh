@@ -27,9 +27,8 @@ readonly CONTAINER=unipept-deploy-test
 
 log() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 
-require_docker() {
-    command -v docker >/dev/null || { echo "docker is not installed" >&2; exit 1; }
-}
+# Every suite but lib runs in a container.
+[ "${1:-all}" = lib ] || command -v docker >/dev/null || { echo "docker is not installed" >&2; exit 1; }
 
 # The systemd container is long-lived: booting it takes a few seconds, and every server case runs
 # against the same one, reset between suites rather than rebuilt.
@@ -52,7 +51,6 @@ run_lib_suite() {
 }
 
 run_server_suite() {
-    require_docker
     log "Building the server image"
     docker build -q -t "$SERVER_IMAGE" "${HERE}/server" >/dev/null
 
@@ -68,8 +66,6 @@ run_server_suite() {
 
 run_lb_suite() {
     local suite=$1 title=$2
-
-    require_docker
 
     log "Building the load balancer image"
     docker build -q -t "$LB_IMAGE" "${HERE}/loadbalancer" >/dev/null

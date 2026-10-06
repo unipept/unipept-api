@@ -33,7 +33,6 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 readonly SOURCE="${HERE}/.."
 
-# Sets the shell options and the traps every script here runs with: see lib/core.sh.
 # shellcheck source=../lib.sh
 source "${SOURCE}/lib.sh"
 

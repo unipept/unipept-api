@@ -13,7 +13,6 @@
 # The socket is srw------- root:haproxy. Either run as root, or give the socket `mode 660` in
 # haproxy.cfg and put the operator in the haproxy group.
 
-# Sets the shell options and the traps every script here runs with: see lib/core.sh.
 # shellcheck source=../lib.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
 

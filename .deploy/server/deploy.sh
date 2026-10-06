@@ -53,8 +53,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 
 # Beside this script once install.sh has placed both in /opt/unipept-api/lib, one level up in a
-# repository checkout. Sets the shell options and the traps every script here runs with: see
-# lib/core.sh.
+# repository checkout.
 # shellcheck source=../lib.sh
 if [ -f "${HERE}/lib.sh" ]; then
     source "${HERE}/lib.sh"

@@ -1,10 +1,10 @@
 # shellcheck shell=bash
 #
 # The cases for lib/core.sh: the shell options, logging, die, require, need_value, unknown_option
-# and the error trap, through scripts that source lib.sh as the deploy scripts do. Needs LIB, the path of the
-# lib.sh to test, and TEMP_DIR, a directory to write those scripts in, and the assertions. Sourced
-# by the lib suite, never run. Byte for byte the same as its copy in the other repository that
-# deploys Unipept, as core.sh is.
+# and the error trap, through scripts that source lib.sh as the deploy scripts do. Needs LIB, the
+# path of the lib.sh to test, and TEMP_DIR, a directory to write those scripts in, and the
+# assertions. Sourced by the lib suite, never run. Byte for byte the same as its copy in the other
+# repository that deploys Unipept, as core.sh is.
 # shellcheck disable=SC2016 # the bodies are the scripts' own code, expanded when those run
 
 # A script that sources lib.sh, as the deploy scripts do, and then runs the body. Its own process,

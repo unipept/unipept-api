@@ -8,10 +8,31 @@
 # rollout.sh's preflight and install.sh's audit each run the ones they need, so a problem both look
 # for is reported by both with the same line.
 #
+# Also read_inventory, which is not a check but reads what several of them are given.
+#
 # Uses log from core.sh and http_code from remote.sh. From the script that sources it: HAPROXY, the
 # path of haproxy.sh, with HAPROXY_SOCKET set for it; REMOTE_DEPLOY; on_host HOST COMMAND, which runs
 # one command on a server the way that script reaches it; and, for check_fleet_index, which only
 # rollout.sh runs, its distinct_values. Beside haproxy.sh, in the checkout and on the load balancer.
+
+# The inventory, one server per line: name host port haproxy_backends haproxy_server
+#
+# haproxy_backends is comma-separated, because a server can sit in more than one backend: routing
+# the database endpoints separately puts every server in two. A drain has to cover all of them, or
+# the server keeps taking the traffic of the one that was missed.
+#
+# Comments and blank lines are ignored, and so is a line too short to name its server, which
+# check_inventory_entries reports. The variant is not here: the server owns that, in its environment
+# file, so adding a server is one edit rather than two. Given a name, only that server's line.
+read_inventory() {
+    local file=$1 only=${2:-} name host port backends server
+    while read -r name host port backends server _; do
+        case ${name:-} in '' | \#*) continue ;; esac
+        [ -n "$server" ] || continue
+        [ -z "$only" ] || [ "$only" = "$name" ] || continue
+        printf '%s %s %s %s %s\n' "$name" "$host" "$port" "$backends" "$server"
+    done < "$file"
+}
 
 # The inventory is hand-edited, and three of its mistakes are silent: a short line, a repeated name,
 # which makes one line unreachable by name, and a repeated haproxy_server, which drains one host

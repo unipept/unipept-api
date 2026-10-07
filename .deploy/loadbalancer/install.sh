@@ -180,8 +180,7 @@ fi
 
 check_inventory_entries "$INVENTORY" || problems=$((problems + 1))
 
-# The inventory as rollout.sh reads it, one "name host port backends server" per server.
-inventory=$(awk '$1 !~ /^#/ && NF >= 5 { print $1, $2, $3, $4, $5 }' "$INVENTORY")
+inventory=$(read_inventory "$INVENTORY")
 
 # `|| true` because pipefail turns a missing haproxy.cfg into a fatal exit here, which
 # check_haproxy_health_uris below exists to report.
@@ -204,7 +203,7 @@ check_haproxy_health_uris "$HAPROXY_CONFIG" || problems=$((problems + 1))
 
 # Every server the inventory names, reached the way a rollout reaches it: as the operator, on the
 # options a rollout uses — the same bounds rollout.sh builds SSH_OPTIONS from, so tuning a timeout
-# there tunes it here — and as the user rollout.conf names.
+# there tunes it here.
 readonly AUDIT_SSH=(-n "${SSH_CONNECTION_BOUNDS[@]}")
 ssh_user=$(conf_value SSH_USER)
 REMOTE_DEPLOY=$(conf_value REMOTE_DEPLOY)

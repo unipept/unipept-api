@@ -242,23 +242,6 @@ case $COMMAND in
     *) take_rollout_lock || die "$(rollout_lock_refused $?)" ;;
 esac
 
-# One server per line: name host port haproxy_backends haproxy_server
-#
-# haproxy_backends is comma-separated, because a server can sit in more than one backend: routing
-# the database endpoints separately puts every server in two. A drain has to cover all of them, or
-# the server keeps taking the traffic of the one that was missed.
-#
-# Comments and blank lines are ignored. The variant is not here: the server owns that, in its
-# environment file, so adding a server is one edit rather than two.
-read_inventory() {
-    local name host port backends server
-    while read -r name host port backends server _; do
-        case ${name:-} in ''|\#*) continue ;; esac
-        [ -z "$ONLY" ] || [ "$ONLY" = "$name" ] || continue
-        printf '%s %s %s %s %s\n' "$name" "$host" "$port" "$backends" "$server"
-    done < "$INVENTORY"
-}
-
 # Primaries first, backups last.
 #
 # A backup takes no traffic while the primaries are up, so updating it first would put the fleet's
@@ -893,7 +876,7 @@ do_status() {
     fi
     printf '\n' >&2
 
-    inventory=$(read_inventory)
+    inventory=$(read_inventory "$INVENTORY" "$ONLY")
 
     printf '%-10s %-22s %-28s %-10s %-10s %s\n' SERVER ADDRESS HAPROXY VERSION VARIANT INDEX
     while read -r name host port backends server; do
@@ -960,7 +943,7 @@ do_abort() {
 do_ready() {
     local wanted=("$@") inventory name host port backends server chosen=0 restored=0 refused=0
 
-    inventory=$(read_inventory)
+    inventory=$(read_inventory "$INVENTORY" "$ONLY")
     while read -r name host port backends server; do
         [ -n "$name" ] || continue
 
@@ -995,7 +978,7 @@ main() {
     # Read once and passed around, rather than re-read by each phase that wants it.
     local inventory
     check_inventory_entries "$INVENTORY" || die "the inventory, ${INVENTORY}, has the problems above"
-    inventory=$(read_inventory)
+    inventory=$(read_inventory "$INVENTORY" "$ONLY")
 
     local -a servers=()
     mapfile -t servers < <(ordered_servers "$inventory")

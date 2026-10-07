@@ -165,10 +165,14 @@ section "the installed rollout can find haproxy.sh"
 # rollout.sh resolves it as loadbalancer/haproxy.sh relative to itself, so a flat install leaves the
 # installed copy unable to reach HAProxy at all — and ordered_servers would swallow the failure and
 # sort the backup as a primary.
-check "installed in place"   "$([ -x /opt/unipept-rollout/loadbalancer/haproxy.sh ] && echo yes)" "yes"
-check "and every part of lib.sh" "$(ls /opt/unipept-rollout/lib)" "$(ls /deploy/lib)"
-check "all of them root's, as the scripts that load them are" \
-    "$(stat -c '%U' /opt/unipept-rollout/lib /opt/unipept-rollout/lib.sh /opt/unipept-rollout/lib/*.sh | sort -u)" "root"
+# What the checkout holds of what the load balancer runs, by its path in the install, which mirrors it.
+mirrored_files() {
+  { echo lib.sh; find /deploy/lib -name '*.sh' -printf 'lib/%f\n'; echo loadbalancer/haproxy.sh; echo rollout.sh; } | sort
+}
+installed_files() { (cd /opt/unipept-rollout && find -L lib lib.sh loadbalancer rollout.sh -type f | sort); }
+check "the install mirrors the checkout, file for file" "$(installed_files)" "$(mirrored_files)"
+check "all of it root's, as only install.sh changes it" \
+    "$(find -L /opt/unipept-rollout -printf '%u\n' | sort -u)" "root"
 echo ok > /tmp/fake-ssh-mode
 cat > /etc/unipept-rollout/servers.conf <<EOF
 patty  patty 9101 all_handlers,db_handlers patty
@@ -188,20 +192,18 @@ section "no install while a rollout runs"
 flock /run/lock/unipept-rollout.lock sleep 5 &
 holder=$!
 for _ in $(seq 50); do flock -n /run/lock/unipept-rollout.lock true 2>/dev/null || break; sleep 0.1; done
-before=$(stat -L -c %Y /opt/unipept-rollout/rollout.sh)
 touch -d '2000-01-01' /opt/unipept-rollout/rollout.sh
 /deploy/loadbalancer/install.sh >/tmp/i-lock.log 2>&1
 check "refused"                  "$?" "2"
 check "and says a rollout holds it" "$(grep -c 'another rollout holds /run/lock/unipept-rollout.lock.*Install once it has finished' /tmp/i-lock.log)" "1"
 check "nothing was replaced"     "$(stat -L -c %Y /opt/unipept-rollout/rollout.sh)" "$(date -d '2000-01-01' +%s)"
 wait "$holder"
-touch -d "@${before}" /opt/unipept-rollout/rollout.sh
 # A part an earlier checkout had, and this one does not.
 touch /opt/unipept-rollout/lib/gone.sh
 /deploy/loadbalancer/install.sh >/tmp/i-lock.log 2>&1
 check_absent "once it has finished, the install is not refused" 'a rollout holds' /tmp/i-lock.log
 check "and replaces the files" "$([ "$(stat -L -c %Y /opt/unipept-rollout/rollout.sh)" -gt "$(date -d '2000-01-01' +%s)" ] && echo yes)" "yes"
-check "leaving nothing the checkout no longer has" "$(ls /opt/unipept-rollout/lib)" "$(ls /deploy/lib)"
+check "leaving nothing the checkout no longer has" "$(installed_files)" "$(mirrored_files)"
 check "nor any release but the one in place and the one it replaced" "$(find /opt/unipept-rollout/releases -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
 check "each script found through it" "$(readlink /opt/unipept-rollout/rollout.sh) $(readlink /opt/unipept-rollout/lib)" "release/rollout.sh release/lib"
 

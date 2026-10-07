@@ -11,7 +11,11 @@ R=/deploy
 source /deploy/tests/lib.sh
 
 section "install.sh (the one root step)"
-$R/server/install.sh >/tmp/install.log 2>&1; check "exit 0" "$?" "0"
+$R/server/install.sh >/tmp/install.log 2>&1
+status=$?
+check "exit 0" "$status" "0"
+# What it said, where CI keeps nothing of the container afterwards.
+[ "$status" -eq 0 ] || sed 's/^/    /' /tmp/install.log
 check "linger on"      "$(loginctl show-user unipept -p Linger --value)" "yes"
 check "bin dir owned"  "$(stat -c %U /opt/unipept-api/bin)" "unipept"
 check "unit installed" "$([ -f /home/unipept/.config/systemd/user/unipept-api.service ] && echo yes)" "yes"

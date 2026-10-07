@@ -21,7 +21,7 @@
 #   6. Install the port redirect script, in root/, and its system unit, both owned by root.
 #   7. Install the service unit in the service user's ~/.config/systemd/user.
 #   8. Enable and restart unipept-api-ports, so port 80 reaches the port the service binds.
-#   9. Enable lingering for the service user, and wait for its runtime directory to appear.
+#   9. Enable lingering for the service user, and wait for its user manager to answer.
 #  10. Enable the user unit as that user. It is not started: there is no binary until a deploy.
 #      Let go of the API lock.
 #  11. Print what is left to do by hand on this host.
@@ -130,15 +130,18 @@ log "port 80 reaches $(env_value PORT "$ENV_FILE")"
 loginctl enable-linger "$USER"
 log "enabled lingering for ${USER}"
 
-# As the service user, against its own manager. The runtime directory exists once lingering is on.
+# As the service user, against its own manager.
 runtime="/run/user/$(id -u "$USER")"
-for _ in $(seq 20); do [ -d "$runtime" ] && break; sleep 0.5; done
-[ -d "$runtime" ] || die "${runtime} did not appear; check systemd-logind"
-
 as_user() {
     setpriv --reuid "$USER" --regid "$USER" --init-groups \
         env XDG_RUNTIME_DIR="$runtime" "$@"
 }
+
+# Lingering starts the user manager, and its runtime directory appears before the manager answers
+# in it, so what is waited for is an answer.
+for _ in $(seq 20); do as_user systemctl --user show-environment >/dev/null 2>&1 && break; sleep 0.5; done
+as_user systemctl --user show-environment >/dev/null 2>&1 \
+    || die "the user manager of ${USER} does not answer in ${runtime}; check systemd-logind"
 
 as_user systemctl --user daemon-reload
 as_user systemctl --user enable "$SERVICE"

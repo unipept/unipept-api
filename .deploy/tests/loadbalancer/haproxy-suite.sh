@@ -79,6 +79,8 @@ section "4. a backup server counts as capacity"
 $H maint all_handlers/patty >/dev/null 2>&1
 $H maint all_handlers/selma >/dev/null 2>&1
 check "only rick left"     "$($H up-count all_handlers)" "1"
+check "draining rick empties all_handlers" "$($H emptied-by all_handlers,db_handlers/rick)" "all_handlers"
+check "draining patty empties nothing" "$($H emptied-by all_handlers,db_handlers/patty)" ""
 $H ready all_handlers/patty >/dev/null 2>&1; $H ready all_handlers/selma >/dev/null 2>&1
 
 section "5. wait-empty gives up rather than hanging"

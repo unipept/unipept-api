@@ -92,7 +92,8 @@ rm -f /tmp/unipept-haproxy-fragment.cfg
 /deploy/loadbalancer/install.sh >/tmp/i3.log 2>&1
 check "exit non-zero"      "$([ $? -ne 0 ] && echo yes)" "yes"
 # The line a rollout's preflight reports it with: both run check_haproxy_backends.
-check "names what is missing" "$(grep -c '  check: HAProxy is not running these, which the inventory expects: absent_backend/patty absent_backend/selma absent_backend/rick$' /tmp/i3.log)" "1"
+check "names what is missing" "$(grep -c '  check: HAProxy is not running absent_backend/patty, which the inventory names for patty$' /tmp/i3.log)" "1"
+check "for every server" "$(grep -c 'check: HAProxy is not running' /tmp/i3.log)" "3"
 check "wrote the fragment"    "$([ -f /tmp/unipept-haproxy-fragment.cfg ] && echo yes)" "yes"
 check "fragment has the backend" "$(grep -c '^backend db_handlers' /tmp/unipept-haproxy-fragment.cfg)" "1"
 # notice mails every transition a rollout makes; alert keeps only the failures.
@@ -131,11 +132,14 @@ check "says so"        "$(grep -c 'check: HAProxy does not answer on /run/haprox
 check "and writes no fragment" "$([ -e /tmp/unipept-haproxy-fragment.cfg ] && echo written || echo none)" "none"
 mv -f /run/haproxy/live.sock /run/haproxy/haproxy.sock
 
-section "a socket only root can use is named"
+section "a socket only root can use is named, and the backends are still compared"
+sed -i 's#all_handlers,db_handlers#all_handlers,absent_backend#' /etc/unipept-rollout/servers.conf
 chmod 600 /run/haproxy/haproxy.sock
 /deploy/loadbalancer/install.sh >/tmp/i4b.log 2>&1
 check "exit non-zero"  "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says so"        "$(grep -c 'check: the admin socket is mode 600, so only root can use it' /tmp/i4b.log)" "1"
+check "and names what is missing too" "$(grep -c 'check: HAProxy is not running absent_backend/patty' /tmp/i4b.log)" "1"
+sed -i 's#all_handlers,absent_backend#all_handlers,db_handlers#' /etc/unipept-rollout/servers.conf
 chmod 666 /run/haproxy/haproxy.sock
 
 section "the servers are reached the way a rollout reaches them"

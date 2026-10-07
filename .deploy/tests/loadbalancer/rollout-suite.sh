@@ -195,16 +195,30 @@ $1 || exit 1" >/tmp/one-check.log 2>&1
 }
 printf 'patty patty 9101 all_handlers patty\npatty selma 9102 all_handlers selma\n' > /tmp/twice.conf
 sed 's#uri /health/database#uri /private_api/metadata.json#' /etc/haproxy/haproxy.cfg > /tmp/bad-haproxy.cfg
-good_line='patty patty 9101 all_handlers,db_handlers patty'
-bad_line='patty patty 9101 all_handlers,absent_backend patty'
+# A socket left with a mode of its own, nothing listening on it.
+socat UNIX-LISTEN:/tmp/mode.sock,unlink-close=0 /dev/null >/dev/null 2>&1 &
+stale=$!
+for _ in $(seq 50); do [ -S /tmp/mode.sock ] && break; sleep 0.1; done
+kill "$stale" 2>/dev/null; wait "$stale" 2>/dev/null
+sed 's/^backend db_handlers$/backend db_handlers   # the routes that need OpenSearch/' /etc/haproxy/haproxy.cfg > /tmp/commented-haproxy.cfg
 
 both_ways check_inventory_entries "check_inventory_entries /work/servers.conf" \
   "check_inventory_entries /tmp/twice.conf" "the inventory names 'patty' twice"
-both_ways check_haproxy_socket "check_haproxy_socket /run/haproxy/haproxy.sock /etc/haproxy/haproxy.cfg" \
-  "check_haproxy_socket /run/haproxy/absent.sock /etc/haproxy/haproxy.cfg" "no HAProxy admin socket at"
-both_ways check_haproxy_backends "check_haproxy_backends '${good_line}'" \
-  "check_haproxy_backends '${bad_line}'" "which the inventory expects: absent_backend/patty$"
-both_ways check_haproxy_health_uris "check_haproxy_health_uris /etc/haproxy/haproxy.cfg" \
+one_check "read_inventory /nonexistent"
+check "read_inventory reads nothing from a file it cannot read" "$?" "0"
+both_ways check_haproxy_answers "check_haproxy_answers /run/haproxy/haproxy.sock" \
+  "check_haproxy_answers /run/haproxy/absent.sock" "no HAProxy admin socket at"
+both_ways check_haproxy_answers "check_haproxy_answers /run/haproxy/haproxy.sock" \
+  "check_haproxy_answers /tmp/mode.sock" "HAProxy does not answer on /tmp/mode.sock"
+chmod 760 /tmp/mode.sock
+one_check "check_haproxy_socket_mode /tmp/mode.sock /etc/haproxy/haproxy.cfg"
+check "check_haproxy_socket_mode takes a group that can read and write" "$?" "0"
+chmod 600 /tmp/mode.sock
+both_ways check_haproxy_socket_mode "check_haproxy_socket_mode /run/haproxy/haproxy.sock /etc/haproxy/haproxy.cfg" \
+  "check_haproxy_socket_mode /tmp/mode.sock /etc/haproxy/haproxy.cfg" "the admin socket is mode 600, so only root can use it"
+both_ways check_haproxy_backends "check_haproxy_backends patty all_handlers,db_handlers patty" \
+  "check_haproxy_backends patty all_handlers,absent_backend patty" "HAProxy is not running absent_backend/patty, which the inventory names for patty$"
+both_ways check_haproxy_health_uris "check_haproxy_health_uris /tmp/commented-haproxy.cfg" \
   "check_haproxy_health_uris /tmp/bad-haproxy.cfg" "db_handlers checks /private_api/metadata.json"
 $H maint db_handlers/selma >/dev/null 2>&1
 both_ways check_server_up "check_server_up patty all_handlers,db_handlers/patty" \
@@ -236,8 +250,11 @@ check "but passes for a server already out, which leaves patty" "$?" "0"
 reset_fleet
 one_check "check_backend_capacity all_handlers,db_handlers patty"
 check "check_backend_capacity passes" "$?" "0"
-# check_fleet_index uses rollout.sh's distinct_values, so case 13 runs it through a rollout.
-rm -f /tmp/twice.conf /tmp/bad-haproxy.cfg
+one_check "HAPROXY_SOCKET=/run/haproxy/absent.sock check_backend_capacity all_handlers patty"
+check "and stops the script where HAProxy cannot be asked" "$?" "2"
+both_ways check_fleet_index "check_fleet_index 'patty=2026.09 selma=2026.09 '" \
+  "check_fleet_index 'patty=2026.09 selma=2026.02 '" "the fleet does not agree on an index"
+rm -f /tmp/twice.conf /tmp/bad-haproxy.cfg /tmp/commented-haproxy.cfg /tmp/mode.sock
 
 section "4e. a backend HAProxy does not run is named, with the line the install's audit uses"
 cp /work/servers.conf /tmp/servers.keep
@@ -248,7 +265,9 @@ rick   rick 9103 all_handlers,absent_backend rick
 EOF
 $R --version v2.6.0 >/tmp/absent.txt 2>&1
 check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
-check "names what is missing" "$(grep -c '  check: HAProxy is not running these, which the inventory expects: absent_backend/patty absent_backend/selma absent_backend/rick$' /tmp/absent.txt)" "1"
+check "names what is missing" "$(grep -c '  check: HAProxy is not running absent_backend/patty, which the inventory names for patty$' /tmp/absent.txt)" "1"
+check "for every server, once" "$(grep -c 'check: HAProxy is not running' /tmp/absent.txt)" "3"
+check "and nothing else of HAProxy" "$(grep -c 'check: HAProxy cannot say\|^Error:.*not in every one of' /tmp/absent.txt)" "0"
 check "nothing was touched" "$(grep -c 'nothing was touched' /tmp/absent.txt)" "1"
 cp /tmp/servers.keep /work/servers.conf
 

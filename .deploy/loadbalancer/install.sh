@@ -24,7 +24,8 @@
 #      loadbalancer/ scripts and lib.sh relative to itself.
 #   5. Put the operator in the haproxy group, which is what reaches the admin socket.
 #   6. Check the inventory.
-#   7. Read the socket path out of haproxy.cfg, and check that its mode lets that group use it.
+#   7. Read the socket path out of haproxy.cfg, and check that HAProxy answers on it and that its
+#      mode lets that group use it.
 #   8. Ask the socket what HAProxy is running. Report every server the inventory expects in a
 #      backend that is not there, and write the configuration to add to /tmp.
 #   9. Check the health route each of the two backends checks, in haproxy.cfg.
@@ -189,14 +190,23 @@ socket=${socket:-/run/haproxy/haproxy.sock}
 [ -r "$HAPROXY_CONFIG" ] || log "no ${HAPROXY_CONFIG} to read; assuming ${socket}"
 export HAPROXY_SOCKET=$socket
 
-if ! check_haproxy_socket "$socket" "$HAPROXY_CONFIG"; then
-    problems=$((problems + 1))
-elif check_haproxy_backends "$inventory"; then
-    log "every server in the inventory is in every backend it names"
+if check_haproxy_answers "$socket"; then
+    check_haproxy_socket_mode "$socket" "$HAPROXY_CONFIG" || problems=$((problems + 1))
+
+    missing=0
+    while read -r name _ _ backends server; do
+        [ -n "$name" ] || continue
+        check_haproxy_backends "$name" "$backends" "$server" || missing=$((missing + 1))
+    done <<<"$inventory"
+    if [ "$missing" -eq 0 ]; then
+        log "every server in the inventory is in every backend it names"
+    else
+        problems=$((problems + missing))
+        write_fragment
+        log "a configuration to add is in ${FRAGMENT}"
+    fi
 else
     problems=$((problems + 1))
-    write_fragment
-    log "a configuration to add is in ${FRAGMENT}"
 fi
 
 check_haproxy_health_uris "$HAPROXY_CONFIG" || problems=$((problems + 1))

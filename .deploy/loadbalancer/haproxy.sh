@@ -34,6 +34,7 @@ usage: haproxy.sh <command> <backend[,backend...]>/<server> [arguments]
   wait-up <target> <secs>      wait until every backend reports UP
   up-count <backend>           print how many servers in one backend are UP
   is-backup <target>           exit 0 when the server is a backup in any of its backends
+  emptied-by <target>          print each backend with no server UP but this one
   servers                      print "backend/server" for every server HAProxy runs
 
 Every command but state, sessions, up-count and servers takes several backends at once.
@@ -193,6 +194,29 @@ up_count() {
     '
 }
 
+# The backends draining this server would leave with no server UP, one per line, from one `show stat`
+# so every backend is read at the same moment. A backup counts: with the primaries out, it is what
+# answers.
+emptied_by() {
+    local backends server
+    { read -r backends; read -r server; } < <(split_target "$1")
+
+    runtime "show stat" | awk -F, -v wanted="$backends" -v sv="$server" '
+        BEGIN { split(wanted, list, " "); for (i in list) others[list[i]] = 0 }
+        /^#/ {
+            for (i = 1; i <= NF; i++) {
+                name = $i
+                sub(/^# */, "", name)
+                if (name == "status") statuscol = i
+            }
+            if (!statuscol) exit 2
+            next
+        }
+        ($1 in others) && $2 != sv && $2 != "BACKEND" && $2 != "FRONTEND" && $statuscol ~ /^UP/ { others[$1]++ }
+        END { for (b in others) if (others[b] == 0) print b }
+    '
+}
+
 # Whether HAProxy considers this server a backup, in any of the backends it sits in.
 #
 # Read from the `bck` field rather than from the inventory, so there is one source of truth for what a
@@ -269,6 +293,7 @@ case $command in
     wait-up) [ $# -eq 2 ] || usage; wait_up "$1" "$2" ;;
     up-count) up_count "$1" ;;
     is-backup) is_backup "$1" ;;
+    emptied-by) emptied_by "$1" ;;
     servers) servers ;;
     *) usage ;;
 esac

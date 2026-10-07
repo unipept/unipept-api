@@ -2,18 +2,21 @@
 #
 # What has to be true of the load balancer and the fleet before a rollout drains a server, one
 # function per check. A check prints nothing when all is well; otherwise it prints each thing that is
-# wrong as `check: …` and returns 1. None of them exits or changes anything. check_server_ready also
-# passes on the server's own report, on standard output, for a caller that reads it.
+# wrong as `check: …` and returns 1. None of them changes anything, and none exits but
+# check_backend_capacity, which stops the script where HAProxy cannot be asked at all: that is an
+# error rather than something found, and no flag may let a drain go ahead on it. check_server_ready
+# also passes on the server's own report, on standard output, for a caller that reads it.
 #
 # rollout.sh's preflight and install.sh's audit each run the ones they need, so a problem both look
 # for is reported by both with the same line.
 #
-# Also read_inventory, which is not a check but reads what several of them are given.
+# Also read_inventory and distinct_values, which are not checks but read what several of them are
+# given.
 #
-# Uses log from core.sh and http_code from remote.sh. From the script that sources it: HAPROXY, the
-# path of haproxy.sh, with HAPROXY_SOCKET set for it; REMOTE_DEPLOY; on_host HOST COMMAND, which runs
-# one command on a server the way that script reaches it; and, for check_fleet_index, which only
-# rollout.sh runs, its distinct_values. Beside haproxy.sh, in the checkout and on the load balancer.
+# Uses log and die from core.sh and http_code from remote.sh. From the script that sources it:
+# HAPROXY, the path of haproxy.sh, with HAPROXY_SOCKET set for it; REMOTE_DEPLOY; and on_host HOST
+# COMMAND, which runs one command on a server the way that script reaches it. Beside haproxy.sh, in
+# the checkout and on the load balancer.
 
 # The inventory, one server per line: name host port haproxy_backends haproxy_server
 #
@@ -26,12 +29,24 @@
 # file, so adding a server is one edit rather than two. Given a name, only that server's line.
 read_inventory() {
     local file=$1 only=${2:-} name host port backends server
+    # check_inventory_entries says so.
+    [ -r "$file" ] || return 0
     while read -r name host port backends server _; do
         case ${name:-} in '' | \#*) continue ;; esac
         [ -n "$server" ] || continue
         [ -z "$only" ] || [ "$only" = "$name" ] || continue
         printf '%s %s %s %s %s\n' "$name" "$host" "$port" "$backends" "$server"
     done < "$file"
+}
+
+# How many different values a run of `name=value ` entries holds.
+#
+# Two callers ask it of two different things — the version each server is serving, and the index
+# each one reads — and both only ever compare the answer against 1. Counted here rather than in each
+# of them, so a change to how those entries are built cannot leave one caller reading them the old
+# way and quietly agreeing that a split fleet is on one version.
+distinct_values() {
+    printf '%s' "$1" | tr ' ' '\n' | sed 's/^[^=]*=//' | grep -v '^$' | sort -u | wc -l
 }
 
 # The inventory is hand-edited, and three of its mistakes are silent: a short line, a repeated name,
@@ -60,18 +75,25 @@ check_inventory_entries() {
     return "$status"
 }
 
-# The admin socket is how a rollout drains and restores a server, and the haproxy group is how the
-# operator reaches it. HAProxy has to answer on it too: a socket left behind by one that stopped is
-# still a socket.
-check_haproxy_socket() {
-    local socket=$1 config=$2 mode
+# The admin socket is how a rollout drains and restores a server, and HAProxy has to answer on it: a
+# socket left behind by one that stopped is still a socket. haproxy.sh's own error is left out,
+# since its advice is about who asks, and this is about whether anything answers.
+check_haproxy_answers() {
+    local socket=$1
 
     [ -S "$socket" ] || { log "check: no HAProxy admin socket at ${socket}"; return 1; }
-    HAPROXY_SOCKET=$socket "$HAPROXY" servers >/dev/null \
+    HAPROXY_SOCKET=$socket "$HAPROXY" servers >/dev/null 2>&1 \
         || { log "check: HAProxy does not answer on ${socket}"; return 1; }
+}
+
+# The haproxy group is how the operator reaches the socket, so the group has to be able to read and
+# write it.
+check_haproxy_socket_mode() {
+    local socket=$1 config=$2 mode
+
     mode=$(stat -c %a "$socket")
-    case $mode in
-        66* | 77*) ;;
+    case ${mode: -2:1} in
+        6 | 7) ;;
         *)
             log "check: the admin socket is mode ${mode}, so only root can use it. In ${config}, change"
             log "check:     stats socket ${socket} mode ${mode} level admin"
@@ -83,25 +105,21 @@ check_haproxy_socket() {
     esac
 }
 
-# Every backend each inventory line names holds its server in what HAProxy is actually running,
-# which is not always what haproxy.cfg says: an edit that was never reloaded is invisible to the file
-# and obvious here. LINES is the inventory as "name host port backends server" per line.
+# Every backend the inventory names for a server holds it in what HAProxy is actually running, which
+# is not always what haproxy.cfg says: an edit that was never reloaded is invisible to the file and
+# obvious here.
 check_haproxy_backends() {
-    local lines=$1 running name backends server backend missing=''
+    local name=$1 backends=$2 server=$3 running backend missing=''
 
     running=$("$HAPROXY" servers) || { log "check: HAProxy does not answer on ${HAPROXY_SOCKET}"; return 1; }
+    for backend in ${backends//,/ }; do
+        case $'\n'"${running}"$'\n' in
+            *$'\n'"${backend}/${server}"$'\n'*) ;;
+            *) missing="${missing}${backend}/${server} " ;;
+        esac
+    done
 
-    while read -r name _ _ backends server _; do
-        [ -n "$name" ] || continue
-        for backend in ${backends//,/ }; do
-            case $'\n'"${running}"$'\n' in
-                *$'\n'"${backend}/${server}"$'\n'*) ;;
-                *) missing="${missing}${backend}/${server} " ;;
-            esac
-        done
-    done <<<"$lines"
-
-    [ -z "$missing" ] || { log "check: HAProxy is not running these, which the inventory expects: ${missing% }"; return 1; }
+    [ -z "$missing" ] || { log "check: HAProxy is not running ${missing% }, which the inventory names for ${name}"; return 1; }
 }
 
 # The route each backend checks, which decides what takes a server out of it: all_handlers needs the
@@ -113,9 +131,8 @@ check_haproxy_health_uris() {
     for pair in all_handlers:/health db_handlers:/health/database; do
         backend=${pair%%:*}
         expected=${pair#*:}
-        actual=$(awk -v b="backend ${backend}" '
-            $0 ~ "^"b"$" { inside = 1; next }
-            /^(backend|frontend|listen|defaults|global)/ { inside = 0 }
+        actual=$(awk -v b="$backend" '
+            $1 ~ /^(backend|frontend|listen|defaults|global)$/ { inside = ($1 == "backend" && $2 == b); next }
             inside && /http-check send/ { for (i = 1; i <= NF; i++) if ($i == "uri") print $(i + 1) }
         ' "$config" | head -1)
 
@@ -192,16 +209,13 @@ check_fleet_index() {
 # backup counts: with the primaries out, it is what answers. Asked before the run and again before
 # each drain, since capacity can move in between.
 check_backend_capacity() {
-    local backends=$1 server=$2 status=0 backend up state
+    local backends=$1 server=$2 emptied backend
 
-    for backend in ${backends//,/ }; do
-        if ! up=$("$HAPROXY" up-count "$backend") || ! state=$("$HAPROXY" state "${backend}/${server}"); then
-            log "check: HAProxy cannot say which servers are UP in ${backend}"
-            return 1
-        fi
-        case $state in UP*) up=$((up - 1)) ;; esac
-        [ "$up" -ge 1 ] \
-            || { log "check: draining ${server} leaves ${backend} with no server UP; --allow-downtime accepts that"; status=1; }
+    emptied=$("$HAPROXY" emptied-by "${backends}/${server}") \
+        || die "cannot ask HAProxy which servers are UP in ${backends//,/, }"
+    [ -n "$emptied" ] || return 0
+    for backend in $emptied; do
+        log "check: draining ${server} leaves ${backend} with no server UP; --allow-downtime accepts that"
     done
-    return "$status"
+    return 1
 }

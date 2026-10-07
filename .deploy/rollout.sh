@@ -323,16 +323,6 @@ fetch_release() {
     report_fleet_versions
 }
 
-# How many different values a run of `name=value ` entries holds.
-#
-# Two callers ask it of two different things — the version each server is serving, and the index
-# each one reads — and both only ever compare the answer against 1. Counted here rather than in each
-# of them, so a change to how those entries are built cannot leave one caller reading them the old
-# way and quietly agreeing that a split fleet is on one version.
-distinct_values() {
-    printf '%s' "$1" | tr ' ' '\n' | sed 's/^[^=]*=//' | grep -v '^$' | sort -u | wc -l
-}
-
 # What the fleet is running before anything is installed.
 #
 # Reported, never refused. A fleet that disagrees is what a run which stopped part way leaves
@@ -372,11 +362,9 @@ report_fleet_versions() {
 preflight() {
     local lines=$1 name host port backends server failures=0 versions=''
 
-    check_haproxy_backends "$lines" || failures=$((failures + 1))
-
     while read -r name host port backends server; do
         [ -n "$name" ] || continue
-        if check_server_up "$name" "${backends}/${server}"; then
+        if check_haproxy_backends "$name" "$backends" "$server" && check_server_up "$name" "${backends}/${server}"; then
             check_backend_capacity "$backends" "$server" || [ "$ALLOW_DOWNTIME" = true ] || failures=$((failures + 1))
         else
             failures=$((failures + 1))

@@ -1,7 +1,8 @@
 # shellcheck shell=bash
 #
 # What every deploy script runs on: the shell options, logging, stopping, the commands a script
-# needs, and the trap that reports a command that failed. Needs nothing else. Sourced through
+# needs, and the trap that reports a command that failed; and how an install puts the scripts it
+# installs in place. Needs nothing else. Sourced through
 # .deploy/lib.sh, never run. Byte for byte the same as its copy in the other repository that
 # deploys Unipept, so a change here is made there in the same release.
 #
@@ -62,6 +63,31 @@ need_value() {
 # Stops on an option the script does not take.
 unknown_option() {
     die "unknown option '$1'. Run with --help for the options."
+}
+
+# Puts the release an install has made whole in ROOT/releases/ID in place, at once, for an install
+# run as root. ROOT/release is a link to the release, and the one thing that changes: a new link is
+# renamed over it, which is atomic, so each file a script opens from then on is the new release's,
+# and an install stopped part way leaves the one before in place. Each ENTRY of ROOT, what the
+# scripts are run and found by, is a link through it, release/ENTRY, made where it is not one
+# already. The release it replaces stays until the next, for a run that resolved its paths into it;
+# every other entry of releases/ goes, what an install stopped part way left among them. A leftover
+# that cannot be removed is said and left, since the new release is in place by then.
+switch_release() {
+    local root=$1 id=$2 entry before
+    shift 2
+
+    before=$(readlink "${root}/release" || true)
+    rm -rf "${root:?}/release.new"
+    ln -s "releases/${id}" "${root}/release.new"
+    mv -fT "${root}/release.new" "${root}/release"
+    for entry in "$@"; do
+        [ "$(readlink "${root}/${entry}" || true)" != "release/${entry}" ] || continue
+        rm -rf "${root:?}/${entry}"
+        ln -s "release/${entry}" "${root}/${entry}"
+    done
+    find "${root}/releases" -mindepth 1 -maxdepth 1 ! -name "$id" ! -name "${before#releases/}" -exec rm -rf {} + \
+        || log "could not remove every old release in ${root}/releases (above); what is left there is unused"
 }
 
 # The ERR trap: a command that failed where nothing expected it to. Names the script, the command,

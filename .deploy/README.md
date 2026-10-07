@@ -14,7 +14,7 @@ holding copies.
 | `loadbalancer/haproxy.sh` | the HAProxy runtime API: drain, ready, wait |
 | `server/unipept-api.service` | systemd **user** unit, installed at `~unipept/.config/systemd/user/` |
 | `server/unipept-api.env.example` | per-host configuration, installed at `/opt/unipept-api/etc/unipept-api.env` |
-| `server/install.sh` | prepares a host once. The only step that needs root |
+| `server/install.sh` | prepares a host, and updates its scripts. The only step that needs root |
 | `server/deploy.sh` | installs or puts back a binary on one server, or restarts it on another database |
 | `server/checks.sh` | what a server has to be before `deploy.sh` runs, starts or installs anything: one function per check |
 
@@ -25,15 +25,23 @@ it uses of the others.
 
 | Part | What it holds |
 | --- | --- |
-| `lib/core.sh` | the shell options, `log`, `die`, `require`, `need_value`, the error trap |
+| `lib/core.sh` | the shell options, `log`, `die`, `require`, `need_value`, the error trap, `switch_release` |
 | `lib/config.sh` | reading `key=value` settings, from a file or from `deploy.sh status` |
 | `lib/locks.sh` | the rollout lock and the API lock, both at fixed paths in `/run/lock` |
 | `lib/release.sh` | where a release is published, its file names, the download, checksums |
 | `lib/remote.sh` | the bounds on a connection to a server, and polling its health |
 
-`server/install.sh` installs them as `/opt/unipept-api/lib/lib.sh` and `/opt/unipept-api/lib/lib/`,
-the service user's like `deploy.sh` beside them. `loadbalancer/install.sh` installs them as
-`/opt/unipept-rollout/lib.sh` and `/opt/unipept-rollout/lib/`, root's like `rollout.sh`.
+Both installs lay the scripts out as the checkout does, so each finds `lib.sh` by the same relative
+path in both. `server/install.sh` installs them as `/opt/unipept-api/deploy/lib.sh` and
+`/opt/unipept-api/deploy/lib/`, beside `deploy/server/deploy.sh` and its `checks.sh`.
+`loadbalancer/install.sh` installs them as `/opt/unipept-rollout/lib.sh` and
+`/opt/unipept-rollout/lib/`, beside `rollout.sh` and `loadbalancer/haproxy.sh`. All of it is root's.
+
+Each install builds a release whole in `releases/` and puts it in place with `switch_release` from
+`lib/core.sh`: `release` is a link to it, renamed over the old one in one step, and each installed
+entry, such as `deploy`, is a link through it. Each file a script opens is one whole release's, an
+install stopped part way leaves the one before in place, and nothing a checkout no longer has is
+left behind. The release replaced stays until the next install, for a run that started from it.
 
 `lib/core.sh` is the same file in every repository that deploys Unipept. Its header lists what a script's exit status means, which is the same for every script.
 
@@ -42,9 +50,9 @@ the service user's like `deploy.sh` beside them. `loadbalancer/install.sh` insta
 One server, on that server, as the `unipept` user:
 
 ```bash
-/opt/unipept-api/lib/deploy.sh check                 # is this host ready?
-/opt/unipept-api/lib/deploy.sh deploy --version v2.6.0
-/opt/unipept-api/lib/deploy.sh rollback
+/opt/unipept-api/deploy/server/deploy.sh check                 # is this host ready?
+/opt/unipept-api/deploy/server/deploy.sh deploy --version v2.6.0
+/opt/unipept-api/deploy/server/deploy.sh rollback
 ```
 
 ## Serving another database
@@ -57,9 +65,9 @@ server, loading its proteins and switching to it is
 [unipept-database](https://github.com/unipept/unipept-database)'s part. It uses these:
 
 ```bash
-/opt/unipept-api/lib/deploy.sh check --index /mnt/data/uniprot-2026-03/suffix-array   # would it serve?
-/opt/unipept-api/lib/deploy.sh stop
-/opt/unipept-api/lib/deploy.sh start                 # on what the environment file names now
+/opt/unipept-api/deploy/server/deploy.sh check --index /mnt/data/uniprot-2026-03/suffix-array   # would it serve?
+/opt/unipept-api/deploy/server/deploy.sh stop
+/opt/unipept-api/deploy/server/deploy.sh start                 # on what the environment file names now
 ```
 
 `check --index` checks a directory by the rules `check` applies to `INDEX_LOCATION`, before anything
@@ -89,12 +97,12 @@ be there yet: make it, 0644 so every account can open it, then open it for readi
 or to create once it is there, another account's file in sticky `/run/lock` is refused. So:
 
 ```bash
-lock=$(/opt/unipept-api/lib/deploy.sh status | sed -n 's/^api_lock=//p')
+lock=$(/opt/unipept-api/deploy/server/deploy.sh status | sed -n 's/^api_lock=//p')
 [ -e "$lock" ] || (umask 022 && : > "$lock") 2>/dev/null
 exec 7<"$lock" && flock -n 7 || exit 1
-/opt/unipept-api/lib/deploy.sh stop
+/opt/unipept-api/deploy/server/deploy.sh stop
 # … point INDEX_LOCATION at the new files …
-/opt/unipept-api/lib/deploy.sh start
+/opt/unipept-api/deploy/server/deploy.sh start
 ```
 
 ### What `status` reports
@@ -211,8 +219,10 @@ reads it.
 ## A user unit, so a deploy needs no privilege
 
 The service runs as a systemd user unit owned by the `unipept` user, started at boot by lingering.
-That user owns `/opt/unipept-api`, so it replaces the binary and restarts its own unit without root,
-sudo or a polkit rule. Only the first install needs root.
+That user owns `/opt/unipept-api/bin` and `/opt/unipept-api/etc`, so it replaces the binary and
+restarts its own unit without root, sudo or a polkit rule. Only the install needs root. The rest of
+`/opt/unipept-api` is root's, `deploy/` with the scripts and `root/` with the port redirect script
+root runs, so the service user cannot replace what runs as root.
 
 A user manager holds no capability to grant, so the service cannot bind port 80 itself — measured on
 systemd 255, `AmbientCapabilities=CAP_NET_BIND_SERVICE` fails with *"Failed to apply ambient

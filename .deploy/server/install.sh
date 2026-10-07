@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Prepares a server to run the API. Run once per host, as root.
+# Prepares a server to run the API, and updates the scripts a deploy runs. Run as root, once per
+# host and after each release.
 #
 # This is the only step that needs root. Afterwards the service user owns everything a deploy
 # touches and restarts its own unit, so no deploy uses sudo.
@@ -12,11 +13,12 @@
 #      so no deploy, rollback, start or stop runs while this changes the host.
 #   2. Create the unipept user, or give an account that already exists a login shell: the rollout
 #      runs the deploy over ssh, and sshd needs a shell to exec a remote command.
-#   3. Create /opt/unipept-api and its bin, etc and lib directories, owned by that user.
+#   3. Create /opt/unipept-api, root's, and its bin and etc directories, owned by that user.
 #   4. Write etc/unipept-api.env from the example, or keep the file already there.
-#   5. Install deploy.sh, the checks it makes and lib.sh in lib/, the path the rollout calls over
-#      ssh, and the parts lib.sh loads in lib/lib/.
-#   6. Install the port redirect script and its system unit, both owned by root.
+#   5. Install deploy.sh, the checks it makes and lib.sh in deploy/, laid out as the checkout lays
+#      them out: deploy/server/deploy.sh is the path the rollout calls over ssh. A release made
+#      whole in releases/, put in place at once by switch_release.
+#   6. Install the port redirect script, in root/, and its system unit, both owned by root.
 #   7. Install the service unit in the service user's ~/.config/systemd/user.
 #   8. Enable and restart unipept-api-ports, so port 80 reaches the port the service binds.
 #   9. Enable lingering for the service user, and wait for its runtime directory to appear.
@@ -28,6 +30,7 @@
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 
+[ -r "${HERE}/../lib.sh" ] || { echo "Error: there is no ${HERE}/../lib.sh to load." 1>&2; exit 2; }
 # shellcheck source=../lib.sh
 source "${HERE}/../lib.sh"
 
@@ -65,8 +68,11 @@ if [ -z "$home" ] || [ ! -d "$home" ]; then
 fi
 unit_directory="${home}/.config/systemd/user"
 
-# Owned by the service user, so a deploy replaces the binary without privilege.
-install -d -m 0755 -o "$USER" -g "$USER" "$ROOT" "${ROOT}/bin" "${ROOT}/etc" "${ROOT}/lib"
+# The root of the install is root's, so the service user cannot rename what root runs out of it and
+# put its own in its place. bin/ and etc/ are the service user's, so a deploy replaces the binary,
+# and the service reads its settings, without privilege.
+install -d -m 0755 -o root -g root "$ROOT"
+install -d -m 0755 -o "$USER" -g "$USER" "${ROOT}/bin" "${ROOT}/etc"
 
 # Never overwritten: it holds this host's index path, its port and its storage backend.
 if [ -f "$ENV_FILE" ]; then
@@ -79,22 +85,32 @@ else
     log "wrote ${ENV_FILE} from the example. Edit it before starting the service."
 fi
 
-# The rollout runs these over SSH as the service user, so they sit at a fixed path it owns.
-# Re-running install.sh is how they are updated.
-
-# The parts of lib.sh before lib.sh, and lib.sh and checks.sh before deploy.sh. A deploy started
-# meanwhile loads them before it asks for the lock, so it then finds what it loads and is refused
-# the lock, rather than failing on a part not there yet.
-install -d -m 0755 -o "$USER" -g "$USER" "${ROOT}/lib/lib"
-install -m 0644 -o "$USER" -g "$USER" "${HERE}/../lib/"*.sh "${ROOT}/lib/lib/"
-install -m 0644 -o "$USER" -g "$USER" "${HERE}/../lib.sh" "${ROOT}/lib/lib.sh"
-install -m 0644 -o "$USER" -g "$USER" "${HERE}/checks.sh" "${ROOT}/lib/checks.sh"
-install -m 0755 -o "$USER" -g "$USER" "${HERE}/deploy.sh" "${ROOT}/lib/deploy.sh"
-log "installed ${ROOT}/lib/deploy.sh"
+# The rollout runs deploy.sh over ssh as the service user, so it sits at a fixed path. Laid out as
+# the checkout lays it out, deploy/ for .deploy/, so it finds lib.sh one level up in both. Root's,
+# since only this script changes it; the service user runs it and changes nothing in it. Re-running
+# install.sh is how it is updated.
+#
+# A release, made whole in releases/ and put in place at once by switch_release: each file a script
+# opens is one whole release's, and a deploy, which would pair two, is refused the lock this holds;
+# an install stopped part way leaves the one before; and nothing the checkout no longer has lingers.
+# Named after when it was made, and by which run, so a second install of the same commit makes its
+# own.
+release_id="$(date -u +%Y%m%dT%H%M%SZ).$$"
+release="${ROOT}/releases/${release_id}"
+install -d -m 0755 -o root -g root "${ROOT}/releases"
+install -d -m 0755 "${release}/deploy/lib" "${release}/deploy/server"
+install -m 0644 "${HERE}/../lib.sh" "${release}/deploy/"
+install -m 0644 "${HERE}/../lib/"*.sh "${release}/deploy/lib/"
+install -m 0644 "${HERE}/checks.sh" "${release}/deploy/server/"
+install -m 0755 "${HERE}/deploy.sh" "${release}/deploy/server/"
+switch_release "$ROOT" "$release_id" deploy
+log "installed ${ROOT}/deploy/server/deploy.sh"
 
 # The service cannot bind port 80 itself, so a netfilter rule sends 80 to the port it does bind.
-# Root-owned, because only root can change netfilter and nothing about a deploy should be able to.
-install -m 0755 "${HERE}/unipept-api-ports.sh" "${ROOT}/lib/unipept-api-ports.sh"
+# Root-owned, in a directory root owns, because root runs it: only root can change netfilter, and
+# nothing about a deploy should be able to.
+install -d -m 0755 -o root -g root "${ROOT}/root"
+install -m 0755 "${HERE}/unipept-api-ports.sh" "${ROOT}/root/unipept-api-ports.sh"
 install -m 0644 "${HERE}/unipept-api-ports.service" /etc/systemd/system/unipept-api-ports.service
 log "installed the port redirect"
 
@@ -138,7 +154,7 @@ Still to do on this host:
   1. Edit ${ENV_FILE}: INDEX_LOCATION, DATABASE_ADDRESS, PORT and VARIANT.
   2. Make the index directory readable by ${USER}, and keep it out of /home.
   3. Give ${USER} an authorized_keys for the load balancer, if this host is rolled out to.
-  4. As ${USER}: ${ROOT}/lib/deploy.sh deploy --version <tag>
+  4. As ${USER}: ${ROOT}/deploy/server/deploy.sh deploy --version <tag>
 
 HAProxy keeps its server lines on port 80: the redirect installed here sends 80 to PORT inside this
 host, so nothing on the network changes. Changing PORT later means re-running this script.
@@ -154,10 +170,10 @@ log "checking this host against ${ENV_FILE}"
 
 # One call: the key=value lines are not useful here and go to /dev/null, the problems go to the
 # terminal on stderr, and the exit status decides what to say about them.
-if as_user "${ROOT}/lib/deploy.sh" check >/dev/null; then
+if as_user "${ROOT}/deploy/server/deploy.sh" check >/dev/null; then
     log "this host is ready; the deploy above is the only step left"
 else
     printf '\n' >&2
     log "the lines above are what to fix before deploying. Then re-run this script, or:"
-    log "  sudo -u ${USER} ${ROOT}/lib/deploy.sh check"
+    log "  sudo -u ${USER} ${ROOT}/deploy/server/deploy.sh check"
 fi

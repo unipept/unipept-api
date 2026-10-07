@@ -25,8 +25,9 @@ readonly API_LOCK=/run/lock/unipept-api.lock
 open_lock() {
     local fd=$1 lock=$2
 
-    # Made where missing, and there regardless where another account made it first: its open to
-    # create is then refused, in a sticky directory, though the file is there to take.
+    # Made where missing, and there regardless where another account made it between the test and
+    # the open: that open to create is refused, in a sticky directory, though the file is there to
+    # take.
     if [ ! -e "$lock" ]; then
         (umask 022 && : > "$lock") 2> /dev/null || [ -e "$lock" ] || return 2
     fi

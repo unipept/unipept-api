@@ -39,10 +39,14 @@
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 
+[ -r "${HERE}/lib.sh" ] || { echo "Error: there is no ${HERE}/lib.sh to load." 1>&2; exit 2; }
 # shellcheck source=lib.sh
 source "${HERE}/lib.sh"
 
-readonly HAPROXY="${HERE}/loadbalancer/haproxy.sh"
+# Resolved through every link, so installed it is the haproxy.sh of the release this run started from,
+# however long the run, and not of whichever release an install puts in place meanwhile.
+HAPROXY="$(cd -P "${HERE}/loadbalancer" && pwd)/haproxy.sh"
+readonly HAPROXY
 
 # This host's own settings live outside the checkout, because the inventory names the fleet and the
 # configuration names where failures are emailed. Beside the script is the fallback, so running from
@@ -56,7 +60,7 @@ HAPROXY_SOCKET=/run/haproxy/haproxy.sock
 # The service user owns the binary directory and restarts its own user unit, so a deploy needs no
 # privilege and the rollout carries no sudo.
 SSH_USER=unipept
-REMOTE_DEPLOY=/opt/unipept-api/lib/deploy.sh
+REMOTE_DEPLOY=$DEFAULT_REMOTE_DEPLOY
 # Seconds to wait for a draining server to finish. Above the API's own 150-second request timeout,
 # so a server answers or gives up before this runs out.
 DRAIN_TIMEOUT=240

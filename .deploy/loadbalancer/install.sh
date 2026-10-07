@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Prepares the load balancer to run rollouts. Run once, as root.
+# Prepares the load balancer to run rollouts, and updates its scripts. Run as root, once and after
+# each release.
 #
 # It installs the scripts, puts this host's configuration somewhere that is not a git checkout, and
 # then audits what a rollout depends on: the admin socket, the backends HAProxy is actually running,
@@ -33,6 +34,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 readonly SOURCE="${HERE}/.."
 
+[ -r "${SOURCE}/lib.sh" ] || { echo "Error: there is no ${SOURCE}/lib.sh to load." 1>&2; exit 2; }
 # shellcheck source=../lib.sh
 source "${SOURCE}/lib.sh"
 
@@ -113,7 +115,7 @@ conf_value() {
     )
 }
 
-install -d -m 0755 "$ROOT" "${ROOT}/lib" "${ROOT}/loadbalancer" "$CONFIG"
+install -d -m 0755 "$ROOT" "$CONFIG"
 
 # This host's own settings, kept out of the checkout: the inventory names the fleet and the
 # configuration names where failures are emailed, neither of which belongs in a repository.
@@ -145,12 +147,20 @@ install_config "${SOURCE}/servers.example.conf" "${CONFIG}/servers.conf" "$OPERA
 take_rollout_lock || die "$(rollout_lock_refused $?). Install once it has finished."
 
 # The same shape as the checkout, because rollout.sh resolves haproxy.sh as loadbalancer/haproxy.sh
-# relative to itself. The parts of lib.sh before lib.sh, and lib.sh before the scripts that load it,
-# so a rollout started meanwhile finds what the files beside it load.
-install -m 0644 "${SOURCE}/lib/"*.sh "${ROOT}/lib/"
-install -m 0644 "${SOURCE}/lib.sh" "${ROOT}/lib.sh"
-install -m 0755 "${SOURCE}/rollout.sh" "${ROOT}/rollout.sh"
-install -m 0755 "${HERE}/haproxy.sh" "${ROOT}/loadbalancer/haproxy.sh"
+# relative to itself, and haproxy.sh lib.sh one level up. A release, made whole in releases/ and put
+# in place at once by switch_release: each file a script opens is one whole release's, and a rollout,
+# which would pair two, is refused the lock this holds; an install stopped part way leaves the one
+# before, and nothing the checkout no longer has lingers. Named after when it was made, and by which
+# run, so a second install makes its own.
+release_id="$(date -u +%Y%m%dT%H%M%SZ).$$"
+release="${ROOT}/releases/${release_id}"
+install -d -m 0755 -o root -g root "${ROOT}/releases"
+install -d -m 0755 "${release}/lib" "${release}/loadbalancer"
+install -m 0644 "${SOURCE}/lib/"*.sh "${release}/lib/"
+install -m 0644 "${SOURCE}/lib.sh" "${release}/lib.sh"
+install -m 0755 "${SOURCE}/rollout.sh" "${release}/rollout.sh"
+install -m 0755 "${HERE}/haproxy.sh" "${release}/loadbalancer/haproxy.sh"
+switch_release "$ROOT" "$release_id" lib lib.sh loadbalancer rollout.sh
 log "installed the scripts in ${ROOT}"
 
 # The socket is the one thing a rollout cannot do without, and the only privilege it needs.
@@ -236,7 +246,7 @@ readonly AUDIT_SSH=(-n "${SSH_CONNECTION_BOUNDS[@]}")
 # Every server the inventory names, reached the way a rollout reaches it.
 ssh_user=$(conf_value SSH_USER)
 remote=$(conf_value REMOTE_DEPLOY)
-remote=${remote:-/opt/unipept-api/lib/deploy.sh}
+remote=${remote:-$DEFAULT_REMOTE_DEPLOY}
 
 while read -r name host _ _ _; do
     case ${name:-} in '' | \#*) continue ;; esac

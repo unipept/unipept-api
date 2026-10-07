@@ -34,9 +34,8 @@
 #      it are never touched.
 #   8. Phase 3: on every exit, including a signal. Clear the staging directory on every server it
 #      reached, and through loadbalancer/journal.sh write one journal line per server and email if
-#      an update failed or a server is out
-#      of the pool — a server this run drained and never put back included, which is what an
-#      interrupted install leaves behind.
+#      an update failed or a server is out of the pool — a server this run drained and never put
+#      back included, which is what an interrupted install leaves behind.
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
@@ -92,6 +91,11 @@ if [ -f "${CONFIG_DIR}/rollout.conf" ]; then
     # shellcheck source=/dev/null  # written on the load balancer, not in this repository.
     source "${CONFIG_DIR}/rollout.conf"
 fi
+
+# What the run in progress is doing, for `status` to read and `abort` to signal. Beside the lock
+# rather than in it: the lock is opened for reading, so nothing can be written through it. Fixed, as
+# the lock is: set after the configuration, so nothing there changes it.
+readonly RUN_STATE=/run/lock/unipept-rollout.state
 
 export HAPROXY_SOCKET NOTIFY_TO NOTIFY_SMTP
 

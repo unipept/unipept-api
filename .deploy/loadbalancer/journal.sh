@@ -16,9 +16,6 @@ UPDATED=''
 # an entry.
 FAILED_NAMES=''
 DOWN_NAMES=''
-# The host every mail names and is sent from.
-RUN_ON="$(hostname -f 2>/dev/null || hostname)"
-readonly RUN_ON
 
 # Sends one message to the team, through the MTA this host already runs for HAProxy's email-alert.
 #
@@ -36,15 +33,15 @@ notify() {
 
     message=$(mktemp)
     {
-        printf 'From: %s\n' "${NOTIFY_FROM:-unipept-rollout@${RUN_ON}}"
+        printf 'From: %s\n' "${NOTIFY_FROM:-unipept-rollout@$(hostname -f 2>/dev/null || hostname)}"
         printf 'To: %s\n' "$NOTIFY_TO"
         printf 'Subject: %s\n\n' "$subject"
         printf '%s\n' "$body"
     } > "$message"
 
     if curl -s --max-time 20 \
-        --url "smtp://${NOTIFY_SMTP:-127.0.0.1:25}/${RUN_ON}" \
-        --mail-from "${NOTIFY_FROM:-unipept-rollout@${RUN_ON}}" \
+        --url "smtp://${NOTIFY_SMTP:-127.0.0.1:25}/$(hostname -f 2>/dev/null || hostname)" \
+        --mail-from "${NOTIFY_FROM:-unipept-rollout@$(hostname -f 2>/dev/null || hostname)}" \
         --mail-rcpt "$NOTIFY_TO" --upload-file "$message"; then
         log "emailed ${NOTIFY_TO}: ${subject}"
     else
@@ -67,7 +64,7 @@ note_updated() {
 
   $(printf '%s' "${STATUS[$name]:-unknown}" | tr '\n' ' ')
 
-Run by ${RUN_BY} on ${RUN_ON}."
+Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
 }
 
 # An update that failed but left the fleet serving. Worth an email, not an alarm.
@@ -115,7 +112,7 @@ To see the fleet:      ${HERE}/rollout.sh status
 To return a server:    ${HERE}/rollout.sh ready <name>
 On the server itself:  ${REMOTE_DEPLOY} status
 
-Run by ${RUN_BY} on ${RUN_ON}."
+Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
     elif [ -n "$FAILED_UPDATE" ]; then
         notify "[unipept-rollout] ${VERSION} was rolled back on $(hostname -s)" \
 "A rollout of ${VERSION} stopped and the fleet is serving its previous version.
@@ -127,7 +124,7 @@ consistent only if this was the first one. Check with:
 
   ${HERE}/rollout.sh status
 
-Run by ${RUN_BY} on ${RUN_ON}."
+Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
     elif [ -n "$UPDATED" ] && [ "$status" -eq 0 ]; then
         # Keyed on a server having been updated, not on VERSION: --dry-run sets that too.
         notify "[unipept-rollout] ${VERSION} deployed on $(hostname -s)" \
@@ -135,7 +132,7 @@ Run by ${RUN_BY} on ${RUN_ON}."
 
   ${UPDATED}
 
-Run by ${RUN_BY} on ${RUN_ON}."
+Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
     fi
 }
 

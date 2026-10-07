@@ -5,13 +5,8 @@
 #
 # Uses log and die from core.sh, env_value from config.sh and ROLLOUT_LOCK from locks.sh;
 # check_inventory_entries and read_inventory from checks.sh. From rollout.sh, which sources it:
-# VERSION, STARTED_AT, RUN_BY, INVENTORY, ONLY, HERE, HAPROXY, on_server and return_to_pool. Beside
+# RUN_STATE, VERSION, STARTED_AT, RUN_BY, INVENTORY, ONLY, HERE, HAPROXY, on_server and return_to_pool. Beside
 # haproxy.sh, in the checkout and on the load balancer.
-
-# What the run in progress is doing, for `status` to read and `abort` to signal. Beside the lock
-# rather than in it: the lock is opened for reading, so nothing can be written through it. Fixed, as
-# the lock is: read-only before rollout.conf is read, so nothing there changes it.
-readonly RUN_STATE=/run/lock/unipept-rollout.state
 
 # Makes the state file writable by this run before anything depends on it.
 #

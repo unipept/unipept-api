@@ -59,7 +59,7 @@ $H maint all_handlers,db_handlers/patty >/dev/null 2>&1
 check "maint in both"     "$($H states all_handlers,db_handlers/patty)" "all_handlers=MAINT db_handlers=MAINT "
 $H ready all_handlers,db_handlers/patty >/dev/null 2>&1
 $H wait-up all_handlers,db_handlers/patty 60 >/dev/null 2>&1; check "one wait-up covers both" "$?" "0"
-check "least-up across both" "$($H least-up all_handlers,db_handlers)" "3"
+check "back in both" "$($H up-count all_handlers) $($H up-count db_handlers)" "3 3"
 
 section "3c. a backend that does not hold the server is refused"
 $H drain all_handlers,nosuch/patty >/tmp/e4 2>&1; check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
@@ -79,6 +79,8 @@ section "4. a backup server counts as capacity"
 $H maint all_handlers/patty >/dev/null 2>&1
 $H maint all_handlers/selma >/dev/null 2>&1
 check "only rick left"     "$($H up-count all_handlers)" "1"
+check "draining rick empties all_handlers" "$($H emptied-by all_handlers,db_handlers/rick)" "all_handlers"
+check "draining patty empties nothing" "$($H emptied-by all_handlers,db_handlers/patty)" ""
 $H ready all_handlers/patty >/dev/null 2>&1; $H ready all_handlers/selma >/dev/null 2>&1
 
 section "5. wait-empty gives up rather than hanging"
@@ -113,6 +115,28 @@ check "and said why"   "$(grep -c 'is not in every one of' /tmp/e4)" "1"
 check "well inside 30s" "$([ "$elapsed" -lt 30 ] && echo yes)" "yes"
 kill $deaf >/dev/null 2>&1
 rm -f /run/haproxy/deaf.sock
+
+section "8. servers lists every backend/server pair HAProxy runs"
+$H servers >/tmp/servers.txt 2>&1
+check "exit 0"            "$?" "0"
+check "both backends, all three servers" "$(sort /tmp/servers.txt | tr '\n' ' ')" \
+  "all_handlers/patty all_handlers/rick all_handlers/selma db_handlers/patty db_handlers/rick db_handlers/selma "
+HAPROXY_SOCKET=/run/haproxy/absent.sock $H servers >/tmp/e5 2>&1
+check "no socket: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "level reads admin"  "$($H level)" "admin"
+check "and operator on that socket" "$(HAPROXY_SOCKET=/run/haproxy/operator.sock $H level)" "operator"
+# A socket that answers with a message rather than a stat dump.
+socat UNIX-LISTEN:/run/haproxy/talker.sock,fork SYSTEM:'echo Unknown command.' >/dev/null 2>&1 &
+talker=$!
+sleep 1
+HAPROXY_SOCKET=/run/haproxy/talker.sock $H servers >/tmp/e6 2>&1
+check "servers refuses an answer with no header" "$?" "2"
+HAPROXY_SOCKET=/run/haproxy/talker.sock $H emptied-by all_handlers/patty >/tmp/e7 2>&1
+check "and so does emptied-by" "$?" "2"
+$H emptied-by nosuch/patty >/tmp/e8 2>&1
+check "as it does a backend HAProxy does not have" "$?" "2"
+kill $talker >/dev/null 2>&1
+rm -f /run/haproxy/talker.sock
 
 # The fake backends hold stdout open; without this a pipe on the outside never sees EOF.
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1

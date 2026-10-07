@@ -24,7 +24,7 @@ can boot; nothing else needs it.
 | `server/suite.sh` | systemd 255 on Ubuntu 24.04, with a user manager and lingering | the first install, and the release a second one puts in place, a deploy with no privilege, `check` and each failure it reports, the OpenSearch index of the served version against a fake cluster, `check --index`, `stop` and `start`, the API lock and a caller handing it down, what `status` reports, clearing a tripped start limit, the memory arm per variant, the binary swap under signal, rollback, the interrupt paths, and the per-host `READY_TIMEOUT` with the unit watch that makes a long one safe |
 | `loadbalancer/haproxy-suite.sh` | HAProxy 2.8 | reading `show stat` by field name, multi-backend targets, the drain cycle, a transitional `UP 1/100` status, backups |
 | `loadbalancer/install-suite.sh` | HAProxy 2.8 | what `loadbalancer/install.sh` installs and audits, the `rollout.conf` it refuses, and the rollout lock it takes |
-| `loadbalancer/rollout-suite.sh` | HAProxy 2.8 with two backends over three servers | the four phases, the lock, ordering, preflight, each failure-resolution path, cleanup, the record, an interrupt during an install, and the deadline each server asks for |
+| `loadbalancer/rollout-suite.sh` | HAProxy 2.8 with two backends over three servers | each check in `loadbalancer/checks.sh` on its own, the four phases, the lock, ordering, preflight, each failure-resolution path, cleanup, the record, an interrupt during an install, and the deadline each server asks for |
 
 ## Why containers rather than mocks
 

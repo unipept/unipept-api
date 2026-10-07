@@ -33,11 +33,13 @@ usage: haproxy.sh <command> <backend[,backend...]>/<server> [arguments]
   wait-empty <target> <secs>   wait until every backend reports no open sessions
   wait-up <target> <secs>      wait until every backend reports UP
   up-count <backend>           print how many servers in one backend are UP
-  least-up <backend[,...]>     print the smallest UP count across the backends
   is-backup <target>           exit 0 when the server is a backup in any of its backends
+  emptied-by <target>          print each backend with no server UP but this one
+  servers                      print "backend/server" for every server HAProxy runs
+  level                        print the level the socket gives, admin, operator or user
 
-Every command but state, sessions, up-count and least-up takes several backends at once. The
-socket path comes from HAPROXY_SOCKET.
+Every command but state, sessions, up-count, servers and level takes several backends at once.
+The socket path comes from HAPROXY_SOCKET.
 EOF
     exit 2
 }
@@ -193,14 +195,33 @@ up_count() {
     '
 }
 
-# The thinnest of the backends, which is the one a drain empties first.
-least_up() {
-    local backend count least=''
-    for backend in ${1//,/ }; do
-        count=$(up_count "$backend")
-        if [ -z "$least" ] || [ "$count" -lt "$least" ]; then least=$count; fi
-    done
-    printf '%s\n' "${least:-0}"
+# The backends draining this server would leave with no server UP, one per line, from one `show stat`
+# so every backend is read at the same moment. A backup counts: with the primaries out, it is what
+# answers.
+emptied_by() {
+    local backends server
+    { read -r backends; read -r server; } < <(split_target "$1")
+
+    # An answer without the header, or without one of the backends, is not a count of anything.
+    runtime "show stat" | awk -F, -v wanted="$backends" -v sv="$server" '
+        BEGIN { split(wanted, list, " "); for (i in list) others[list[i]] = 0 }
+        /^#/ {
+            for (i = 1; i <= NF; i++) {
+                name = $i
+                sub(/^# */, "", name)
+                if (name == "status") statuscol = i
+            }
+            next
+        }
+        !statuscol { next }
+        ($1 in others) { seen[$1] = 1 }
+        ($1 in others) && $2 != sv && $2 != "BACKEND" && $2 != "FRONTEND" && $statuscol ~ /^UP/ { others[$1]++ }
+        END {
+            if (!statuscol) exit 2
+            for (b in others) if (!seen[b]) exit 2
+            for (b in others) if (others[b] == 0) print b
+        }
+    ' || die "HAProxy did not answer for every one of: ${backends// /, }"
 }
 
 # Whether HAProxy considers this server a backup, in any of the backends it sits in.
@@ -231,6 +252,21 @@ is_backup() {
     [ "$backup" = "1" ] || exit 1
 }
 
+# Every server in every backend, as "backend/server", for comparing with what the inventory expects.
+servers() {
+    runtime "show stat" | awk -F, '
+        /^#/ { header = 1; next }
+        header && $2 != "BACKEND" && $2 != "FRONTEND" && $2 != "" { print $1 "/" $2 }
+        END { if (!header) exit 2 }
+    ' || die "HAProxy did not answer show stat"
+}
+
+# The level the socket gives whoever asks: admin, operator or user. Draining and restoring a server
+# needs admin.
+level() {
+    runtime "show cli level"
+}
+
 # "backend=status" per backend, for a caller that wants to report rather than wait.
 states() {
     local backends server
@@ -255,9 +291,10 @@ single_value() {
     esac
 }
 
-[ $# -ge 2 ] || usage
+[ $# -ge 1 ] || usage
 command=$1
 shift
+[ "$command" = servers ] || [ "$command" = level ] || [ $# -ge 1 ] || usage
 
 case $command in
     drain) set_state "$1" drain ;;
@@ -269,7 +306,9 @@ case $command in
     wait-empty) [ $# -eq 2 ] || usage; wait_empty "$1" "$2" ;;
     wait-up) [ $# -eq 2 ] || usage; wait_up "$1" "$2" ;;
     up-count) up_count "$1" ;;
-    least-up) least_up "$1" ;;
     is-backup) is_backup "$1" ;;
+    emptied-by) emptied_by "$1" ;;
+    servers) servers ;;
+    level) level ;;
     *) usage ;;
 esac

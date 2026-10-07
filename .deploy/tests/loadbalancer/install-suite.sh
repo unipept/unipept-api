@@ -22,6 +22,8 @@ done
 sleep 1
 haproxy -f /etc/haproxy/haproxy.cfg -D
 sleep 3
+# What `group haproxy` on the stats socket line gives a load balancer.
+chgrp haproxy /run/haproxy/haproxy.sock
 
 # An ssh that answers the way a prepared server would, so the connectivity audit has something real
 # to talk to.
@@ -32,9 +34,9 @@ cat > /usr/local/bin/ssh <<'EOF'
 mode=$(cat /tmp/fake-ssh-mode 2>/dev/null || echo ok)
 cmd="$*"
 printf '%s\n' "$cmd" >> /tmp/audit-ssh.log
+# 127 is what the remote shell answers for a command that is not there.
 case "$cmd" in
-  *"test -x"*)         [ "$mode" = no-deploy ] && exit 1; [ "$mode" = no-ssh ] && exit 255; exit 0 ;;
-  *"deploy.sh check"*) [ "$mode" = check-fails ] && exit 1; [ "$mode" = no-ssh ] && exit 255; exit 0 ;;
+  *"deploy.sh check"*) [ "$mode" = no-deploy ] && exit 127; [ "$mode" = check-fails ] && exit 1; [ "$mode" = no-ssh ] && exit 255; exit 0 ;;
   *)                   [ "$mode" = no-ssh ] && exit 255; exit 0 ;;
 esac
 EOF
@@ -83,8 +85,7 @@ chmod 0644 /etc/unipept-rollout/rollout.conf
 section "the audit reads HAProxy, not just the file"
 # The test config has both backends and all three servers.
 check "no missing servers" "$(grep -c 'is in every backend it names' /tmp/i2.log)" "1"
-check "checked all_handlers' uri" "$(grep -c 'all_handlers checks /health' /tmp/i2.log)" "1"
-check "checked db_handlers' uri"  "$(grep -c 'db_handlers checks /health/database' /tmp/i2.log)" "1"
+check_absent "and no check uri to change" 'should check' /tmp/i2.log
 
 section "a missing backend is named, and a fragment written"
 # An inventory naming a backend HAProxy is not running.
@@ -92,7 +93,9 @@ sed -i 's#all_handlers,db_handlers#all_handlers,absent_backend#' /etc/unipept-ro
 rm -f /tmp/unipept-haproxy-fragment.cfg
 /deploy/loadbalancer/install.sh >/tmp/i3.log 2>&1
 check "exit non-zero"      "$([ $? -ne 0 ] && echo yes)" "yes"
-check "names what is missing" "$(grep -c 'absent_backend' /tmp/i3.log)" "1"
+# The line a rollout's preflight reports it with: both run check_haproxy_backends.
+check "names what is missing" "$(grep -c '  check: HAProxy is not running absent_backend/patty, which the inventory names for patty$' /tmp/i3.log)" "1"
+check "for every server" "$(grep -c 'check: HAProxy is not running' /tmp/i3.log)" "3"
 check "wrote the fragment"    "$([ -f /tmp/unipept-haproxy-fragment.cfg ] && echo yes)" "yes"
 check "fragment has the backend" "$(grep -c '^backend db_handlers' /tmp/unipept-haproxy-fragment.cfg)" "1"
 # notice mails every transition a rollout makes; alert keeps only the failures.
@@ -100,6 +103,14 @@ check "mails failures, not rollouts" "$(grep -c '^ *email-alert level alert$' /t
 check_absent "not at notice level" 'email-alert level notice' /tmp/unipept-haproxy-fragment.cfg
 check_absent "haproxy.cfg untouched" 'absent_backend' /etc/haproxy/haproxy.cfg
 sed -i 's#all_handlers,absent_backend#all_handlers,db_handlers#' /etc/unipept-rollout/servers.conf
+
+section "a mistake in the inventory is named"
+cp /etc/unipept-rollout/servers.conf /tmp/servers.keep
+printf 'patty patty.ugent.be 80 all_handlers patty\n' >> /etc/unipept-rollout/servers.conf
+/deploy/loadbalancer/install.sh >/tmp/i3b.log 2>&1
+check "exit non-zero"  "$([ $? -ne 0 ] && echo yes)" "yes"
+check "with the line a rollout uses" "$(grep -c "  check: the inventory names 'patty' twice$" /tmp/i3b.log)" "1"
+cp /tmp/servers.keep /etc/unipept-rollout/servers.conf
 
 section "a wrong check uri is named"
 cp /etc/haproxy/haproxy.cfg /tmp/haproxy.cfg.keep
@@ -109,11 +120,46 @@ check "exit non-zero"  "$([ $? -ne 0 ] && echo yes)" "yes"
 check "names the uri"  "$(grep -c 'db_handlers checks /private_api/metadata.json' /tmp/i4.log)" "1"
 cp /tmp/haproxy.cfg.keep /etc/haproxy/haproxy.cfg
 
+section "a socket HAProxy does not answer on is named, and no fragment written"
+# What a stopped HAProxy can leave behind: the socket file, with nothing listening on it.
+mv /run/haproxy/haproxy.sock /run/haproxy/live.sock
+socat UNIX-LISTEN:/run/haproxy/haproxy.sock,unlink-close=0 /dev/null >/dev/null 2>&1 &
+stale=$!
+for _ in $(seq 50); do [ -S /run/haproxy/haproxy.sock ] && break; sleep 0.1; done
+kill "$stale" 2>/dev/null; wait "$stale" 2>/dev/null
+rm -f /tmp/unipept-haproxy-fragment.cfg
+/deploy/loadbalancer/install.sh >/tmp/i4c.log 2>&1
+check "exit non-zero"  "$([ $? -ne 0 ] && echo yes)" "yes"
+check "says so"        "$(grep -c 'check: HAProxy does not answer on /run/haproxy/haproxy.sock' /tmp/i4c.log)" "1"
+check "and writes no fragment" "$([ -e /tmp/unipept-haproxy-fragment.cfg ] && echo written || echo none)" "none"
+mv -f /run/haproxy/live.sock /run/haproxy/haproxy.sock
+
+section "the socket rollout.conf names is the one audited, and a wrong level hides nothing else"
+cp /etc/unipept-rollout/rollout.conf /tmp/rollout.conf.keep
+sed -i 's#^HAPROXY_SOCKET=.*#HAPROXY_SOCKET=/run/haproxy/operator.sock#' /etc/unipept-rollout/rollout.conf
+chgrp haproxy /run/haproxy/operator.sock
+/deploy/loadbalancer/install.sh >/tmp/i4d.log 2>&1
+check "exit non-zero"  "$([ $? -ne 0 ] && echo yes)" "yes"
+check "names that socket's level" "$(grep -c 'check: /run/haproxy/operator.sock is at level operator' /tmp/i4d.log)" "1"
+check "and still compares the backends" "$(grep -c 'is in every backend it names' /tmp/i4d.log)" "1"
+cp /tmp/rollout.conf.keep /etc/unipept-rollout/rollout.conf
+
+section "a socket only root can use is named, and the backends are still compared"
+sed -i 's#all_handlers,db_handlers#all_handlers,absent_backend#' /etc/unipept-rollout/servers.conf
+chmod 600 /run/haproxy/haproxy.sock
+/deploy/loadbalancer/install.sh >/tmp/i4b.log 2>&1
+check "exit non-zero"  "$([ $? -ne 0 ] && echo yes)" "yes"
+check "says so"        "$(grep -c 'check: /run/haproxy/haproxy.sock has group haproxy and mode 600, which the haproxy group cannot use' /tmp/i4b.log)" "1"
+check "and names what is missing too" "$(grep -c 'check: HAProxy is not running absent_backend/patty' /tmp/i4b.log)" "1"
+sed -i 's#all_handlers,absent_backend#all_handlers,db_handlers#' /etc/unipept-rollout/servers.conf
+chmod 666 /run/haproxy/haproxy.sock
+
 section "the servers are reached the way a rollout reaches them"
 echo no-ssh > /tmp/fake-ssh-mode
 /deploy/loadbalancer/install.sh >/tmp/i5.log 2>&1
 check "exit non-zero"     "$([ $? -ne 0 ] && echo yes)" "yes"
-check "says it cannot ssh" "$([ "$(grep -c 'cannot ssh' /tmp/i5.log)" -ge 1 ] && echo yes)" "yes"
+check "says it cannot reach them" "$(grep -c 'check: cannot reach .* over ssh' /tmp/i5.log)" "3"
+check_absent "rather than that they are not ready" 'is not ready' /tmp/i5.log
 echo no-deploy > /tmp/fake-ssh-mode
 /deploy/loadbalancer/install.sh >/tmp/i6.log 2>&1
 check "says deploy.sh is absent" "$([ "$(grep -c 'has no /opt/unipept-api/deploy/server/deploy.sh' /tmp/i6.log)" -ge 1 ] && echo yes)" "yes"
@@ -167,7 +213,7 @@ section "the installed rollout can find haproxy.sh"
 # sort the backup as a primary.
 # What the checkout holds of what the load balancer runs, by its path in the install, which mirrors it.
 mirrored_files() {
-  { echo lib.sh; find /deploy/lib -name '*.sh' -printf 'lib/%f\n'; echo loadbalancer/haproxy.sh; echo rollout.sh; } | sort
+  { echo lib.sh; find /deploy/lib -name '*.sh' -printf 'lib/%f\n'; printf 'loadbalancer/%s\n' checks.sh haproxy.sh; echo rollout.sh; } | sort
 }
 installed_files() { (cd /opt/unipept-rollout && find -L lib lib.sh loadbalancer rollout.sh -type f | sort); }
 check "the install mirrors the checkout, file for file" "$(installed_files)" "$(mirrored_files)"

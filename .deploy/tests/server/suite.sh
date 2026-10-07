@@ -11,7 +11,11 @@ R=/deploy
 source /deploy/tests/lib.sh
 
 section "install.sh (the one root step)"
-$R/server/install.sh >/tmp/install.log 2>&1; check "exit 0" "$?" "0"
+$R/server/install.sh >/tmp/install.log 2>&1
+status=$?
+check "exit 0" "$status" "0"
+# What it said, where CI keeps nothing of the container afterwards.
+[ "$status" -eq 0 ] || sed 's/^/    /' /tmp/install.log
 check "linger on"      "$(loginctl show-user unipept -p Linger --value)" "yes"
 check "bin dir owned"  "$(stat -c %U /opt/unipept-api/bin)" "unipept"
 check "unit installed" "$([ -f /home/unipept/.config/systemd/user/unipept-api.service ] && echo yes)" "yes"
@@ -242,14 +246,6 @@ one_check() {
 SERVICE_USER=unipept ROOT=/opt/unipept-api BINARY=/opt/unipept-api/bin/unipept-api OPENSEARCH_TIMEOUT=5
 source /opt/unipept-api/deploy/server/checks.sh
 $1 || exit 1" >/tmp/one-check.log 2>&1
-}
-# Passes on the host case above found ready, and fails on a host or an input made bad for it, saying
-# what is wrong.
-both_ways() {
-  local name=$1 good=$2 bad=$3 says=$4
-  one_check "$good"; check "${name} passes" "$?" "0"
-  one_check "$bad"; check "${name} fails" "$?" "1"
-  check "and says so" "$(grep -c -- "$says" /tmp/one-check.log)" "1"
 }
 mkdir -p /tmp/bad-index && chmod 755 /tmp/bad-index
 printf 'PORT=eighty\nVARIANT=mmap\n' > /tmp/bad.env && chmod 644 /tmp/bad.env

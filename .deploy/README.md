@@ -12,6 +12,7 @@ holding copies.
 | `servers.example.conf` | the inventory. Copy to `servers.conf` on the load balancer |
 | `rollout.conf.example` | load balancer settings. Copy to `rollout.conf` |
 | `loadbalancer/haproxy.sh` | the HAProxy runtime API: drain, ready, wait |
+| `loadbalancer/checks.sh` | what the load balancer and the fleet have to be before a rollout drains a server: one function per check, run by the preflight and by the install's audit |
 | `server/unipept-api.service` | systemd **user** unit, installed at `~unipept/.config/systemd/user/` |
 | `server/unipept-api.env.example` | per-host configuration, installed at `/opt/unipept-api/etc/unipept-api.env` |
 | `server/install.sh` | prepares a host, and updates its scripts. The only step that needs root |
@@ -35,7 +36,8 @@ Both installs lay the scripts out as the checkout does, so each finds `lib.sh` b
 path in both. `server/install.sh` installs them as `/opt/unipept-api/deploy/lib.sh` and
 `/opt/unipept-api/deploy/lib/`, beside `deploy/server/deploy.sh` and its `checks.sh`.
 `loadbalancer/install.sh` installs them as `/opt/unipept-rollout/lib.sh` and
-`/opt/unipept-rollout/lib/`, beside `rollout.sh` and `loadbalancer/haproxy.sh`. All of it is root's.
+`/opt/unipept-rollout/lib/`, beside `rollout.sh` and `loadbalancer/haproxy.sh` and its `checks.sh`.
+All of it is root's.
 
 Each install builds a release whole in `releases/` and puts it in place with `switch_release` from
 `lib/core.sh`: `release` is a link to it, renamed over the old one in one step, and each installed
@@ -131,9 +133,11 @@ sudo .deploy/loadbalancer/install.sh
 
 It installs the scripts in `/opt/unipept-rollout`, writes this host's configuration to
 `/etc/unipept-rollout` — outside any checkout, since the inventory names the fleet — and then audits
-what a rollout depends on: the admin socket, the backends HAProxy is **actually running**, the
-health-check URIs, and whether every server in the inventory can be reached. It never edits
-`haproxy.cfg`; where something is missing it writes the fragment out and names the file.
+what a rollout depends on: the inventory, the admin socket, the backends HAProxy is **actually
+running**, the health-check URIs, and whether every server in the inventory can be reached and is
+ready. It runs the checks in `loadbalancer/checks.sh`, as a rollout's preflight does, so a problem
+both look for reads the same in both. It never edits `haproxy.cfg`; where something is missing it
+writes the fragment out and names the file.
 
 Every server, from the load balancer:
 

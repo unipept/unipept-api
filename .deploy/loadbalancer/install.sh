@@ -4,8 +4,9 @@
 # each release.
 #
 # It installs the scripts, puts this host's configuration somewhere that is not a git checkout, and
-# then audits what a rollout depends on: the admin socket, the backends HAProxy is actually running,
-# and whether every server in the inventory can be reached.
+# then audits what a rollout depends on: the inventory, the admin socket, the backends HAProxy is
+# actually running, and whether every server in the inventory can be reached. The audit runs the
+# checks in checks.sh, the ones a rollout's preflight runs too.
 #
 # It never edits haproxy.cfg. That file holds the TLS certificates, the rate limiting and the ACLs,
 # and a script that rewrites it is a script that eventually takes the public API down at the wrong
@@ -18,17 +19,19 @@
 #   3. Write /etc/unipept-rollout/rollout.conf and servers.conf from the examples, or keep the ones
 #      already there.
 #   4. Take the rollout lock, so no rollout runs from the files while they are replaced. Install
-#      rollout.sh, loadbalancer/haproxy.sh, lib.sh and the parts it loads from lib/ in
-#      /opt/unipept-rollout, in the shape of the checkout, because rollout.sh resolves haproxy.sh
-#      and lib.sh relative to itself.
+#      rollout.sh, loadbalancer/haproxy.sh and checks.sh, lib.sh and the parts it loads from lib/
+#      in /opt/unipept-rollout, in the shape of the checkout, because rollout.sh resolves the
+#      loadbalancer/ scripts and lib.sh relative to itself.
 #   5. Put the operator in the haproxy group, which is what reaches the admin socket.
-#   6. Read the socket path out of haproxy.cfg, and check that its mode lets that group use it.
-#   7. Ask the socket what HAProxy is running. Report every server the inventory expects in a
+#   6. Check the inventory.
+#   7. Take the socket rollout.conf names, or else the one haproxy.cfg opens, and check that HAProxy
+#      answers on it, at level admin, and that its group and mode let the haproxy group use it.
+#   8. Ask the socket what HAProxy is running. Report every server the inventory expects in a
 #      backend that is not there, and write the configuration to add to /tmp.
-#   8. Read haproxy.cfg for the health route each of the two backends checks.
-#   9. Reach every server in the inventory the way a rollout reaches it: ssh as the operator,
+#   9. Check the health route each of the two backends checks, in haproxy.cfg.
+#  10. Reach every server in the inventory the way a rollout reaches it: ssh as the operator,
 #      deploy.sh installed, and `deploy.sh check` passing there.
-#  10. Count what steps 5 to 9 reported. Nothing: say the host is ready. Otherwise exit non-zero.
+#  11. Count what steps 5 to 10 reported. Nothing: say the host is ready. Otherwise exit non-zero.
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
@@ -37,14 +40,18 @@ readonly SOURCE="${HERE}/.."
 [ -r "${SOURCE}/lib.sh" ] || { echo "Error: there is no ${SOURCE}/lib.sh to load." 1>&2; exit 2; }
 # shellcheck source=../lib.sh
 source "${SOURCE}/lib.sh"
+# shellcheck source=checks.sh
+source "${HERE}/checks.sh"
 
 readonly ROOT=/opt/unipept-rollout
 readonly CONFIG=/etc/unipept-rollout
 readonly OPERATOR=${OPERATOR:-unipept}
 readonly HAPROXY_CONFIG=/etc/haproxy/haproxy.cfg
 readonly FRAGMENT=/tmp/unipept-haproxy-fragment.cfg
+readonly INVENTORY=${CONFIG}/servers.conf
+readonly HAPROXY=${HERE}/haproxy.sh
 
-require chown curl getent install sha256sum socat ssh scp flock logger usermod
+require chown curl getent install sha256sum socat ssh scp sudo flock logger usermod
 [ "$(id -u)" -eq 0 ] || die "run this as root. Rollouts themselves run as ${OPERATOR}."
 id "$OPERATOR" >/dev/null 2>&1 || die "there is no ${OPERATOR} account on this host"
 
@@ -97,7 +104,6 @@ FRAGMENT
 }
 
 problems=0
-note() { log "$*"; problems=$((problems + 1)); }
 
 # One setting of rollout.conf, read with `source` as rollout.sh reads it, so a value means the same
 # to the audit as to a rollout: `SSH_USER=unipept  # deploy account` is the user unipept to both.
@@ -139,7 +145,7 @@ install_config() {
 }
 
 install_config "${SOURCE}/rollout.conf.example" "${CONFIG}/rollout.conf" root
-install_config "${SOURCE}/servers.example.conf" "${CONFIG}/servers.conf" "$OPERATOR"
+install_config "${SOURCE}/servers.example.conf" "$INVENTORY" "$OPERATOR"
 
 # A rollout running while this replaces its files could load one release's lib.sh into another's
 # rollout.sh. So this takes the rollout's own lock for as long as it runs, and refuses while a
@@ -160,6 +166,7 @@ install -m 0644 "${SOURCE}/lib/"*.sh "${release}/lib/"
 install -m 0644 "${SOURCE}/lib.sh" "${release}/lib.sh"
 install -m 0755 "${SOURCE}/rollout.sh" "${release}/rollout.sh"
 install -m 0755 "${HERE}/haproxy.sh" "${release}/loadbalancer/haproxy.sh"
+install -m 0644 "${HERE}/checks.sh" "${release}/loadbalancer/checks.sh"
 switch_release "$ROOT" "$release_id" lib lib.sh loadbalancer rollout.sh
 log "installed the scripts in ${ROOT}"
 
@@ -168,100 +175,65 @@ if getent group haproxy >/dev/null 2>&1; then
     usermod -a -G haproxy "$OPERATOR"
     log "${OPERATOR} is in the haproxy group"
 else
-    note "there is no haproxy group on this host; ${OPERATOR} cannot reach the admin socket"
+    log "there is no haproxy group on this host; ${OPERATOR} cannot reach the admin socket"
+    problems=$((problems + 1))
 fi
 
-# `|| true` because pipefail turns a missing haproxy.cfg into a fatal exit here, which would skip
-# the note below that exists to report exactly that.
-socket=$(sed -n 's/.*stats socket \([^ ]*\).*/\1/p' "$HAPROXY_CONFIG" 2>/dev/null | head -1 || true)
+check_inventory_entries "$INVENTORY" || problems=$((problems + 1))
+
+inventory=$(read_inventory "$INVENTORY")
+
+# The socket rollouts use, which rollout.conf names; else the first haproxy.cfg opens. `|| true`
+# because pipefail turns a missing haproxy.cfg into a fatal exit here, which
+# check_haproxy_health_uris below exists to report.
+socket=$(conf_value HAPROXY_SOCKET)
+[ -n "$socket" ] || socket=$(sed -n '/^[[:space:]]*#/d; s/.*stats socket \([^ ]*\).*/\1/p' "$HAPROXY_CONFIG" 2>/dev/null | head -1 || true)
 socket=${socket:-/run/haproxy/haproxy.sock}
-[ -r "$HAPROXY_CONFIG" ] || note "no ${HAPROXY_CONFIG} to read; assuming ${socket}"
+[ -r "$HAPROXY_CONFIG" ] || log "no ${HAPROXY_CONFIG} to read; assuming ${socket}"
+export HAPROXY_SOCKET=$socket
 
-if [ ! -S "$socket" ]; then
-    note "no HAProxy admin socket at ${socket}"
-else
-    mode=$(stat -c %a "$socket")
-    case $mode in
-        66* | 77*) log "the admin socket is mode ${mode}, which the haproxy group can use" ;;
-        *)
-            note "the admin socket is mode ${mode}, so only root can use it. In ${HAPROXY_CONFIG}, change"
-            note "    stats socket ${socket} mode ${mode} level admin"
-            note "to  stats socket ${socket} mode 660 level admin"
-            note "and reload HAProxy. Do that now rather than during a rollout: a reload returns a"
-            note "draining server to rotation."
-            ;;
-    esac
-fi
+if check_haproxy_answers "$socket"; then
+    check_haproxy_level "$socket" || problems=$((problems + 1))
+    check_haproxy_socket_mode "$socket" "$HAPROXY_CONFIG" || problems=$((problems + 1))
 
-# What HAProxy is actually running, which is not always what the file says: an edit that was never
-# reloaded is invisible to grep and obvious here.
-if [ -S "$socket" ] && backends=$(printf 'show stat\n' | socat "$socket" stdio 2>/dev/null); then
-    inventory=${CONFIG}/servers.conf
-    missing=''
-
-    while read -r name _ _ names server; do
-        case ${name:-} in '' | \#*) continue ;; esac
-        [ -n "$server" ] || continue
-        for backend in ${names//,/ }; do
-            if ! printf '%s\n' "$backends" | awk -F, -v b="$backend" -v s="$server" \
-                '$1 == b && $2 == s { found = 1 } END { exit !found }'; then
-                missing="${missing}${backend}/${server} "
-            fi
-        done
-    done < "$inventory"
-
-    if [ -n "$missing" ]; then
-        note "HAProxy is not running these, which the inventory expects: ${missing}"
-        write_fragment
-        note "a configuration to add is in ${FRAGMENT}"
-    else
+    missing=0
+    while read -r name _ _ backends server; do
+        [ -n "$name" ] || continue
+        check_haproxy_backends "$name" "$backends" "$server" || missing=$((missing + 1))
+    done <<<"$inventory"
+    if [ "$missing" -eq 0 ]; then
         log "every server in the inventory is in every backend it names"
+    else
+        problems=$((problems + missing))
+        write_fragment
+        log "a configuration to add is in ${FRAGMENT}"
     fi
-
-    # The check URI cannot be read from the socket, only from the file, so this is the one place the
-    # configuration is read. Read, never written.
-    for pair in "all_handlers:/health" "db_handlers:/health/database"; do
-        backend=${pair%%:*}
-        expected=${pair##*:}
-        actual=$(awk -v b="backend ${backend}" '
-            $0 ~ "^"b"$" { inside = 1; next }
-            /^(backend|frontend|listen|defaults|global)/ { inside = 0 }
-            inside && /http-check send/ { for (i = 1; i <= NF; i++) if ($i == "uri") print $(i + 1) }
-        ' "$HAPROXY_CONFIG" 2>/dev/null | head -1)
-
-        if [ -z "$actual" ]; then
-            note "${backend} has no http-check send uri; it should check ${expected}"
-        elif [ "$actual" != "$expected" ]; then
-            note "${backend} checks ${actual}; it should check ${expected}"
-        else
-            log "${backend} checks ${expected}"
-        fi
-    done
+else
+    problems=$((problems + 1))
 fi
 
-# Every server the inventory names, reached the way a rollout reaches it, on the options a rollout
-# uses — the same array rollout.sh builds SSH_OPTIONS from, so tuning a timeout there tunes it here.
+check_haproxy_health_uris "$HAPROXY_CONFIG" || problems=$((problems + 1))
+
+# Every server the inventory names, reached the way a rollout reaches it: as the operator, on the
+# options a rollout uses — the same bounds rollout.sh builds SSH_OPTIONS from, so tuning a timeout
+# there tunes it here.
 readonly AUDIT_SSH=(-n "${SSH_CONNECTION_BOUNDS[@]}")
-
-# Every server the inventory names, reached the way a rollout reaches it.
 ssh_user=$(conf_value SSH_USER)
-remote=$(conf_value REMOTE_DEPLOY)
-remote=${remote:-$DEFAULT_REMOTE_DEPLOY}
+REMOTE_DEPLOY=$(conf_value REMOTE_DEPLOY)
+REMOTE_DEPLOY=${REMOTE_DEPLOY:-$DEFAULT_REMOTE_DEPLOY}
 
-while read -r name host _ _ _; do
-    case ${name:-} in '' | \#*) continue ;; esac
-    target=${ssh_user:+${ssh_user}@}${host}
+on_host() {
+    sudo -u "$OPERATOR" ssh "${AUDIT_SSH[@]}" "${ssh_user:+${ssh_user}@}$1" "$2"
+}
 
-    if ! sudo -u "$OPERATOR" ssh "${AUDIT_SSH[@]}" "$target" true 2>/dev/null; then
-        note "${OPERATOR} cannot ssh to ${target}; install a key there"
-    elif ! sudo -u "$OPERATOR" ssh "${AUDIT_SSH[@]}" "$target" "test -x ${remote}" 2>/dev/null; then
-        note "${target} has no ${remote}; run the server install there first"
-    elif ! sudo -u "$OPERATOR" ssh "${AUDIT_SSH[@]}" "$target" "${remote} check" >/dev/null 2>&1; then
-        note "${target} is not ready; run '${remote} check' there to see why"
-    else
+while read -r name host _; do
+    [ -n "$name" ] || continue
+    if check_server_reachable "$name" "$host" && check_server_ready "$name" "$host" >/dev/null; then
         log "${name} is reachable and ready"
+    else
+        problems=$((problems + 1))
     fi
-done < "${CONFIG}/servers.conf"
+done <<<"$inventory"
 
 printf '\n' >&2
 if [ "$problems" -eq 0 ]; then

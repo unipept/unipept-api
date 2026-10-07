@@ -641,6 +641,7 @@ trap clean_staging EXIT
 # refused has done nothing.
 case $command in
     deploy | rollback | stop | start)
+        require flock
         take_api_lock || die "$(api_lock_refused $?)"
         locked=true
         ;;

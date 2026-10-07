@@ -12,10 +12,10 @@
 #
 # Flow:
 #   1. Load rollout.conf, parse the arguments, and take a lock, so only one rollout runs at a time.
-#   2. A subcommand instead of a rollout: `status` prints what a run in progress is doing and then
-#      the fleet; `abort` stops a run and waits for it to put its server back; `ready` returns
-#      servers to the pool. None needs a release. `status` and `abort` take no lock, because both
-#      are for running while a rollout is.
+#   2. A subcommand instead of a rollout, from loadbalancer/state.sh: `status` prints what a run in
+#      progress is doing and then the fleet; `abort` stops a run and waits for it to put its server
+#      back; `ready` returns servers to the pool. None needs a release. `status` and `abort` take no
+#      lock, because both are for running while a rollout is.
 #   3. Check the inventory, read it, and order the servers primaries first, backups last.
 #   4. --dry-run prints what each server holds and how the load balancer sees it, and stops.
 #   5. Phase 0: download the release on the load balancer, once per variant the fleet asks for, and
@@ -33,7 +33,8 @@
 #      server what actually happened, acts on the answer, and stops the run, so the servers after
 #      it are never touched.
 #   8. Phase 3: on every exit, including a signal. Clear the staging directory on every server it
-#      reached, write one journal line per server, and email if an update failed or a server is out
+#      reached, and through loadbalancer/journal.sh write one journal line per server and email if
+#      an update failed or a server is out
 #      of the pool — a server this run drained and never put back included, which is what an
 #      interrupted install leaves behind.
 
@@ -44,8 +45,8 @@ readonly HERE
 # shellcheck source=lib.sh
 source "${HERE}/lib.sh"
 
-# Resolved through every link, so installed it is the haproxy.sh and checks.sh of the release this
-# run started from, however long the run, and not of whichever release an install puts in place
+# Resolved through every link, so installed it is the loadbalancer/ scripts of the release this run
+# started from, however long the run, and not of whichever release an install puts in place
 # meanwhile.
 LOADBALANCER="$(cd -P "${HERE}/loadbalancer" && pwd)"
 readonly LOADBALANCER
@@ -91,11 +92,6 @@ if [ -f "${CONFIG_DIR}/rollout.conf" ]; then
     # shellcheck source=/dev/null  # written on the load balancer, not in this repository.
     source "${CONFIG_DIR}/rollout.conf"
 fi
-
-# What the run in progress is doing, for `status` to read and `abort` to signal. Beside the lock
-# rather than in it: the lock is opened for reading, so nothing can be written through it. Fixed, as
-# the lock is: set after the configuration, so nothing there changes it.
-readonly RUN_STATE=/run/lock/unipept-rollout.state
 
 export HAPROXY_SOCKET NOTIFY_TO NOTIFY_SMTP
 
@@ -147,14 +143,6 @@ declare -A TIMEOUT_OF=()
 declare -A VERSION_BEFORE=()
 # Hosts that have a staging directory, so the cleanup reaches every one of them.
 STAGED_ON=''
-# Servers this run left out of the pool or down, which is what the team is told about.
-FAILED_UPDATE=''
-NEEDS_ATTENTION=''
-# Servers this run updated and put back, for the mail that closes it.
-UPDATED=''
-# The same servers, names only, for the record to iterate over.
-FAILED_NAMES=''
-DOWN_NAMES=''
 # Who to name in the record and the mail. SUDO_USER first, so a run through sudo names the person.
 readonly RUN_BY="${SUDO_USER:-$(id -un)}"
 STARTED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -560,6 +548,13 @@ resolve_failure() {
     fi
 
     die "stopped at ${name}; the servers after it were not touched"
+}
+
+# The lines of a server's `deploy.sh status` that the closing summary and the journal keep: what it
+# runs and serves. Not INDEX_LOCATION, whose spaces would split a journal line, nor the lock's path or
+# the format, which say nothing about the run.
+recorded() {
+    grep -E '^(version|previous|variant|port|active|index_version|opensearch_index)=' || true
 }
 
 # Installs the already-staged binary and verifies the result from here, rather than trusting what the

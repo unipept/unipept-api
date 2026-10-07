@@ -3,18 +3,23 @@
 # What a rollout in progress is doing, kept in RUN_STATE beside the rollout lock, and the three
 # commands that act on a fleet outside a rollout: `status`, `abort` and `ready`.
 #
-# Uses log, die and env_value from lib.sh, and ROLLOUT_LOCK from locks.sh; check_inventory_entries
-# and read_inventory from checks.sh. From rollout.sh, which sources it: RUN_STATE, VERSION, STARTED_AT,
-# RUN_BY, INVENTORY, ONLY, HERE, HAPROXY, on_server and return_to_pool. Beside haproxy.sh, in the
-# checkout and on the load balancer.
+# Uses log and die from core.sh, env_value from config.sh and ROLLOUT_LOCK from locks.sh;
+# check_inventory_entries and read_inventory from checks.sh. From rollout.sh, which sources it:
+# VERSION, STARTED_AT, RUN_BY, INVENTORY, ONLY, HERE, HAPROXY, on_server and return_to_pool. Beside
+# haproxy.sh, in the checkout and on the load balancer.
+
+# What the run in progress is doing, for `status` to read and `abort` to signal. Beside the lock
+# rather than in it: the lock is opened for reading, so nothing can be written through it. Fixed, as
+# the lock is: read-only before rollout.conf is read, so nothing there changes it.
+readonly RUN_STATE=/run/lock/unipept-rollout.state
 
 # Makes the state file writable by this run before anything depends on it.
 #
 # Unlike the lock, this one is written, and the operator and root take it in turns: the operator
 # cannot rewrite root's file at the default mode, and root cannot rewrite the operator's in sticky
-# /run/lock at any mode. `note_phase` tolerates a failed
-# write so a rollout is never lost to one, which is exactly why it has to be settled here instead —
-# a silent failure there leaves `status` and `abort` reading a phase that has moved on.
+# /run/lock at any mode. `note_phase` tolerates a failed write so a rollout is never lost to one,
+# which is exactly why it has to be settled here instead — a silent failure there leaves `status`
+# and `abort` reading a phase that has moved on.
 prepare_run_state() {
     # Another account's file is replaced where this one may remove it, which root may: in sticky
     # /run/lock, root's write to the operator's file is refused even where its mode allows it, and
@@ -118,8 +123,8 @@ do_status() {
 # Stops a rollout that is running, from anywhere.
 #
 # The run restores the server it drained through its own handlers, so this only has to reach them.
-# Ctrl-C cannot, from another terminal: the signal has to go to that process, and until the state
-# file existed there was nothing that said which one it is.
+# Ctrl-C cannot, from another terminal: the signal has to go to that process, and the state file
+# says which one it is.
 do_abort() {
     local pid
 
@@ -160,10 +165,9 @@ do_abort() {
 
 # Returns named servers to the pool, or every server that can be.
 #
-# What the mail after a failure asks for. It names `haproxy.sh ready <backends>/<server>`, which
-# means reading the backend list out of the inventory by hand and, worse, going round
-# `return_to_pool`: that is the only thing holding a server to answering both routes, and a server
-# put back without it can take database traffic it cannot serve.
+# What the mail after a failure asks for. It goes through `return_to_pool`, the one way back that
+# holds a server to answering both routes: put back without it, a server can take database traffic
+# it cannot serve.
 do_ready() {
     local wanted=("$@") inventory name host port backends server chosen=0 restored=0 refused=0
 

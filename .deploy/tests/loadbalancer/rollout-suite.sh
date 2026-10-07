@@ -371,7 +371,7 @@ check "could not roll back"  "$(grep -c 'could not be rolled back' /tmp/r8c.txt)
 check "left out of the pool" "$($H state all_handlers/selma)" "MAINT"
 rm -f /tmp/unhealthy
 check "mailed urgently"      "$(grep -c 'needs attention' /tmp/mail.txt)" "1"
-check "names the command"    "$(grep -c 'haproxy.sh ready' /tmp/mail.txt)" "1"
+check "names the command"    "$(grep -c 'rollout.sh ready <name>' /tmp/mail.txt)" "1"
 
 section "8d. a deploy that worked while the connection died is not undone"
 reset_fleet

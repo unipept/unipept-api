@@ -1,11 +1,24 @@
 # shellcheck shell=bash
 #
-# What a rollout leaves behind for people: one journal line per server, and mail. Mailed from here
-# rather than left to HAProxy's email-alert, which fires on every state change in every backend.
+# What a rollout leaves behind for people: one journal line per server, and mail. It keeps the lists
+# of what the run did to which server, and the closing mail is made from them.
 #
 # Uses log from core.sh. From rollout.sh, which sources it: VERSION, COMMAND, HERE, REMOTE_DEPLOY,
-# RUN_BY, RUN_FROM, NOTIFY_TO, NOTIFY_FROM and NOTIFY_SMTP, STATUS, and the lists this file's note_*
-# functions keep. Beside haproxy.sh, in the checkout and on the load balancer.
+# RUN_BY, RUN_FROM, NOTIFY_TO, NOTIFY_FROM and NOTIFY_SMTP, STATUS, and CURRENT_TARGET, which
+# note_down clears. Beside haproxy.sh, in the checkout and on the load balancer.
+
+# Servers this run left out of the pool or down, which is what the team is told about.
+FAILED_UPDATE=''
+NEEDS_ATTENTION=''
+# Servers this run updated and put back, for the mail that closes it.
+UPDATED=''
+# The same servers, names only, for the record to iterate over: the lists above have spaces inside
+# an entry.
+FAILED_NAMES=''
+DOWN_NAMES=''
+# The host every mail names and is sent from.
+RUN_ON="$(hostname -f 2>/dev/null || hostname)"
+readonly RUN_ON
 
 # Sends one message to the team, through the MTA this host already runs for HAProxy's email-alert.
 #
@@ -23,15 +36,15 @@ notify() {
 
     message=$(mktemp)
     {
-        printf 'From: %s\n' "${NOTIFY_FROM:-unipept-rollout@$(hostname -f 2>/dev/null || hostname)}"
+        printf 'From: %s\n' "${NOTIFY_FROM:-unipept-rollout@${RUN_ON}}"
         printf 'To: %s\n' "$NOTIFY_TO"
         printf 'Subject: %s\n\n' "$subject"
         printf '%s\n' "$body"
     } > "$message"
 
     if curl -s --max-time 20 \
-        --url "smtp://${NOTIFY_SMTP:-127.0.0.1:25}/$(hostname -f 2>/dev/null || hostname)" \
-        --mail-from "${NOTIFY_FROM:-unipept-rollout@$(hostname -f 2>/dev/null || hostname)}" \
+        --url "smtp://${NOTIFY_SMTP:-127.0.0.1:25}/${RUN_ON}" \
+        --mail-from "${NOTIFY_FROM:-unipept-rollout@${RUN_ON}}" \
         --mail-rcpt "$NOTIFY_TO" --upload-file "$message"; then
         log "emailed ${NOTIFY_TO}: ${subject}"
     else
@@ -54,13 +67,10 @@ note_updated() {
 
   $(printf '%s' "${STATUS[$name]:-unknown}" | tr '\n' ' ')
 
-Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
+Run by ${RUN_BY} on ${RUN_ON}."
 }
 
 # An update that failed but left the fleet serving. Worth an email, not an alarm.
-#
-# Two lists: one to read, one to iterate. Splitting "patty (serving 2.5.3)" on whitespace was logging
-# a journal line that claimed the server was called "2.5.3)".
 note_failed_update() {
     FAILED_UPDATE="${FAILED_UPDATE}${1} (serving ${2:-unknown}) "
     FAILED_NAMES="${FAILED_NAMES}${1} "
@@ -81,37 +91,31 @@ note_down() {
 notify_outcome() {
     local status=$1
 
-    # Two texts for the one state, because a subcommand reaches it too. `ready` takes no --version
-    # and attempts no fleet, so the rollout wording mailed "A rollout of  left a server" and sent
-    # the operator looking for servers after it that were never part of the run. Keyed the way
-    # record_run is keyed: a run that set out to change something has a VERSION, and nothing else
-    # does.
-    if [ -n "$NEEDS_ATTENTION" ] && [ -n "$VERSION" ]; then
-        notify "[unipept-rollout] a server needs attention on $(hostname -s)" \
-"A rollout of ${VERSION} left a server that cannot be routed to.
+    local what
+    if [ -n "$NEEDS_ATTENTION" ]; then
+        # `ready` reaches this too, and has no VERSION: worded as a rollout, it would name a run that
+        # never happened and servers after it that were never part of one.
+        if [ -n "$VERSION" ]; then
+            what="A rollout of ${VERSION} left a server that cannot be routed to.
 
   ${NEEDS_ATTENTION}
 
-The servers after it were not attempted, so the rest of the fleet is untouched.
-
-To see the fleet:      ${HERE}/rollout.sh status
-To return a server:    ${HERE}/loadbalancer/haproxy.sh ready <backends>/<server>
-On the server itself:  ${REMOTE_DEPLOY} status
-
-Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
-    elif [ -n "$NEEDS_ATTENTION" ]; then
-        notify "[unipept-rollout] a server needs attention on $(hostname -s)" \
-"'rollout.sh ${COMMAND}' could not return a server to the pool.
+The servers after it were not attempted, so the rest of the fleet is untouched."
+        else
+            what="'rollout.sh ${COMMAND}' could not return a server to the pool.
 
   ${NEEDS_ATTENTION}
 
-No rollout was running, so nothing else on the fleet was touched.
+No rollout was running, so nothing else on the fleet was touched."
+        fi
+        notify "[unipept-rollout] a server needs attention on $(hostname -s)" \
+"${what}
 
 To see the fleet:      ${HERE}/rollout.sh status
-To return a server:    ${HERE}/loadbalancer/haproxy.sh ready <backends>/<server>
+To return a server:    ${HERE}/rollout.sh ready <name>
 On the server itself:  ${REMOTE_DEPLOY} status
 
-Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
+Run by ${RUN_BY} on ${RUN_ON}."
     elif [ -n "$FAILED_UPDATE" ]; then
         notify "[unipept-rollout] ${VERSION} was rolled back on $(hostname -s)" \
 "A rollout of ${VERSION} stopped and the fleet is serving its previous version.
@@ -123,7 +127,7 @@ consistent only if this was the first one. Check with:
 
   ${HERE}/rollout.sh status
 
-Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
+Run by ${RUN_BY} on ${RUN_ON}."
     elif [ -n "$UPDATED" ] && [ "$status" -eq 0 ]; then
         # Keyed on a server having been updated, not on VERSION: --dry-run sets that too.
         notify "[unipept-rollout] ${VERSION} deployed on $(hostname -s)" \
@@ -131,21 +135,14 @@ Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
 
   ${UPDATED}
 
-Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
+Run by ${RUN_BY} on ${RUN_ON}."
     fi
-}
-
-# The lines of a server's `deploy.sh status` that the closing summary and the journal keep: what it
-# runs and serves. Not INDEX_LOCATION, whose spaces would split a journal line, nor the lock's path or
-# the format, which say nothing about the run.
-recorded() {
-    grep -E '^(version|previous|variant|port|active|index_version|opensearch_index)=' || true
 }
 
 # One journal line per server, so "who deployed what, when" has an answer that outlives a terminal.
 #
-# Only for a run that set out to change something. `status` and the recovery commands take no
-# --version, so recording them wrote `version= ... exit=0` and read back as a rollout of nothing.
+# Only for a run that set out to change something: `status` and the recovery commands have no
+# VERSION, and a line for them would read back as a rollout of nothing.
 record_run() {
     local status=$1 name
 

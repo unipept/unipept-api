@@ -13,8 +13,10 @@
 # The socket is srw------- root:haproxy. Either run as root, or give the socket `mode 660` in
 # haproxy.cfg and put the operator in the haproxy group.
 
+LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
+[ -r "$LIB" ] || { echo "Error: there is no ${LIB} to load." 1>&2; exit 2; }
 # shellcheck source=../lib.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh" || exit 2
+source "$LIB"
 
 : "${HAPROXY_SOCKET:=/run/haproxy/haproxy.sock}"
 

@@ -58,8 +58,9 @@
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 
+[ -r "${HERE}/../lib.sh" ] || { echo "Error: there is no ${HERE}/../lib.sh to load." 1>&2; exit 2; }
 # shellcheck source=../lib.sh
-source "${HERE}/../lib.sh" || exit 2
+source "${HERE}/../lib.sh"
 # The checks a server is held to, beside this script in a checkout and on a server alike. Missing
 # only where this script was copied on its own, which install.sh never does.
 [ -f "${HERE}/checks.sh" ] || die "there is no checks.sh beside ${HERE}/deploy.sh; run server/install.sh again"

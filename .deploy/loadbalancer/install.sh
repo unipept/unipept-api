@@ -33,8 +33,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 readonly SOURCE="${HERE}/.."
 
+[ -r "${SOURCE}/lib.sh" ] || { echo "Error: there is no ${SOURCE}/lib.sh to load." 1>&2; exit 2; }
 # shellcheck source=../lib.sh
-source "${SOURCE}/lib.sh" || exit 2
+source "${SOURCE}/lib.sh"
 
 readonly ROOT=/opt/unipept-rollout
 readonly CONFIG=/etc/unipept-rollout

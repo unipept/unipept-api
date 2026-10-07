@@ -168,14 +168,99 @@ check "says too few"   "$(grep -c 'too few fields' /tmp/bad.txt)" "1"
 check "nothing drained" "$(/work/loadbalancer/haproxy.sh state all_handlers/rick | cut -d' ' -f1)" "UP"
 cp /tmp/servers.keep /work/servers.conf
 
+section "4d. each check on its own, on a good fleet and on a bad one"
+# checks.sh as rollout.sh sources it: with lib.sh, haproxy.sh and a deploy.sh to call, and with an
+# on_host that runs the command here, so a case can make the server it reaches what it needs. Exits
+# with the check's own status.
+cat > /tmp/fake-deploy.sh <<'EOF'
+#!/usr/bin/env bash
+[ -z "${FAKE_CHECK_FAILS:-}" ] || { echo "check: ${FAKE_CHECK_FAILS}" >&2; exit 1; }
+printf 'index_version=2026.09-test\nproblems=0\n'
+EOF
+chmod +x /tmp/fake-deploy.sh
+one_check() {
+  bash -c "source /work/lib.sh
+HAPROXY=/work/loadbalancer/haproxy.sh REMOTE_DEPLOY=/tmp/fake-deploy.sh
+on_host() { bash -c \"\$2\"; }
+source /work/loadbalancer/checks.sh
+$1 || exit 1" >/tmp/one-check.log 2>&1
+}
+both_ways() {
+  local name=$1 good=$2 bad=$3 says=$4
+  one_check "$good"; check "${name} passes" "$?" "0"
+  check "and prints nothing" "$(grep -c 'check:' /tmp/one-check.log)" "0"
+  one_check "$bad"; check "${name} fails" "$?" "1"
+  check "and says so" "$(grep -c -- "$says" /tmp/one-check.log)" "1"
+}
+printf 'patty patty 9101 all_handlers patty\npatty selma 9102 all_handlers selma\n' > /tmp/twice.conf
+sed 's#uri /health/database#uri /private_api/metadata.json#' /etc/haproxy/haproxy.cfg > /tmp/bad-haproxy.cfg
+good_line='patty patty 9101 all_handlers,db_handlers patty'
+bad_line='patty patty 9101 all_handlers,absent_backend patty'
+
+both_ways check_inventory_entries "check_inventory_entries /work/servers.conf" \
+  "check_inventory_entries /tmp/twice.conf" "the inventory names 'patty' twice"
+both_ways check_haproxy_socket "check_haproxy_socket /run/haproxy/haproxy.sock /etc/haproxy/haproxy.cfg" \
+  "check_haproxy_socket /run/haproxy/absent.sock /etc/haproxy/haproxy.cfg" "no HAProxy admin socket at"
+both_ways check_haproxy_backends "check_haproxy_backends '${good_line}'" \
+  "check_haproxy_backends '${bad_line}'" "which the inventory expects: absent_backend/patty$"
+both_ways check_haproxy_health_uris "check_haproxy_health_uris /etc/haproxy/haproxy.cfg" \
+  "check_haproxy_health_uris /tmp/bad-haproxy.cfg" "db_handlers checks /private_api/metadata.json"
+$H maint db_handlers/selma >/dev/null 2>&1
+both_ways check_server_up "check_server_up patty all_handlers,db_handlers/patty" \
+  "check_server_up selma all_handlers,db_handlers/selma" "check: selma is all_handlers=UP"
+$H ready db_handlers/selma >/dev/null 2>&1
+both_ways check_server_health "check_server_health patty 127.0.0.1 9101" \
+  "check_server_health patty 127.0.0.1 9199" "does not answer /health/database"
+both_ways check_server_reachable "check_server_reachable patty patty" \
+  "on_host() { return 255; }; check_server_reachable patty patty" "cannot reach patty at patty over ssh"
+both_ways check_server_ready "check_server_ready patty patty" \
+  "FAKE_CHECK_FAILS='the index is missing' check_server_ready patty patty" "check: patty is not ready"
+check "with the server's own lines under it" "$(grep -c '^    check: the index is missing' /tmp/one-check.log)" "1"
+one_check "check_server_ready patty patty --from /tmp/x"
+check "check_server_ready passes on the report" "$(grep -c '^index_version=2026.09-test$' /tmp/one-check.log)" "1"
+one_check "REMOTE_DEPLOY=/nonexistent/deploy.sh check_server_ready patty patty"
+check "and fails where deploy.sh is not installed" "$?" "1"
+check "saying so" "$(grep -c 'check: patty has no /nonexistent/deploy.sh; run the server install there first' /tmp/one-check.log)" "1"
+$H maint all_handlers/selma >/dev/null 2>&1; $H maint all_handlers/rick >/dev/null 2>&1
+one_check "check_backend_capacity all_handlers,db_handlers patty"
+check "check_backend_capacity fails" "$?" "1"
+check "and says so" "$(grep -c 'patty is the only server UP in one of all_handlers, db_handlers' /tmp/one-check.log)" "1"
+reset_fleet
+one_check "check_backend_capacity all_handlers,db_handlers patty"
+check "check_backend_capacity passes" "$?" "0"
+# check_fleet_index is rollout.sh's own, and case 13 runs it through a rollout.
+rm -f /tmp/twice.conf /tmp/bad-haproxy.cfg
+
+section "4e. a backend HAProxy does not run is named, with the line the install's audit uses"
+cp /work/servers.conf /tmp/servers.keep
+cat > /work/servers.conf <<EOF
+patty   patty 9101 all_handlers,absent_backend patty
+selma   selma 9102 all_handlers,absent_backend selma
+rick   rick 9103 all_handlers,absent_backend rick
+EOF
+$R --version v2.6.0 >/tmp/absent.txt 2>&1
+check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "names what is missing" "$(grep -c '  check: HAProxy is not running these, which the inventory expects: absent_backend/patty absent_backend/selma absent_backend/rick$' /tmp/absent.txt)" "1"
+check "nothing was touched" "$(grep -c 'nothing was touched' /tmp/absent.txt)" "1"
+cp /tmp/servers.keep /work/servers.conf
+
 section "5. preflight refuses a fleet that is already down"
 /work/loadbalancer/haproxy.sh maint all_handlers/selma >/dev/null 2>&1
 $R --version v2.6.0 > /tmp/pre.txt 2>&1
 check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
-check "names the problem" "$([ "$(grep -c 'preflight' /tmp/pre.txt)" -ge 2 ] && echo yes)" "yes"
+check "names the problem" "$(grep -c 'check: selma is all_handlers=MAINT' /tmp/pre.txt)" "1"
+check "and stops on it" "$(grep -c '1 preflight problem(s); nothing was touched' /tmp/pre.txt)" "1"
 check "nothing was drained" "$(/work/loadbalancer/haproxy.sh state all_handlers/patty)" "UP"
 /work/loadbalancer/haproxy.sh ready all_handlers/selma >/dev/null 2>&1
 sleep 5
+
+section "5b. preflight refuses a server that does not answer its health routes"
+echo selma > /tmp/no-database
+$R --version v2.6.0 > /tmp/pre-health.txt 2>&1
+check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "names the route" "$(grep -c 'check: selma does not answer /health/database' /tmp/pre-health.txt)" "1"
+check "and stops on it" "$(grep -c '1 preflight problem(s); nothing was touched' /tmp/pre-health.txt)" "1"
+rm -f /tmp/no-database
 
 section "6. the downtime guard refuses to empty the backend"
 /work/loadbalancer/haproxy.sh maint all_handlers/selma >/dev/null 2>&1
@@ -183,6 +268,7 @@ section "6. the downtime guard refuses to empty the backend"
 $R --version v2.6.0 --only patty > /tmp/guard.txt 2>&1
 check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says outage"    "$(grep -c 'is an outage' /tmp/guard.txt)" "1"
+check "before the run, in the preflight" "$(grep -c 'nothing was touched' /tmp/guard.txt)" "1"
 check "patty still UP" "$(/work/loadbalancer/haproxy.sh state all_handlers/patty | cut -d' ' -f1)" "UP"
 
 section "7. --allow-downtime overrides it, and the sequence is drain then maint then ready"
@@ -971,6 +1057,38 @@ check "every server is in the pool" \
     "$(for srv in patty selma rick; do $H state "all_handlers/$srv" | cut -d' ' -f1; done | sort -u)" "UP"
 check_absent "and nothing was deployed" 'deploy --from' /tmp/ssh.log
 mv /work/loadbalancer/haproxy.real "$H"
+
+reset_fleet
+section "35. capacity is asked again before each drain"
+# Two servers, with the backup out of the pool: the preflight finds each can be spared. While patty
+# is being updated selma leaves the pool too, and by its turn patty is all the backends have left.
+cp /work/servers.conf /tmp/servers.keep
+printf 'patty patty 9101 all_handlers,db_handlers patty\nselma selma 9102 all_handlers,db_handlers selma\n' > /work/servers.conf
+$H maint all_handlers,db_handlers/rick >/dev/null 2>&1
+cat > /usr/local/bin/ssh <<'EOF'
+#!/usr/bin/env bash
+args=("$@"); cmd=""
+for a in "${args[@]}"; do case $a in -o|BatchMode=yes|ConnectTimeout=10|ServerAliveInterval=15|ServerAliveCountMax=4|-n) ;; *) cmd="$cmd $a" ;; esac; done
+echo "SSH:$cmd" >> /tmp/ssh.log
+case "$cmd" in
+  *"deploy.sh check"*) printf 'variant=hybrid\nport=80\nindex_version=2026.09-test\nproblems=0\n'; exit 0 ;;
+  *"deploy --from"*)   case "$cmd" in *patty*) /work/loadbalancer/haproxy.sh maint all_handlers,db_handlers/selma >/dev/null 2>&1 ;; esac; exit 0 ;;
+  *status*)            printf 'version=2.6.0\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n'; exit 0 ;;
+esac
+exit 0
+EOF
+chmod +x /usr/local/bin/ssh
+: > /tmp/ssh.log
+$R --version v2.6.0 >/tmp/r42.txt 2>&1
+check "exit non-zero"          "$([ $? -ne 0 ] && echo yes)" "yes"
+check "the preflight passed"   "$(grep -c 'preflight passed' /tmp/r42.txt)" "1"
+check "and patty was updated"  "$(grep -c 'deploy --from' /tmp/ssh.log)" "1"
+check "then selma was refused" "$(grep -c 'check: selma is the only server UP in one of all_handlers, db_handlers' /tmp/r42.txt)" "1"
+check "and not drained"        "$(grep -c 'selma was not drained' /tmp/r42.txt)" "1"
+cp /tmp/servers.keep /work/servers.conf
+cp /tmp/ssh.keep /usr/local/bin/ssh
+$H ready all_handlers,db_handlers/selma >/dev/null 2>&1
+$H ready all_handlers,db_handlers/rick >/dev/null 2>&1
 
 # The fake backends hold stdout open; without this a pipe on the outside never sees EOF.
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1

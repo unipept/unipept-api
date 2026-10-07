@@ -16,16 +16,17 @@
 #      the fleet; `abort` stops a run and waits for it to put its server back; `ready` returns
 #      servers to the pool. None needs a release. `status` and `abort` take no lock, because both
 #      are for running while a rollout is.
-#   3. Read and validate the inventory, and order the servers primaries first, backups last.
+#   3. Check the inventory, read it, and order the servers primaries first, backups last.
 #   4. --dry-run prints what each server holds and how the load balancer sees it, and stops.
 #   5. Phase 0: download the release on the load balancer, once per variant the fleet asks for, and
 #      say what the fleet is running now — a split fleet is reported, never refused, because
 #      rolling out again is how it is put right.
-#   6. Phase 1: preflight. Every server has to be UP in each backend it names and answer /health
-#      and /health/database; its asset is delivered to it and `deploy.sh check --from` runs there;
-#      and the fleet has to agree on one index version. A problem here stops the run, with nothing
-#      drained and nothing installed.
-#   7. Phase 2: one server at a time, in that order. Check the backends can spare it, drain it,
+#   6. Phase 1: preflight, through the checks in loadbalancer/checks.sh. HAProxy has to run every
+#      backend the inventory names; every server has to be UP in each of them, answer /health and
+#      /health/database, take its asset and pass `deploy.sh check --from` with it,
+#      and be one the backends can spare; and the fleet has to agree on one index version. A
+#      problem here stops the run, with nothing drained and nothing installed.
+#   7. Phase 2: one server at a time, in that order. Check again the backends can spare it, drain it,
 #      wait for its connections to end, put it in maintenance, install the staged binary through
 #      `deploy.sh deploy --no-rollback` on the deadline that server asked for, confirm /health and
 #      /health/database over the network, and return it to the pool only then. A failure asks the
@@ -43,10 +44,15 @@ readonly HERE
 # shellcheck source=lib.sh
 source "${HERE}/lib.sh"
 
-# Resolved through every link, so installed it is the haproxy.sh of the release this run started from,
-# however long the run, and not of whichever release an install puts in place meanwhile.
-HAPROXY="$(cd -P "${HERE}/loadbalancer" && pwd)/haproxy.sh"
-readonly HAPROXY
+# Resolved through every link, so installed it is the haproxy.sh and checks.sh of the release this
+# run started from, however long the run, and not of whichever release an install puts in place
+# meanwhile.
+LOADBALANCER="$(cd -P "${HERE}/loadbalancer" && pwd)"
+readonly LOADBALANCER
+readonly HAPROXY="${LOADBALANCER}/haproxy.sh"
+[ -f "${LOADBALANCER}/checks.sh" ] || die "there is no checks.sh in ${LOADBALANCER}; run loadbalancer/install.sh again"
+# shellcheck source=loadbalancer/checks.sh
+source "${LOADBALANCER}/checks.sh"
 
 # This host's own settings live outside the checkout, because the inventory names the fleet and the
 # configuration names where failures are emailed. Beside the script is the fallback, so running from
@@ -248,30 +254,9 @@ read_inventory() {
     local name host port backends server
     while read -r name host port backends server _; do
         case ${name:-} in ''|\#*) continue ;; esac
-        [ -n "$server" ] || die "inventory line for '${name}' has too few fields"
         [ -z "$ONLY" ] || [ "$ONLY" = "$name" ] || continue
         printf '%s %s %s %s %s\n' "$name" "$host" "$port" "$backends" "$server"
     done < "$INVENTORY"
-}
-
-# The inventory is hand-edited, and two of its mistakes are silent: a repeated name makes one line
-# unreachable through the asset map, and a repeated haproxy_server drains one host while updating
-# another.
-validate_inventory() {
-    local name host port backends server seen_names='' seen_servers=''
-    local lines=$1
-
-    while read -r name host port backends server; do
-        [ -n "$name" ] || continue
-        case " ${seen_names} " in *" ${name} "*) die "the inventory names '${name}' twice" ;; esac
-        case " ${seen_servers} " in *" ${server} "*) die "the inventory uses HAProxy server '${server}' twice" ;; esac
-        seen_names="${seen_names} ${name}"
-        seen_servers="${seen_servers} ${server}"
-
-        case $port in
-            '' | *[!0-9]*) die "${name} has port '${port}', which is not a number" ;;
-        esac
-    done <<<"$lines"
 }
 
 # Primaries first, backups last.
@@ -304,13 +289,18 @@ ssh_target() {
     if [ -n "$SSH_USER" ]; then printf '%s@%s\n' "$SSH_USER" "$1"; else printf '%s\n' "$1"; fi
 }
 
-# -n throughout: ssh reads its standard input to forward it, and these run inside `while read`
-# loops whose standard input is the inventory. Without it the first call swallows the rest of the
-# fleet and the rollout silently stops after one server.
+# One command on a server, as the operator. -n throughout: ssh reads its standard input to forward
+# it, and these run inside `while read` loops whose standard input is the inventory. Without it the
+# first call swallows the rest of the fleet and the rollout silently stops after one server.
+on_host() {
+    # shellcheck disable=SC2029  # the command is built here on purpose, not on the server.
+    ssh "${SSH_OPTIONS[@]}" "$(ssh_target "$1")" "$2"
+}
+
+# deploy.sh on a server, with the arguments given.
 on_server() {
     local host=$1; shift
-    # shellcheck disable=SC2029  # the command is built here on purpose, not on the server.
-    ssh "${SSH_OPTIONS[@]}" "$(ssh_target "$host")" "${REMOTE_DEPLOY} $*"
+    on_host "$host" "${REMOTE_DEPLOY} $*"
 }
 
 # Downloads the release once, for every server to be fed from, and prints "name asset" per server.
@@ -392,47 +382,36 @@ report_fleet_versions() {
 
 # Refuses to start from a fleet that cannot take the change, before anything is drained.
 #
-# Everything is collected rather than stopped at, so one run tells the operator the whole story. The
+# Every check is run rather than stopped at, so one run tells the operator the whole story. The
 # binary is staged here too, and `deploy.sh check --from` executes it on each host: a build for the
 # wrong architecture matches its checksum and still cannot run, and learning that from the first
 # server means that server is already out of the pool.
 preflight() {
-    local lines=$1 name host port backends server failures=0 versions=''
+    local lines=$1 name host port backends server failures=0 versions='' in_haproxy=true
+
+    check_haproxy_backends "$lines" || { failures=$((failures + 1)); in_haproxy=false; }
 
     while read -r name host port backends server; do
         [ -n "$name" ] || continue
-        local states
-        states=$("$HAPROXY" states "${backends}/${server}")
-        # Every backend has to read UP, possibly with a check counter after it.
-        if printf '%s' "$states" | grep -qvE '^([[:alnum:]_.-]+=UP[^=]*)+$'; then
-            log "preflight: ${name} is ${states}"
-            failures=$((failures + 1))
+        # Only what HAProxy runs has a state to ask about; what it does not is reported above.
+        if [ "$in_haproxy" = true ]; then
+            check_server_up "$name" "${backends}/${server}" || failures=$((failures + 1))
+            check_backend_capacity "$backends" "$server" || [ "$ALLOW_DOWNTIME" = true ] || failures=$((failures + 1))
         fi
-
-        local route
-        for route in /health /health/database; do
-            if [ "$(http_code "http://${host}:${port}${route}")" != "200" ]; then
-                log "preflight: ${name} does not answer ${route}"
-                failures=$((failures + 1))
-            fi
-        done
+        check_server_health "$name" "$host" "$port" || failures=$((failures + 1))
 
         # The asset this host asks for, delivered now and kept for phase 2, so the bytes that were
         # verified here are the bytes that get installed.
         local asset report
         asset=${ASSET_OF[$name]}
         if ! stage_on "$host" "$asset"; then
-            log "preflight: could not reach ${name} over ssh"
+            log "preflight: could not put ${asset} on ${name}"
             failures=$((failures + 1))
             continue
         fi
 
-        if ! report=$(on_server "$host" check --from "${REMOTE_STAGING}/${asset}" 2>&1); then
-            log "preflight: ${name} is not ready:"
-            printf '%s\n' "$report" | sed 's/^/    /' >&2
-            failures=$((failures + 1))
-            continue
-        fi
+        report=$(check_server_ready "$name" "$host" --from "${REMOTE_STAGING}/${asset}") \
+            || { failures=$((failures + 1)); continue; }
 
         local index_version
         index_version=$(printf '%s\n' "$report" | env_value index_version)
@@ -448,20 +427,9 @@ preflight() {
         TIMEOUT_OF[$name]=$asked
     done <<<"$lines"
 
+    check_fleet_index "$versions" || [ "$ALLOW_INDEX_MISMATCH" = true ] || failures=$((failures + 1))
+
     [ "$failures" -eq 0 ] || die "${failures} preflight problem(s); nothing was touched"
-
-    # One fleet, one index. Two servers on different UniProt versions answer the same request
-    # differently depending on which one the load balancer picked, and every health check still
-    # passes, so nothing else would ever notice.
-    local distinct
-    distinct=$(distinct_values "$versions")
-    if [ "$distinct" -gt 1 ]; then
-        if [ "$ALLOW_INDEX_MISMATCH" != true ]; then
-            die "the fleet does not agree on an index: ${versions}; pass --allow-index-mismatch to accept that"
-        fi
-        log "the fleet does not agree on an index: ${versions}"
-    fi
-
     log "preflight passed: ${versions}"
 }
 
@@ -470,8 +438,7 @@ preflight() {
 stage_on() {
     local host=$1 asset=$2
 
-    # shellcheck disable=SC2029  # the path is built here on purpose: this run owns it.
-    ssh "${SSH_OPTIONS[@]}" "$(ssh_target "$host")" "mkdir -p ${REMOTE_STAGING}" || return 1
+    on_host "$host" "mkdir -p ${REMOTE_STAGING}" || return 1
     STAGED_ON="${STAGED_ON} ${host}"
     scp "${SCP_OPTIONS[@]}" "${TMP_DIR}/${asset}" "${TMP_DIR}/SHA256SUMS" \
         "$(ssh_target "$host"):${REMOTE_STAGING}/" || return 1
@@ -494,15 +461,13 @@ restore_target() {
 # attempted, so a bad release can never take the whole fleet down.
 update_server() {
     local name=$1 host=$2 port=$3 backends=$4 server=$5 asset=$6
-    local target="${backends}/${server}" thinnest
+    local target="${backends}/${server}"
 
     log "=== ${name} ==="
 
-    # Preflight was minutes ago and capacity can move. Every backend it sits in has to keep a server.
-    thinnest=$("$HAPROXY" least-up "$backends")
-    if [ "$thinnest" -le 1 ] && [ "$ALLOW_DOWNTIME" != true ]; then
-        die "${server} is the only server UP in one of ${backends//,/, }; draining it is an outage. Pass --allow-downtime to accept that."
-    fi
+    # Preflight was minutes ago and capacity can move.
+    check_backend_capacity "$backends" "$server" || [ "$ALLOW_DOWNTIME" = true ] \
+        || die "${name} was not drained"
 
     # From the drain until the server is back, this is the one server outside the pool, and after a
     # signal `finish` is the only thing left to say so.
@@ -741,8 +706,7 @@ finish() {
     fi
 
     for host in $STAGED_ON; do
-        # shellcheck disable=SC2029  # the path is built here on purpose: this run owns it.
-        ssh "${SSH_OPTIONS[@]}" "$(ssh_target "$host")" "rm -rf ${REMOTE_STAGING}" 2>/dev/null || \
+        on_host "$host" "rm -rf ${REMOTE_STAGING}" 2>/dev/null || \
             log "could not clear ${REMOTE_STAGING} on ${host}"
     done
     [ -n "$TMP_DIR" ] && rm -rf "$TMP_DIR"
@@ -1030,8 +994,8 @@ do_ready() {
 main() {
     # Read once and passed around, rather than re-read by each phase that wants it.
     local inventory
+    check_inventory_entries "$INVENTORY" || die "the inventory, ${INVENTORY}, has the problems above"
     inventory=$(read_inventory)
-    validate_inventory "$inventory"
 
     local -a servers=()
     mapfile -t servers < <(ordered_servers "$inventory")

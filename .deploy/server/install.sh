@@ -97,6 +97,7 @@ install -m 0644 "${HERE}/../lib.sh" "${staging}/deploy/"
 install -m 0644 "${HERE}/../lib/"*.sh "${staging}/deploy/lib/"
 install -m 0644 "${HERE}/checks.sh" "${staging}/deploy/server/"
 install -m 0755 "${HERE}/deploy.sh" "${staging}/deploy/server/"
+# The old one is moved aside before the new one takes its name, and removed once it has.
 rm -rf "${ROOT:?}/deploy.old"
 [ ! -e "${ROOT}/deploy" ] || mv "${ROOT}/deploy" "${ROOT}/deploy.old"
 mv "${staging}/deploy" "${ROOT}/deploy"

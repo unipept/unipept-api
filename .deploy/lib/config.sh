@@ -1,7 +1,12 @@
 # shellcheck shell=bash
 #
 # How a script reads its settings: the `key=value` lines of an environment file, or of what
-# `deploy.sh status` prints. Needs nothing else. Sourced through .deploy/lib.sh.
+# `deploy.sh status` prints; and where the rollout finds deploy.sh on a server unless rollout.conf
+# says otherwise. Needs nothing else. Sourced through .deploy/lib.sh.
+
+# Where server/install.sh puts deploy.sh on a server, which the rollout calls over ssh.
+# shellcheck disable=SC2034  # read by the scripts that source this file.
+readonly DEFAULT_REMOTE_DEPLOY=/opt/unipept-api/deploy/server/deploy.sh
 
 # Reads one key out of `key=value` lines: a systemd environment file when given a path, otherwise
 # standard input, which is the shape `deploy.sh status` prints for the rollout to read.

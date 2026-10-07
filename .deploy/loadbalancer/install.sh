@@ -145,9 +145,8 @@ install_config "${SOURCE}/servers.example.conf" "${CONFIG}/servers.conf" "$OPERA
 take_rollout_lock || die "$(rollout_lock_refused $?). Install once it has finished."
 
 # The same shape as the checkout, because rollout.sh resolves haproxy.sh as loadbalancer/haproxy.sh
-# relative to itself, and haproxy.sh lib.sh one level up. Staged whole, then each entry swapped in
-# by a rename: nothing the checkout no longer has lingers. The parts of lib.sh before lib.sh, and
-# lib.sh before the scripts that load it, so a rollout started meanwhile finds what they load.
+# relative to itself, and haproxy.sh lib.sh one level up. Staged whole, then swapped in, so nothing
+# the checkout no longer has lingers.
 staging="${ROOT}/.staging"
 rm -rf "${staging:?}"
 install -d -m 0755 "${staging}/lib" "${staging}/loadbalancer"
@@ -155,6 +154,9 @@ install -m 0644 "${SOURCE}/lib/"*.sh "${staging}/lib/"
 install -m 0644 "${SOURCE}/lib.sh" "${staging}/lib.sh"
 install -m 0755 "${SOURCE}/rollout.sh" "${staging}/rollout.sh"
 install -m 0755 "${HERE}/haproxy.sh" "${staging}/loadbalancer/haproxy.sh"
+# Each entry swapped in by a rename, what is loaded before what loads it, so a rollout started
+# meanwhile finds the files of its own release: the parts of lib.sh, lib.sh, then the scripts. The
+# old one is moved aside before the new one takes its name, and removed once it has.
 for entry in lib lib.sh loadbalancer rollout.sh; do
     rm -rf "${ROOT:?}/${entry}.old"
     [ ! -e "${ROOT}/${entry}" ] || mv "${ROOT}/${entry}" "${ROOT}/${entry}.old"
@@ -247,7 +249,7 @@ readonly AUDIT_SSH=(-n "${SSH_CONNECTION_BOUNDS[@]}")
 # Every server the inventory names, reached the way a rollout reaches it.
 ssh_user=$(conf_value SSH_USER)
 remote=$(conf_value REMOTE_DEPLOY)
-remote=${remote:-/opt/unipept-api/deploy/server/deploy.sh}
+remote=${remote:-$DEFAULT_REMOTE_DEPLOY}
 
 while read -r name host _ _ _; do
     case ${name:-} in '' | \#*) continue ;; esac

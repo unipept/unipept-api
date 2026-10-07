@@ -56,7 +56,7 @@ HAPROXY_SOCKET=/run/haproxy/haproxy.sock
 # The service user owns the binary directory and restarts its own user unit, so a deploy needs no
 # privilege and the rollout carries no sudo.
 SSH_USER=unipept
-REMOTE_DEPLOY=/opt/unipept-api/deploy/server/deploy.sh
+REMOTE_DEPLOY=$DEFAULT_REMOTE_DEPLOY
 # Seconds to wait for a draining server to finish. Above the API's own 150-second request timeout,
 # so a server answers or gives up before this runs out.
 DRAIN_TIMEOUT=240

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Prepares the load balancer to run rollouts. Run once, as root.
+# Prepares the load balancer to run rollouts, and updates its scripts. Run as root, once and after
+# each release.
 #
 # It installs the scripts, puts this host's configuration somewhere that is not a git checkout, and
 # then audits what a rollout depends on: the admin socket, the backends HAProxy is actually running,
@@ -147,12 +148,13 @@ take_rollout_lock || die "$(rollout_lock_refused $?). Install once it has finish
 
 # The same shape as the checkout, because rollout.sh resolves haproxy.sh as loadbalancer/haproxy.sh
 # relative to itself, and haproxy.sh lib.sh one level up. A release, made whole in releases/ and put
-# in place at once by switch_release: a rollout started meanwhile finds one release or the other
-# whole, an install stopped part way leaves the one before, and nothing the checkout no longer has
-# lingers. Named after when it was made, and by which run, so a second install makes its own.
+# in place at once by switch_release: each file a script opens is one whole release's, and a rollout,
+# which would pair two, is refused the lock this holds; an install stopped part way leaves the one
+# before, and nothing the checkout no longer has lingers. Named after when it was made, and by which
+# run, so a second install makes its own.
 release_id="$(date -u +%Y%m%dT%H%M%SZ).$$"
 release="${ROOT}/releases/${release_id}"
-install -d -m 0755 "${ROOT}/releases"
+install -d -m 0755 -o root -g root "${ROOT}/releases"
 install -d -m 0755 "${release}/lib" "${release}/loadbalancer"
 install -m 0644 "${SOURCE}/lib/"*.sh "${release}/lib/"
 install -m 0644 "${SOURCE}/lib.sh" "${release}/lib.sh"

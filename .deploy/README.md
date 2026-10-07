@@ -14,7 +14,7 @@ holding copies.
 | `loadbalancer/haproxy.sh` | the HAProxy runtime API: drain, ready, wait |
 | `server/unipept-api.service` | systemd **user** unit, installed at `~unipept/.config/systemd/user/` |
 | `server/unipept-api.env.example` | per-host configuration, installed at `/opt/unipept-api/etc/unipept-api.env` |
-| `server/install.sh` | prepares a host once. The only step that needs root |
+| `server/install.sh` | prepares a host, and updates its scripts. The only step that needs root |
 | `server/deploy.sh` | installs or puts back a binary on one server, or restarts it on another database |
 | `server/checks.sh` | what a server has to be before `deploy.sh` runs, starts or installs anything: one function per check |
 
@@ -25,7 +25,7 @@ it uses of the others.
 
 | Part | What it holds |
 | --- | --- |
-| `lib/core.sh` | the shell options, `log`, `die`, `require`, `need_value`, the error trap |
+| `lib/core.sh` | the shell options, `log`, `die`, `require`, `need_value`, the error trap, `switch_release` |
 | `lib/config.sh` | reading `key=value` settings, from a file or from `deploy.sh status` |
 | `lib/locks.sh` | the rollout lock and the API lock, both at fixed paths in `/run/lock` |
 | `lib/release.sh` | where a release is published, its file names, the download, checksums |

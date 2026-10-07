@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Prepares a server to run the API. Run once per host, as root.
+# Prepares a server to run the API, and updates the scripts a deploy runs. Run as root, once per
+# host and after each release.
 #
 # This is the only step that needs root. Afterwards the service user owns everything a deploy
 # touches and restarts its own unit, so no deploy uses sudo.
@@ -89,10 +90,11 @@ fi
 # since only this script changes it; the service user runs it and changes nothing in it. Re-running
 # install.sh is how it is updated.
 #
-# A release, made whole in releases/ and put in place at once by switch_release: a deploy started
-# meanwhile finds one release or the other whole, and is refused the lock this holds; an install
-# stopped part way leaves the one before; and nothing the checkout no longer has lingers. Named
-# after when it was made, and by which run, so a second install of the same commit makes its own.
+# A release, made whole in releases/ and put in place at once by switch_release: each file a script
+# opens is one whole release's, and a deploy, which would pair two, is refused the lock this holds;
+# an install stopped part way leaves the one before; and nothing the checkout no longer has lingers.
+# Named after when it was made, and by which run, so a second install of the same commit makes its
+# own.
 release_id="$(date -u +%Y%m%dT%H%M%SZ).$$"
 release="${ROOT}/releases/${release_id}"
 install -d -m 0755 -o root -g root "${ROOT}/releases"

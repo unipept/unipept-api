@@ -459,9 +459,10 @@ rm -rf /srv/index-next
 
 section "the API lock: what changes the service, or installs, is refused while another holds it"
 LOCK=/run/lock/unipept-api.lock
-# Held by another process, on a descriptor opened for reading as the scripts open it. `exec`, so the
-# kill below ends the process that holds it.
-( flock -n 7 && exec sleep 30 ) 7<"$LOCK" &
+# Held by another process, on a descriptor opened for reading as the scripts open it. Waiting for the
+# lock, so a poll below that takes it for an instant does not make it give up; `exec`, so the kill
+# below ends the process that holds it; long enough for every case below.
+( flock 7 && exec sleep 300 ) 7<"$LOCK" &
 holder=$!
 for _ in $(seq 50); do ( flock -n 7 ) 7<"$LOCK" || break; sleep 0.1; done
 running=$(/opt/unipept-api/bin/unipept-api --version)

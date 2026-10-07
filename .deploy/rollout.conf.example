@@ -6,7 +6,8 @@
 
 # HAProxy runtime socket. It ships as srw------- root:haproxy, so either run the rollout as root, or
 # set `mode 660` on the stats socket line in haproxy.cfg and put the operator in the haproxy group.
-# Only the load balancer side needs privilege; the servers need none.
+# The line needs `level admin` too, since draining a server is an admin command. The install's audit
+# checks all three. Only the load balancer side needs privilege; the servers need none.
 HAPROXY_SOCKET=/run/haproxy/haproxy.sock
 
 # SSH user on every API server. It is the service user: it owns the binary directory and restarts its

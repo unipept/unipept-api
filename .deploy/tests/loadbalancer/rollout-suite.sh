@@ -195,11 +195,17 @@ $1 || exit 1" >/tmp/one-check.log 2>&1
 }
 printf 'patty patty 9101 all_handlers patty\npatty selma 9102 all_handlers selma\n' > /tmp/twice.conf
 sed 's#uri /health/database#uri /private_api/metadata.json#' /etc/haproxy/haproxy.cfg > /tmp/bad-haproxy.cfg
-# A socket left with a mode of its own, nothing listening on it.
-socat UNIX-LISTEN:/tmp/mode.sock,unlink-close=0 /dev/null >/dev/null 2>&1 &
-stale=$!
-for _ in $(seq 50); do [ -S /tmp/mode.sock ] && break; sleep 0.1; done
-kill "$stale" 2>/dev/null; wait "$stale" 2>/dev/null
+# Sockets left with a mode of their own, nothing listening on them: the haproxy group's, and root's
+# alone.
+groupadd haproxy 2>/dev/null
+for sock in /tmp/mode.sock /tmp/closed.sock; do
+  socat UNIX-LISTEN:"$sock",unlink-close=0 /dev/null >/dev/null 2>&1 &
+  stale=$!
+  for _ in $(seq 50); do [ -S "$sock" ] && break; sleep 0.1; done
+  kill "$stale" 2>/dev/null; wait "$stale" 2>/dev/null
+done
+chgrp haproxy /tmp/mode.sock /tmp/closed.sock; chmod 660 /tmp/mode.sock; chmod 600 /tmp/closed.sock
+useradd outsider 2>/dev/null
 sed 's/^backend db_handlers$/backend db_handlers   # the routes that need OpenSearch/' /etc/haproxy/haproxy.cfg > /tmp/commented-haproxy.cfg
 
 both_ways check_inventory_entries "check_inventory_entries /work/servers.conf" \
@@ -210,12 +216,20 @@ both_ways check_haproxy_answers "check_haproxy_answers /run/haproxy/haproxy.sock
   "check_haproxy_answers /run/haproxy/absent.sock" "no HAProxy admin socket at"
 both_ways check_haproxy_answers "check_haproxy_answers /run/haproxy/haproxy.sock" \
   "check_haproxy_answers /tmp/mode.sock" "HAProxy does not answer on /tmp/mode.sock"
+both_ways check_haproxy_answers "check_haproxy_answers /run/haproxy/haproxy.sock" \
+  "check_haproxy_answers /run/haproxy/operator.sock" "is at level operator, and draining a server needs level admin"
+su outsider -s /bin/bash -c "source /work/lib.sh; HAPROXY=/work/loadbalancer/haproxy.sh; source /work/loadbalancer/checks.sh; check_haproxy_answers /tmp/closed.sock || exit 1" >/tmp/one-check.log 2>&1
+check "check_haproxy_answers fails for a user who cannot use the socket" "$?" "1"
+check "and says so" "$(grep -c 'check: outsider cannot use /tmp/closed.sock; join the haproxy group' /tmp/one-check.log)" "1"
+both_ways check_haproxy_socket_mode "check_haproxy_socket_mode /tmp/mode.sock /etc/haproxy/haproxy.cfg" \
+  "check_haproxy_socket_mode /tmp/closed.sock /etc/haproxy/haproxy.cfg" "the admin socket is mode 600, so only root can use it"
 chmod 760 /tmp/mode.sock
 one_check "check_haproxy_socket_mode /tmp/mode.sock /etc/haproxy/haproxy.cfg"
 check "check_haproxy_socket_mode takes a group that can read and write" "$?" "0"
-chmod 600 /tmp/mode.sock
-both_ways check_haproxy_socket_mode "check_haproxy_socket_mode /run/haproxy/haproxy.sock /etc/haproxy/haproxy.cfg" \
-  "check_haproxy_socket_mode /tmp/mode.sock /etc/haproxy/haproxy.cfg" "the admin socket is mode 600, so only root can use it"
+chmod 660 /tmp/mode.sock; chgrp root /tmp/mode.sock
+one_check "check_haproxy_socket_mode /tmp/mode.sock /etc/haproxy/haproxy.cfg"
+check "check_haproxy_socket_mode fails for another group's socket" "$?" "1"
+check "and says so" "$(grep -c 'belongs to the group root, so the haproxy group cannot use it' /tmp/one-check.log)" "1"
 both_ways check_haproxy_backends "check_haproxy_backends patty all_handlers,db_handlers patty" \
   "check_haproxy_backends patty all_handlers,absent_backend patty" "HAProxy is not running absent_backend/patty, which the inventory names for patty$"
 both_ways check_haproxy_health_uris "check_haproxy_health_uris /tmp/commented-haproxy.cfg" \
@@ -254,7 +268,7 @@ one_check "HAPROXY_SOCKET=/run/haproxy/absent.sock check_backend_capacity all_ha
 check "and stops the script where HAProxy cannot be asked" "$?" "2"
 both_ways check_fleet_index "check_fleet_index 'patty=2026.09 selma=2026.09 '" \
   "check_fleet_index 'patty=2026.09 selma=2026.02 '" "the fleet does not agree on an index"
-rm -f /tmp/twice.conf /tmp/bad-haproxy.cfg /tmp/commented-haproxy.cfg /tmp/mode.sock
+rm -f /tmp/twice.conf /tmp/bad-haproxy.cfg /tmp/commented-haproxy.cfg /tmp/mode.sock /tmp/closed.sock
 
 section "4e. a backend HAProxy does not run is named, with the line the install's audit uses"
 cp /work/servers.conf /tmp/servers.keep

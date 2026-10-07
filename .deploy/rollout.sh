@@ -362,6 +362,10 @@ report_fleet_versions() {
 preflight() {
     local lines=$1 name host port backends server failures=0 versions=''
 
+    # Every check below asks HAProxy, so one that cannot be asked is said once, before anything is
+    # staged.
+    check_haproxy_answers "$HAPROXY_SOCKET" || die "nothing was touched"
+
     while read -r name host port backends server; do
         [ -n "$name" ] || continue
         if check_haproxy_backends "$name" "$backends" "$server" && check_server_up "$name" "${backends}/${server}"; then

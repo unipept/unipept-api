@@ -123,6 +123,20 @@ check "both backends, all three servers" "$(sort /tmp/servers.txt | tr '\n' ' ')
   "all_handlers/patty all_handlers/rick all_handlers/selma db_handlers/patty db_handlers/rick db_handlers/selma "
 HAPROXY_SOCKET=/run/haproxy/absent.sock $H servers >/tmp/e5 2>&1
 check "no socket: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+check "level reads admin"  "$($H level)" "admin"
+check "and operator on that socket" "$(HAPROXY_SOCKET=/run/haproxy/operator.sock $H level)" "operator"
+# A socket that answers with a message rather than a stat dump.
+socat UNIX-LISTEN:/run/haproxy/talker.sock,fork SYSTEM:'echo Unknown command.' >/dev/null 2>&1 &
+talker=$!
+sleep 1
+HAPROXY_SOCKET=/run/haproxy/talker.sock $H servers >/tmp/e6 2>&1
+check "servers refuses an answer with no header" "$?" "2"
+HAPROXY_SOCKET=/run/haproxy/talker.sock $H emptied-by all_handlers/patty >/tmp/e7 2>&1
+check "and so does emptied-by" "$?" "2"
+$H emptied-by nosuch/patty >/tmp/e8 2>&1
+check "as it does a backend HAProxy does not have" "$?" "2"
+kill $talker >/dev/null 2>&1
+rm -f /run/haproxy/talker.sock
 
 # The fake backends hold stdout open; without this a pipe on the outside never sees EOF.
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1

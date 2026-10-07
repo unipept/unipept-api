@@ -75,23 +75,33 @@ check_inventory_entries() {
     return "$status"
 }
 
-# The admin socket is how a rollout drains and restores a server, and HAProxy has to answer on it: a
-# socket left behind by one that stopped is still a socket. haproxy.sh's own error is left out,
-# since its advice is about who asks, and this is about whether anything answers.
+# The admin socket is how a rollout drains and restores a server. Whoever runs this has to be able to
+# use it, HAProxy has to answer on it — a socket left behind by one that stopped is still a socket —
+# and at the admin level, which every change of a server's state needs.
 check_haproxy_answers() {
-    local socket=$1
+    local socket=$1 level
 
     [ -S "$socket" ] || { log "check: no HAProxy admin socket at ${socket}"; return 1; }
-    HAPROXY_SOCKET=$socket "$HAPROXY" servers >/dev/null 2>&1 \
-        || { log "check: HAProxy does not answer on ${socket}"; return 1; }
+    [ -r "$socket" ] && [ -w "$socket" ] \
+        || { log "check: $(id -un) cannot use ${socket}; join the haproxy group, and log in again"; return 1; }
+    if ! level=$(HAPROXY_SOCKET=$socket "$HAPROXY" level 2>/dev/null) \
+        || ! HAPROXY_SOCKET=$socket "$HAPROXY" servers >/dev/null 2>&1; then
+        log "check: HAProxy does not answer on ${socket}"
+        return 1
+    fi
+    [ "$level" = admin ] \
+        || { log "check: ${socket} is at level ${level:-unknown}, and draining a server needs level admin"; return 1; }
 }
 
-# The haproxy group is how the operator reaches the socket, so the group has to be able to read and
-# write it.
+# The haproxy group is how the operator reaches the socket, so the socket has to be that group's, and
+# the group able to read and write it.
 check_haproxy_socket_mode() {
-    local socket=$1 config=$2 mode
+    local socket=$1 config=$2 group mode
 
-    mode=$(stat -c %a "$socket")
+    read -r group mode < <(stat -c '%G %a' "$socket" 2>/dev/null) \
+        || { log "check: cannot read the mode of ${socket}"; return 1; }
+    [ "$group" = haproxy ] \
+        || { log "check: ${socket} belongs to the group ${group}, so the haproxy group cannot use it"; return 1; }
     case ${mode: -2:1} in
         6 | 7) ;;
         *)

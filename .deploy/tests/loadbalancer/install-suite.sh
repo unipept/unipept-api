@@ -22,6 +22,8 @@ done
 sleep 1
 haproxy -f /etc/haproxy/haproxy.cfg -D
 sleep 3
+# What `group haproxy` on the stats socket line gives a load balancer.
+chgrp haproxy /run/haproxy/haproxy.sock
 
 # An ssh that answers the way a prepared server would, so the connectivity audit has something real
 # to talk to.

@@ -114,6 +114,14 @@ check "well inside 30s" "$([ "$elapsed" -lt 30 ] && echo yes)" "yes"
 kill $deaf >/dev/null 2>&1
 rm -f /run/haproxy/deaf.sock
 
+section "8. servers lists every backend/server pair HAProxy runs"
+$H servers >/tmp/servers.txt 2>&1
+check "exit 0"            "$?" "0"
+check "both backends, all three servers" "$(sort /tmp/servers.txt | tr '\n' ' ')" \
+  "all_handlers/patty all_handlers/rick all_handlers/selma db_handlers/patty db_handlers/rick db_handlers/selma "
+HAPROXY_SOCKET=/run/haproxy/absent.sock $H servers >/tmp/e5 2>&1
+check "no socket: non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
+
 # The fake backends hold stdout open; without this a pipe on the outside never sees EOF.
 pkill -f 'TCP-LISTEN' >/dev/null 2>&1
 kill "$(jobs -p)" >/dev/null 2>&1

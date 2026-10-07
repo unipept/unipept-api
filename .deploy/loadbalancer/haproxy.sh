@@ -35,9 +35,10 @@ usage: haproxy.sh <command> <backend[,backend...]>/<server> [arguments]
   up-count <backend>           print how many servers in one backend are UP
   least-up <backend[,...]>     print the smallest UP count across the backends
   is-backup <target>           exit 0 when the server is a backup in any of its backends
+  servers                      print "backend/server" for every server HAProxy runs
 
-Every command but state, sessions, up-count and least-up takes several backends at once. The
-socket path comes from HAPROXY_SOCKET.
+Every command but state, sessions, up-count, least-up and servers takes several backends at once.
+The socket path comes from HAPROXY_SOCKET.
 EOF
     exit 2
 }
@@ -231,6 +232,14 @@ is_backup() {
     [ "$backup" = "1" ] || exit 1
 }
 
+# Every server in every backend, as "backend/server", for comparing with what the inventory expects.
+servers() {
+    runtime "show stat" | awk -F, '
+        /^#/ { next }
+        $2 != "BACKEND" && $2 != "FRONTEND" && $2 != "" { print $1 "/" $2 }
+    '
+}
+
 # "backend=status" per backend, for a caller that wants to report rather than wait.
 states() {
     local backends server
@@ -255,9 +264,10 @@ single_value() {
     esac
 }
 
-[ $# -ge 2 ] || usage
+[ $# -ge 1 ] || usage
 command=$1
 shift
+[ "$command" = servers ] || [ $# -ge 1 ] || usage
 
 case $command in
     drain) set_state "$1" drain ;;
@@ -271,5 +281,6 @@ case $command in
     up-count) up_count "$1" ;;
     least-up) least_up "$1" ;;
     is-backup) is_backup "$1" ;;
+    servers) servers ;;
     *) usage ;;
 esac

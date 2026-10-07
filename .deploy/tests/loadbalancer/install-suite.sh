@@ -188,21 +188,22 @@ section "no install while a rollout runs"
 flock /run/lock/unipept-rollout.lock sleep 5 &
 holder=$!
 for _ in $(seq 50); do flock -n /run/lock/unipept-rollout.lock true 2>/dev/null || break; sleep 0.1; done
-before=$(stat -c %Y /opt/unipept-rollout/rollout.sh)
+before=$(stat -L -c %Y /opt/unipept-rollout/rollout.sh)
 touch -d '2000-01-01' /opt/unipept-rollout/rollout.sh
 /deploy/loadbalancer/install.sh >/tmp/i-lock.log 2>&1
 check "refused"                  "$?" "2"
 check "and says a rollout holds it" "$(grep -c 'another rollout holds /run/lock/unipept-rollout.lock.*Install once it has finished' /tmp/i-lock.log)" "1"
-check "nothing was replaced"     "$(stat -c %Y /opt/unipept-rollout/rollout.sh)" "$(date -d '2000-01-01' +%s)"
+check "nothing was replaced"     "$(stat -L -c %Y /opt/unipept-rollout/rollout.sh)" "$(date -d '2000-01-01' +%s)"
 wait "$holder"
 touch -d "@${before}" /opt/unipept-rollout/rollout.sh
 # A part an earlier checkout had, and this one does not.
 touch /opt/unipept-rollout/lib/gone.sh
 /deploy/loadbalancer/install.sh >/tmp/i-lock.log 2>&1
 check_absent "once it has finished, the install is not refused" 'a rollout holds' /tmp/i-lock.log
-check "and replaces the files" "$([ "$(stat -c %Y /opt/unipept-rollout/rollout.sh)" -gt "$(date -d '2000-01-01' +%s)" ] && echo yes)" "yes"
+check "and replaces the files" "$([ "$(stat -L -c %Y /opt/unipept-rollout/rollout.sh)" -gt "$(date -d '2000-01-01' +%s)" ] && echo yes)" "yes"
 check "leaving nothing the checkout no longer has" "$(ls /opt/unipept-rollout/lib)" "$(ls /deploy/lib)"
-check "nor anything staged or moved aside" "$(ls /opt/unipept-rollout | tr '\n' ' ')" "lib lib.sh loadbalancer rollout.sh "
+check "nor any release but the one in place" "$(ls /opt/unipept-rollout/releases)" "$(basename "$(readlink /opt/unipept-rollout/release)")"
+check "each script found through it" "$(readlink /opt/unipept-rollout/rollout.sh) $(readlink /opt/unipept-rollout/lib)" "release/rollout.sh release/lib"
 
 section "a lock the install makes is one the operator can read"
 # Where no rollout has run yet, the install makes the lock, as root and with root's umask. A

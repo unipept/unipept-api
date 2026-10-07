@@ -15,8 +15,8 @@
 #   3. Create /opt/unipept-api, root's, and its bin and etc directories, owned by that user.
 #   4. Write etc/unipept-api.env from the example, or keep the file already there.
 #   5. Install deploy.sh, the checks it makes and lib.sh in deploy/, laid out as the checkout lays
-#      them out: deploy/server/deploy.sh is the path the rollout calls over ssh. Staged whole and
-#      swapped in by a rename, so nothing the checkout no longer has lingers.
+#      them out: deploy/server/deploy.sh is the path the rollout calls over ssh. A release made
+#      whole in releases/, put in place at once by switch_release.
 #   6. Install the port redirect script, in root/, and its system unit, both owned by root.
 #   7. Install the service unit in the service user's ~/.config/systemd/user.
 #   8. Enable and restart unipept-api-ports, so port 80 reaches the port the service binds.
@@ -89,21 +89,19 @@ fi
 # since only this script changes it; the service user runs it and changes nothing in it. Re-running
 # install.sh is how it is updated.
 #
-# Staged whole, then swapped in by a rename: nothing the checkout no longer has lingers, and a
-# deploy started meanwhile finds one release or the other, and is refused the lock this holds.
-staging="${ROOT}/.staging"
-rm -rf "${staging:?}"
-install -d -m 0755 "${staging}/deploy/lib" "${staging}/deploy/server"
-install -m 0644 "${HERE}/../lib.sh" "${staging}/deploy/"
-install -m 0644 "${HERE}/../lib/"*.sh "${staging}/deploy/lib/"
-install -m 0644 "${HERE}/checks.sh" "${staging}/deploy/server/"
-install -m 0755 "${HERE}/deploy.sh" "${staging}/deploy/server/"
-# The old one is moved aside before the new one takes its name, and removed once it has.
-rm -rf "${ROOT:?}/deploy.old"
-[ ! -e "${ROOT}/deploy" ] || mv "${ROOT}/deploy" "${ROOT}/deploy.old"
-mv "${staging}/deploy" "${ROOT}/deploy"
-rm -rf "${ROOT:?}/deploy.old"
-rmdir "$staging"
+# A release, made whole in releases/ and put in place at once by switch_release: a deploy started
+# meanwhile finds one release or the other whole, and is refused the lock this holds; an install
+# stopped part way leaves the one before; and nothing the checkout no longer has lingers. Named
+# after when it was made, and by which run, so a second install of the same commit makes its own.
+release_id="$(date -u +%Y%m%dT%H%M%SZ).$$"
+release="${ROOT}/releases/${release_id}"
+install -d -m 0755 -o root -g root "${ROOT}/releases"
+install -d -m 0755 "${release}/deploy/lib" "${release}/deploy/server"
+install -m 0644 "${HERE}/../lib.sh" "${release}/deploy/"
+install -m 0644 "${HERE}/../lib/"*.sh "${release}/deploy/lib/"
+install -m 0644 "${HERE}/checks.sh" "${release}/deploy/server/"
+install -m 0755 "${HERE}/deploy.sh" "${release}/deploy/server/"
+switch_release "$ROOT" "$release_id" deploy
 log "installed ${ROOT}/deploy/server/deploy.sh"
 
 # The service cannot bind port 80 itself, so a netfilter rule sends 80 to the port it does bind.

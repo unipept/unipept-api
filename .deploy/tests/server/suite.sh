@@ -23,14 +23,17 @@ mirrored_files() {
 installed_files() { (cd /opt/unipept-api/deploy && find . -type f | sed 's#^\./##' | sort); }
 check "the install mirrors the checkout, file for file" "$(installed_files)" "$(mirrored_files)"
 check "deploy.sh runnable" "$(stat -c '%U %a' /opt/unipept-api/deploy/server/deploy.sh)" "root 755"
-check "all of it root's, which only install.sh changes" "$(find /opt/unipept-api/deploy -printf '%u\n' | sort -u)" "root"
+check "all of it root's, which only install.sh changes" "$(find -L /opt/unipept-api/deploy -printf '%u\n' | sort -u)" "root"
+check "found through the one release" "$(readlink /opt/unipept-api/deploy) $(readlink /opt/unipept-api/release)" \
+    "release/deploy releases/$(ls /opt/unipept-api/releases)"
 check "and so is the install's root, so the service user cannot replace what root runs" \
     "$(stat -c %U /opt/unipept-api)" "root"
 check "the port script root's, in a directory root owns" \
     "$(stat -c '%U %a' /opt/unipept-api/root /opt/unipept-api/root/unipept-api-ports.sh | tr '\n' ' ')" "root 755 root 755 "
 check "the unit runs that one" "$(sed -n 's/^ExecStart=//p' /etc/systemd/system/unipept-api-ports.service)" "/opt/unipept-api/root/unipept-api-ports.sh"
 check "beside the service user's bin and etc, and nothing else" \
-    "$(find /opt/unipept-api -mindepth 1 -maxdepth 1 -printf '%f %u\n' | sort | tr '\n' ' ')" "bin unipept deploy root etc unipept root root "
+    "$(find /opt/unipept-api -mindepth 1 -maxdepth 1 -printf '%f %u\n' | sort | tr '\n' ' ')" \
+    "bin unipept deploy root etc unipept release root releases root root root "
 
 # A fake index holding every file start() opens, since `check` now requires them and `deploy` runs
 # `check` first. Created before the first deploy, not half way down.
@@ -894,7 +897,7 @@ section "install.sh is idempotent and keeps an edited env file"
 touch /opt/unipept-api/deploy/server/gone.sh
 $R/server/install.sh >/dev/null 2>&1; check "exit 0" "$?" "0"
 check "leaving nothing the checkout no longer has" "$(installed_files)" "$(mirrored_files)"
-check "nor anything staged or moved aside" "$(find /opt/unipept-api -mindepth 1 -maxdepth 1 -printf '%f\n' | sort | tr '\n' ' ')" "bin deploy etc root "
+check "nor any release but the one in place" "$(ls /opt/unipept-api/releases)" "$(basename "$(readlink /opt/unipept-api/release)")"
 check "PORT kept" "$(sed -n 's/^PORT=//p' /opt/unipept-api/etc/unipept-api.env)" "8099"
 
 summary

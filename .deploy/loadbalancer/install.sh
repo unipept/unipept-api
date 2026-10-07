@@ -146,25 +146,19 @@ install_config "${SOURCE}/servers.example.conf" "${CONFIG}/servers.conf" "$OPERA
 take_rollout_lock || die "$(rollout_lock_refused $?). Install once it has finished."
 
 # The same shape as the checkout, because rollout.sh resolves haproxy.sh as loadbalancer/haproxy.sh
-# relative to itself, and haproxy.sh lib.sh one level up. Staged whole, then swapped in, so nothing
-# the checkout no longer has lingers.
-staging="${ROOT}/.staging"
-rm -rf "${staging:?}"
-install -d -m 0755 "${staging}/lib" "${staging}/loadbalancer"
-install -m 0644 "${SOURCE}/lib/"*.sh "${staging}/lib/"
-install -m 0644 "${SOURCE}/lib.sh" "${staging}/lib.sh"
-install -m 0755 "${SOURCE}/rollout.sh" "${staging}/rollout.sh"
-install -m 0755 "${HERE}/haproxy.sh" "${staging}/loadbalancer/haproxy.sh"
-# Each entry swapped in by a rename, what is loaded before what loads it, so a rollout started
-# meanwhile finds the files of its own release: the parts of lib.sh, lib.sh, then the scripts. The
-# old one is moved aside before the new one takes its name, and removed once it has.
-for entry in lib lib.sh loadbalancer rollout.sh; do
-    rm -rf "${ROOT:?}/${entry}.old"
-    [ ! -e "${ROOT}/${entry}" ] || mv "${ROOT}/${entry}" "${ROOT}/${entry}.old"
-    mv "${staging}/${entry}" "${ROOT}/${entry}"
-    rm -rf "${ROOT:?}/${entry}.old"
-done
-rmdir "$staging"
+# relative to itself, and haproxy.sh lib.sh one level up. A release, made whole in releases/ and put
+# in place at once by switch_release: a rollout started meanwhile finds one release or the other
+# whole, an install stopped part way leaves the one before, and nothing the checkout no longer has
+# lingers. Named after when it was made, and by which run, so a second install makes its own.
+release_id="$(date -u +%Y%m%dT%H%M%SZ).$$"
+release="${ROOT}/releases/${release_id}"
+install -d -m 0755 "${ROOT}/releases"
+install -d -m 0755 "${release}/lib" "${release}/loadbalancer"
+install -m 0644 "${SOURCE}/lib/"*.sh "${release}/lib/"
+install -m 0644 "${SOURCE}/lib.sh" "${release}/lib.sh"
+install -m 0755 "${SOURCE}/rollout.sh" "${release}/rollout.sh"
+install -m 0755 "${HERE}/haproxy.sh" "${release}/loadbalancer/haproxy.sh"
+switch_release "$ROOT" "$release_id" lib lib.sh loadbalancer rollout.sh
 log "installed the scripts in ${ROOT}"
 
 # The socket is the one thing a rollout cannot do without, and the only privilege it needs.

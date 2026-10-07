@@ -109,6 +109,42 @@ check "an option the script does not take stops it with status 2" "$?" "2"
 check "and says where to look" "$output" "Error: unknown option '--no-such-option'. Run with --help for the options."
 
 
+section "core.sh: switch_release"
+
+# GNU mv's -T, which every host has; a host without it, such as macOS, has none of these cases.
+if mv --version > /dev/null 2>&1; then
+    root="${TEMP_DIR}/install"
+    mkdir -p "${root}/releases/first/scripts"
+    echo first > "${root}/releases/first/scripts/run.sh"
+    echo kept > "${root}/settings"
+
+    script=$(core_script switch-release.sh 'switch_release "$1" "$2" scripts')
+    "$script" "$root" first
+    check "a first release is put in place" "$?" "0"
+    check "and found through its entry" "$(cat "${root}/scripts/run.sh")" "first"
+    check "which is a link through release" "$(readlink "${root}/scripts") $(readlink "${root}/release")" "release/scripts releases/first"
+
+    mkdir -p "${root}/releases/second/scripts"
+    echo second > "${root}/releases/second/scripts/run.sh"
+    "$script" "$root" second
+    check "the next replaces it" "$(cat "${root}/scripts/run.sh")" "second"
+    check "and the one before is gone" "$(ls "${root}/releases")" "second"
+    check "with nothing else of the install touched, and no new link left over" \
+        "$(find "$root" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort | tr '\n' ' ')" "release releases scripts settings "
+
+    # What an install stopped part way leaves: a release never put in place.
+    mkdir -p "${root}/releases/half/scripts" "${root}/releases/third/scripts"
+    echo third > "${root}/releases/third/scripts/run.sh"
+    "$script" "$root" third
+    check "is removed by the next" "$(ls "${root}/releases")" "third"
+
+    # An entry that is a directory, not a link: replaced by one.
+    rm "${root}/scripts" && mkdir "${root}/scripts"
+    "$script" "$root" third
+    check "an entry that is no link becomes one" "$(readlink "${root}/scripts")" "release/scripts"
+fi
+
+
 section "core.sh: the error trap"
 
 script=$(core_script fails.sh 'false')

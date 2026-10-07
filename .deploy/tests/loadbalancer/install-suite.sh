@@ -202,7 +202,7 @@ touch /opt/unipept-rollout/lib/gone.sh
 check_absent "once it has finished, the install is not refused" 'a rollout holds' /tmp/i-lock.log
 check "and replaces the files" "$([ "$(stat -L -c %Y /opt/unipept-rollout/rollout.sh)" -gt "$(date -d '2000-01-01' +%s)" ] && echo yes)" "yes"
 check "leaving nothing the checkout no longer has" "$(ls /opt/unipept-rollout/lib)" "$(ls /deploy/lib)"
-check "nor any release but the one in place" "$(ls /opt/unipept-rollout/releases)" "$(basename "$(readlink /opt/unipept-rollout/release)")"
+check "nor any release but the one in place and the one it replaced" "$(find /opt/unipept-rollout/releases -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
 check "each script found through it" "$(readlink /opt/unipept-rollout/rollout.sh) $(readlink /opt/unipept-rollout/lib)" "release/rollout.sh release/lib"
 
 section "a lock the install makes is one the operator can read"

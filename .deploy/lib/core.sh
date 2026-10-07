@@ -67,24 +67,26 @@ unknown_option() {
 
 # Puts the release an install has made whole in ROOT/releases/ID in place, at once, for an install
 # run as root. ROOT/release is a link to the release, and the one thing that changes: a new link is
-# renamed over it, which is atomic, so a script started at any moment finds one release whole, and
-# an install stopped part way leaves the one before in place. Each ENTRY of ROOT, what the scripts
-# are run and found by, is a link through it, release/ENTRY, made where it is not one already. The
-# releases it replaces, and what an install stopped part way left, go once nothing names them.
+# renamed over it, which is atomic, so each file a script opens from then on is the new release's,
+# and an install stopped part way leaves the one before in place. Each ENTRY of ROOT, what the
+# scripts are run and found by, is a link through it, release/ENTRY, made where it is not one
+# already. The release it replaces stays until the next, for a run that opened its script there and
+# a shell whose working directory is in it; every other entry of releases/ goes, what an install
+# stopped part way left among them.
 switch_release() {
-    local root=$1 id=$2 entry release
+    local root=$1 id=$2 entry before
     shift 2
 
-    ln -sfn "releases/${id}" "${root}/release.new"
+    before=$(readlink "${root}/release" || true)
+    rm -rf "${root:?}/release.new"
+    ln -s "releases/${id}" "${root}/release.new"
     mv -fT "${root}/release.new" "${root}/release"
     for entry in "$@"; do
         [ "$(readlink "${root}/${entry}" || true)" != "release/${entry}" ] || continue
         rm -rf "${root:?}/${entry}"
         ln -s "release/${entry}" "${root}/${entry}"
     done
-    for release in "${root}/releases/"*; do
-        [ "$release" = "${root}/releases/${id}" ] || rm -rf "$release"
-    done
+    find "${root}/releases" -mindepth 1 -maxdepth 1 ! -name "$id" ! -name "${before#releases/}" -exec rm -rf {} +
 }
 
 # The ERR trap: a command that failed where nothing expected it to. Names the script, the command,

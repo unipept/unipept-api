@@ -39,9 +39,9 @@ path in both. `server/install.sh` installs them as `/opt/unipept-api/deploy/lib.
 
 Each install builds a release whole in `releases/` and puts it in place with `switch_release` from
 `lib/core.sh`: `release` is a link to it, renamed over the old one in one step, and each installed
-entry, such as `deploy`, is a link through it. A script started at any moment finds one release
-whole, an install stopped part way leaves the one before in place, and nothing a checkout no longer
-has is left behind.
+entry, such as `deploy`, is a link through it. Each file a script opens is one whole release's, an
+install stopped part way leaves the one before in place, and nothing a checkout no longer has is
+left behind. The release replaced stays until the next install, for a run that started from it.
 
 `lib/core.sh` is the same file in every repository that deploys Unipept. Its header lists what a script's exit status means, which is the same for every script.
 

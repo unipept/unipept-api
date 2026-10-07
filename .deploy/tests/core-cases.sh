@@ -128,15 +128,18 @@ if mv --version > /dev/null 2>&1; then
     echo second > "${root}/releases/second/scripts/run.sh"
     "$script" "$root" second
     check "the next replaces it" "$(cat "${root}/scripts/run.sh")" "second"
-    check "and the one before is gone" "$(ls "${root}/releases")" "second"
+    check "and the one before stays, for what started from it" "$(find "${root}/releases" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort | tr '\n' ' ')" "first second "
     check "with nothing else of the install touched, and no new link left over" \
         "$(find "$root" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort | tr '\n' ' ')" "release releases scripts settings "
 
-    # What an install stopped part way leaves: a release never put in place.
-    mkdir -p "${root}/releases/half/scripts" "${root}/releases/third/scripts"
+    # What an install stopped part way leaves: a release never put in place, a dot-named one, and a
+    # new link made into a directory.
+    mkdir -p "${root}/releases/half/scripts" "${root}/releases/.staging" "${root}/release.new" "${root}/releases/third/scripts"
     echo third > "${root}/releases/third/scripts/run.sh"
     "$script" "$root" third
-    check "is removed by the next" "$(ls "${root}/releases")" "third"
+    check "is removed by the next, which keeps the one before and no other" \
+        "$(find "${root}/releases" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort | tr '\n' ' ')" "second third "
+    check "and puts its own in place" "$(cat "${root}/scripts/run.sh") $(readlink "${root}/release")" "third releases/third"
 
     # An entry that is a directory, not a link: replaced by one.
     rm "${root}/scripts" && mkdir "${root}/scripts"

@@ -897,7 +897,7 @@ section "install.sh is idempotent and keeps an edited env file"
 touch /opt/unipept-api/deploy/server/gone.sh
 $R/server/install.sh >/dev/null 2>&1; check "exit 0" "$?" "0"
 check "leaving nothing the checkout no longer has" "$(installed_files)" "$(mirrored_files)"
-check "nor any release but the one in place" "$(ls /opt/unipept-api/releases)" "$(basename "$(readlink /opt/unipept-api/release)")"
+check "nor any release but the one in place and the one it replaced" "$(find /opt/unipept-api/releases -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
 check "PORT kept" "$(sed -n 's/^PORT=//p' /opt/unipept-api/etc/unipept-api.env)" "8099"
 
 summary

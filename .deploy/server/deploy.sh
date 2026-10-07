@@ -13,7 +13,12 @@
 #
 # Flow:
 #   The first argument selects what runs. The signal handlers are installed before it is read, so an
-#   interrupt always clears the staged file, and one after the swap rolls back.
+#   interrupt always clears what this run staged, and one after the swap rolls back.
+#
+#   deploy, rollback, stop and start change the service, and take the API lock before anything else,
+#   refusing rather than waiting where something else holds it. A caller that holds it already, for a change
+#   to the index this host serves, hands it down on descriptor 7 (see take_api_lock). check and
+#   status change nothing and take no lock, so both answer while something else holds it.
 #
 #   deploy:
 #     1. Parse the flags. --timeout defaults to READY_TIMEOUT in the environment file, so a host
@@ -46,8 +51,9 @@
 #   INDEX_LOCATION, before anything points the service at it. Print key=value for a caller to read,
 #   and exit 1 if anything is wrong.
 #
-#   status: print the installed version, the previous one, the variant, the port, and whether the
-#   unit is active.
+#   status: print the format of what follows, the installed version, the previous one, the variant,
+#   the port, whether the unit is active, the index it serves with that index's version and
+#   OpenSearch index, and the path of the API lock.
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
@@ -269,6 +275,11 @@ download_asset() {
 # Whether the binary in place is the new one, which decides what an interrupt has to undo.
 swapped=false
 
+# Whether this run holds the API lock, and so may clear the staged file. Every deploy.sh on this host
+# stages at the same path, and one refused the lock, or a check or a status run meanwhile, must not
+# clear the file of the deploy that holds it.
+locked=false
+
 # Runs on every exit, including a signal.
 #
 # HUP is in the list because the rollout invokes this over ssh: interrupting the rollout closes the
@@ -292,7 +303,7 @@ on_signal() {
 }
 
 clean_staging() {
-    rm -f "$STAGED"
+    [ "$locked" = false ] || rm -f "$STAGED"
     [ -n "${DOWNLOAD_DIR:-}" ] && rm -rf "$DOWNLOAD_DIR"
     return 0
 }
@@ -355,6 +366,8 @@ do_check() {
                 if check_index_version "$index" "$index_version"; then
                     opensearch_index=$(index_name "$index_version")
                 else
+                    # Not printed below: it may hold anything, a line of its own included.
+                    index_version='-'
                     problems=$((problems + 1))
                 fi
             else
@@ -582,16 +595,36 @@ reported_version() {
     printf '%s\n' "${reported:-unknown}"
 }
 
-# key=value lines, so the rollout can read them.
+# key=value lines, for the rollout and for whatever changes the index this host serves, so neither
+# reads this host's files itself.
+#
+# status_format comes first and says how to read the rest: it is raised only where a line changes
+# meaning or goes, and a caller refuses a format it does not know. A line added keeps it.
+#
+# The index's version and its OpenSearch index are `-` where its .version cannot be read or names no
+# index, so a .version of several lines never adds one here; `check` says why.
 do_status() {
+    local index version named index_version='-' opensearch_index='-'
+
     prepare_user_manager
 
+    index=$(env_value INDEX_LOCATION "$ENV_FILE" || true)
+    if [ -n "$index" ] && [ -f "${index}/.version" ] && [ -r "${index}/.version" ] &&
+        version=$(version_in "${index}/.version") && named=$(index_name "$version"); then
+        index_version=$version
+        opensearch_index=$named
+    fi
+
+    printf 'status_format=1\n'
     printf 'version=%s\n' "$(reported_version "$BINARY")"
     printf 'previous=%s\n' "$(reported_version "$PREVIOUS")"
     printf 'variant=%s\n' "$(env_value VARIANT "$ENV_FILE" || true)"
     printf 'port=%s\n' "$(env_value PORT "$ENV_FILE" || true)"
-
     printf 'active=%s\n' "$(systemctl --user is-active "$SERVICE" || true)"
+    printf 'index_location=%s\n' "$index"
+    printf 'index_version=%s\n' "$index_version"
+    printf 'opensearch_index=%s\n' "$opensearch_index"
+    printf 'api_lock=%s\n' "$API_LOCK"
 }
 
 [ $# -gt 0 ] || usage
@@ -603,6 +636,16 @@ trap 'on_signal INT' INT
 trap 'on_signal TERM' TERM
 trap 'on_signal HUP' HUP
 trap clean_staging EXIT
+
+# The commands that change the service take the API lock before they read their flags, so one that is
+# refused has done nothing.
+case $command in
+    deploy | rollback | stop | start)
+        require flock
+        take_api_lock || die "$(api_lock_refused $?)"
+        locked=true
+        ;;
+esac
 
 case $command in
     # A host with problems is a check's "no", exit 1. Said here, since do_check also answers the

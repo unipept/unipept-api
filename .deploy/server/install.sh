@@ -8,7 +8,8 @@
 # It installs no binary: deploy.sh does that, here and on every release after it.
 #
 # Flow:
-#   1. Check that every command it uses is installed, and that this runs as root.
+#   1. Check that every command it uses is installed, and that this runs as root. Take the API lock,
+#      so no deploy, rollback, start or stop runs while this changes the host.
 #   2. Create the unipept user, or give an account that already exists a login shell: the rollout
 #      runs the deploy over ssh, and sshd needs a shell to exec a remote command.
 #   3. Create /opt/unipept-api and its bin, etc and lib directories, owned by that user.
@@ -20,6 +21,7 @@
 #   8. Enable and restart unipept-api-ports, so port 80 reaches the port the service binds.
 #   9. Enable lingering for the service user, and wait for its runtime directory to appear.
 #  10. Enable the user unit as that user. It is not started: there is no binary until a deploy.
+#      Let go of the API lock.
 #  11. Print what is left to do by hand on this host.
 #  12. Run `deploy.sh check`, and report what is still wrong now rather than at the first deploy.
 
@@ -34,8 +36,14 @@ readonly USER=unipept
 readonly ROOT=/opt/unipept-api
 readonly ENV_FILE="${ROOT}/etc/unipept-api.env"
 
-require getent install iptables loginctl setpriv systemctl useradd usermod
+require flock getent install iptables loginctl setpriv systemctl useradd usermod
 [ "$(id -u)" -eq 0 ] || die "run this as root. It is the only step that needs it."
+
+# A deploy, rollback, start or stop running while this changes the host could load one release's
+# lib.sh into another's deploy.sh, or restart the service on a unit being replaced. So this holds the
+# API lock until the unit is enabled, and refuses, before it changes anything, while anything else
+# holds it. The service user can take the lock file this leaves: it is made 0644.
+take_api_lock || die "$(api_lock_refused $?). Install once it has finished."
 
 # A home directory, because a user unit lives in it. A real shell, because the rollout runs
 # `ssh unipept@host .../deploy.sh`, and sshd execs a remote command through the login shell:
@@ -73,8 +81,10 @@ fi
 
 # The rollout runs these over SSH as the service user, so they sit at a fixed path it owns.
 # Re-running install.sh is how they are updated.
-# The parts of lib.sh before lib.sh, and lib.sh and checks.sh before deploy.sh, so a deploy started
-# meanwhile finds what the files beside it load.
+
+# The parts of lib.sh before lib.sh, and lib.sh and checks.sh before deploy.sh. A deploy started
+# meanwhile loads them before it asks for the lock, so it then finds what it loads and is refused
+# the lock, rather than failing on a part not there yet.
 install -d -m 0755 -o "$USER" -g "$USER" "${ROOT}/lib/lib"
 install -m 0644 -o "$USER" -g "$USER" "${HERE}/../lib/"*.sh "${ROOT}/lib/lib/"
 install -m 0644 -o "$USER" -g "$USER" "${HERE}/../lib.sh" "${ROOT}/lib/lib.sh"
@@ -117,6 +127,10 @@ as_user() {
 as_user systemctl --user daemon-reload
 as_user systemctl --user enable "$SERVICE"
 log "enabled ${SERVICE}, not started: it has no binary until deploy.sh runs"
+
+# Held until here, so no deploy restarts the service on a unit or a port redirect being replaced. Let
+# go before what is left, which changes nothing, so the check at the end does not hold it.
+exec 7<&-
 
 cat >&2 <<EOF
 

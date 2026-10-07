@@ -101,6 +101,12 @@ as_user "/opt/unipept-api/lib/deploy.sh status" > /tmp/st.txt 2>/dev/null
 check "version line" "$(sed -n 's/^version=//p' /tmp/st.txt)" "2.6.0"
 check "variant line" "$(sed -n 's/^variant=//p' /tmp/st.txt)" "hybrid"
 check "active line"  "$(sed -n 's/^active=//p' /tmp/st.txt)" "active"
+check "the format first" "$(head -1 /tmp/st.txt)" "status_format=1"
+check "the index it serves" "$(sed -n 's/^index_location=//p' /tmp/st.txt)" "/srv/index"
+check "that index's version" "$(sed -n 's/^index_version=//p' /tmp/st.txt)" "2026.09-test"
+check "and its OpenSearch index" "$(sed -n 's/^opensearch_index=//p' /tmp/st.txt)" "uniprot_entries-2026-09-test"
+check "the API lock" "$(sed -n 's/^api_lock=//p' /tmp/st.txt)" "/run/lock/unipept-api.lock"
+check "the lock install.sh made, which any account can open" "$(stat -c '%a' /run/lock/unipept-api.lock)" "644"
 
 section "upgrade keeps the old binary"
 d2=$(stage 2.7.0 yes)
@@ -159,6 +165,20 @@ check "exit 0"          "$?" "0"
 check "says unknown"    "$(sed -n 's/^version=//p' /tmp/f2.log)" "unknown"
 check "still reports variant" "$(sed -n 's/^variant=//p' /tmp/f2.log)" "hybrid"
 cp /tmp/keep-real /opt/unipept-api/bin/unipept-api
+
+section "status names no index version where the index has none"
+sed -i 's#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/nowhere#' /opt/unipept-api/etc/unipept-api.env
+as_user "/opt/unipept-api/lib/deploy.sh status" >/tmp/f3.log 2>&1
+check "exit 0" "$?" "0"
+check "the index as configured" "$(sed -n 's/^index_location=//p' /tmp/f3.log)" "/srv/nowhere"
+check "no version" "$(sed -n 's/^index_version=//p' /tmp/f3.log)" "-"
+check "no OpenSearch index" "$(sed -n 's/^opensearch_index=//p' /tmp/f3.log)" "-"
+mkdir -p /srv/nowhere && printf '2026.09\nversion=9.9.9\n' > /srv/nowhere/.version
+as_user "/opt/unipept-api/lib/deploy.sh status" >/tmp/f4.log 2>&1
+check "a .version of two lines: no version" "$(sed -n 's/^index_version=//p' /tmp/f4.log)" "-"
+check "and adds no line" "$(grep -c '^version=' /tmp/f4.log)" "1"
+rm -rf /srv/nowhere
+sed -i 's#^INDEX_LOCATION=.*#INDEX_LOCATION=/srv/index#' /opt/unipept-api/etc/unipept-api.env
 
 section "a restart that fails rolls back rather than aborting"
 cp /opt/unipept-api/bin/unipept-api /opt/unipept-api/bin/unipept-api.previous
@@ -436,6 +456,68 @@ as_user "/opt/unipept-api/lib/deploy.sh start --timeout 30" >/tmp/r4.log 2>&1
 check "start clears it: exit 0" "$?" "0"
 check "back on the first" "$(as_user 'systemctl --user is-active unipept-api')" "active"
 rm -rf /srv/index-next
+
+section "the API lock: what changes the service, or installs, is refused while another holds it"
+LOCK=/run/lock/unipept-api.lock
+# Held by another process, on a descriptor opened for reading as the scripts open it. Waiting for the
+# lock, so a poll below that takes it for an instant does not make it give up; `exec`, so the kill
+# below ends the process that holds it; long enough for every case below.
+( flock 7 && exec sleep 300 ) 7<"$LOCK" &
+holder=$!
+for _ in $(seq 50); do ( flock -n 7 ) 7<"$LOCK" || break; sleep 0.1; done
+running=$(/opt/unipept-api/bin/unipept-api --version)
+d_locked=$(stage 6.6.6 yes)
+# Where the deploy that holds the lock stages its binary: nothing refused or merely reading clears it.
+printf 'staged\n' > /opt/unipept-api/bin/unipept-api.new; chown unipept: /opt/unipept-api/bin/unipept-api.new
+for command in "deploy --from $d_locked/unipept-api-6.6.6-x86_64-linux-gnu-hybrid --timeout 30" \
+    "rollback --timeout 30" stop "start --timeout 30"; do
+  as_user "/opt/unipept-api/lib/deploy.sh $command" >/tmp/l1.log 2>&1
+  check "${command%% *}: exit 2" "$?" "2"
+  check "${command%% *}: says what holds it" "$(grep -c "holds ${LOCK}; wait for it to finish" /tmp/l1.log)" "1"
+done
+check "binary untouched" "$(/opt/unipept-api/bin/unipept-api --version)" "$running"
+check "still active" "$(as_user 'systemctl --user is-active unipept-api')" "active"
+as_user "/opt/unipept-api/lib/deploy.sh check" >/dev/null 2>&1
+check "check answers meanwhile" "$?" "0"
+as_user "/opt/unipept-api/lib/deploy.sh status" >/tmp/l2.log 2>&1
+check "status answers meanwhile" "$(sed -n 's/^active=//p' /tmp/l2.log)" "active"
+check "the holder's staged binary left alone" "$(cat /opt/unipept-api/bin/unipept-api.new 2>/dev/null)" "staged"
+rm -f /opt/unipept-api/bin/unipept-api.new
+touch -d '2000-01-01' /opt/unipept-api/lib/deploy.sh
+$R/server/install.sh >/tmp/l7.log 2>&1
+check "install.sh: exit 2" "$?" "2"
+check "install.sh: says to wait" "$(grep -c "holds ${LOCK}; wait for it to finish. Install once it has finished." /tmp/l7.log)" "1"
+check "install.sh: deploy.sh not replaced" "$(stat -c %Y /opt/unipept-api/lib/deploy.sh)" "$(date -d '2000-01-01' +%s)"
+kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
+$R/server/install.sh >/tmp/l8.log 2>&1
+check "install.sh once it is free: exit 0" "$?" "0"
+check "and replaces deploy.sh" "$([ "$(stat -c %Y /opt/unipept-api/lib/deploy.sh)" != "$(date -d '2000-01-01' +%s)" ] && echo yes)" "yes"
+
+section "the API lock: a caller that holds it hands it down on descriptor 7"
+as_user "exec 7<${LOCK} && flock -n 7 && /opt/unipept-api/lib/deploy.sh stop && /opt/unipept-api/lib/deploy.sh start --timeout 30" >/tmp/l3.log 2>&1
+check "stop and start under it: exit 0" "$?" "0"
+check "started" "$(grep -c 'started$' /tmp/l3.log)" "1"
+check "active" "$(as_user 'systemctl --user is-active unipept-api')" "active"
+# The caller's lock still keeps out a deploy.sh it did not hand it to.
+as_user "exec 7<${LOCK} && flock -n 7 && /opt/unipept-api/lib/deploy.sh stop 7<&-" >/tmp/l4.log 2>&1
+check "one not handed it: exit 2" "$?" "2"
+check "is refused" "$(grep -c "holds ${LOCK}" /tmp/l4.log)" "1"
+check "still active" "$(as_user 'systemctl --user is-active unipept-api')" "active"
+
+section "the API lock: one that cannot be read or made is said so"
+mv "$LOCK" /tmp/api-lock.keep
+: > "$LOCK"; chmod 600 "$LOCK"
+as_user "/opt/unipept-api/lib/deploy.sh stop" >/tmp/l5.log 2>&1
+check "unreadable: exit 2" "$?" "2"
+check "names its owner" "$(grep -c "cannot read ${LOCK}, which belongs to root" /tmp/l5.log)" "1"
+rm -f "$LOCK"
+chmod 1755 /run/lock
+as_user "/opt/unipept-api/lib/deploy.sh stop" >/tmp/l6.log 2>&1
+check "cannot be made: exit 2" "$?" "2"
+check "says why" "$(grep -c "cannot create ${LOCK}" /tmp/l6.log)" "1"
+chmod 1777 /run/lock
+mv /tmp/api-lock.keep "$LOCK"
+check "still active" "$(as_user 'systemctl --user is-active unipept-api')" "active"
 
 section "each failure on its own"
 # A missing index file.

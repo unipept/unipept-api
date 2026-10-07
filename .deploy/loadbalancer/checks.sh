@@ -81,8 +81,10 @@ check_haproxy_answers() {
     local socket=$1
 
     [ -S "$socket" ] || { log "check: no HAProxy admin socket at ${socket}"; return 1; }
-    [ -r "$socket" ] && [ -w "$socket" ] \
-        || { log "check: $(id -un) cannot use ${socket}; join the haproxy group, and log in again"; return 1; }
+    if [ ! -r "$socket" ] || [ ! -w "$socket" ]; then
+        log "check: $(id -un) cannot use ${socket}; join the haproxy group, and log in again"
+        return 1
+    fi
     HAPROXY_SOCKET=$socket "$HAPROXY" level >/dev/null 2>&1 \
         || { log "check: HAProxy does not answer on ${socket}"; return 1; }
 }

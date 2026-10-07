@@ -621,7 +621,7 @@ resolve_failure() {
     if [ "$installed" = "${VERSION#v}" ] && serving "$host" "$port" 10; then
         # The deploy worked; only the connection to it failed.
         log "${name} is serving ${installed} after all, so only the connection failed"
-        STATUS[$name]=$report
+        STATUS[$name]=$(printf '%s\n' "$report" | recorded)
         return_to_pool "$name" "$host" "$port" "$target" ||
             die "stopped at ${name}; the servers after it were not touched"
         return 0
@@ -708,7 +708,7 @@ install_on() {
     fi
 
     # Kept for the closing summary, so the rollout does not ask twice for the same answer.
-    STATUS[$name]=$(on_server "$host" status)
+    STATUS[$name]=$(on_server "$host" status | recorded)
 
     local installed
     installed=$(printf '%s\n' "${STATUS[$name]}" | env_value version)
@@ -808,6 +808,13 @@ Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
     # non-zero return would trip the error trap and turn every "no" into an error.
 }
 
+# The lines of a server's `deploy.sh status` that the closing summary and the journal keep: what it
+# runs and serves. Not INDEX_LOCATION, whose spaces would split a journal line, nor the lock's path or
+# the format, which say nothing about the run.
+recorded() {
+    grep -E '^(version|previous|variant|port|active|index_version|opensearch_index)=' || true
+}
+
 # One journal line per server, so "who deployed what, when" has an answer that outlives a terminal.
 #
 # Only for a run that set out to change something. `status` and the recovery commands take no
@@ -891,7 +898,7 @@ a_run_is_in_progress() {
     #
     # Taking the lock and letting go is the whole test. A failure for any other reason reads as a
     # run in progress, which is the answer that refuses to act.
-    ! { flock -n 8; } 8< "$ROLLOUT_LOCK" 2>/dev/null
+    ! { flock -n 8; } 2>/dev/null 8< "$ROLLOUT_LOCK"
 }
 
 # Reads the fleet without changing any of it. What to reach for after a run stopped part way, or
@@ -929,7 +936,7 @@ do_status() {
             "$("$HAPROXY" states "${backends}/${server}" 2>/dev/null || echo unreachable)" \
             "$(printf '%s\n' "$report" | env_value version)" \
             "$(printf '%s\n' "$report" | env_value variant)" \
-            "$(on_server "$host" check 2>/dev/null | env_value index_version || echo '-')"
+            "$(index=$(printf '%s\n' "$report" | env_value index_version); printf '%s\n' "${index:--}")"
     done <<<"$inventory"
 }
 

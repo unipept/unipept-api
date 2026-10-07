@@ -38,7 +38,7 @@ case "$cmd" in
     [ -n "${FAKE_CHECK_FAILS:-}" ] && { echo "check: ${FAKE_CHECK_FAILS}" >&2; echo "problems=1"; exit 1; }
     printf 'variant=%s\nport=80\nindex_version=%s\nproblems=0\nwarnings=0\n' \
       "${FAKE_VARIANT:-hybrid}" "${FAKE_INDEX:-2026.09-test}" ;;
-  *status*) printf 'version=%s\nprevious=2.5.3\nvariant=%s\nport=80\nactive=active\n' "${FAKE_VERSION:-2.6.0}" "${FAKE_VARIANT:-hybrid}" ;;
+  *status*) printf 'status_format=1\nversion=%s\nprevious=2.5.3\nvariant=%s\nport=80\nactive=active\nindex_location=/srv/uniprot 2026\nindex_version=%s\nopensearch_index=uniprot_entries-2026-09-test\napi_lock=/run/lock/unipept-api.lock\n' "${FAKE_VERSION:-2.6.0}" "${FAKE_VARIANT:-hybrid}" "${FAKE_INDEX:-2026.09-test}" ;;
   *"deploy --from"*)
     [ -n "${FAKE_DEPLOY_BREAKS_HEALTH:-}" ] && touch /tmp/unhealthy
     [ -n "${FAKE_DEPLOY_FAILS:-}" ] && exit 1
@@ -338,7 +338,7 @@ case "$cmd" in
   *"deploy.sh check"*)
     [ -n "${FAKE_CHECK_FAILS:-}" ] && { echo "check: ${FAKE_CHECK_FAILS}" >&2; echo "problems=1"; exit 1; }
     printf 'variant=hybrid\nport=80\nindex_version=2026.09-test\nproblems=0\n' ;;
-  *status*) printf 'version=%s\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n' "${FAKE_VERSION:-2.6.0}" ;;
+  *status*) printf 'status_format=1\nversion=%s\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\nindex_location=/srv/uniprot 2026\nindex_version=2026.09-test\nopensearch_index=uniprot_entries-2026-09-test\napi_lock=/run/lock/unipept-api.lock\n' "${FAKE_VERSION:-2.6.0}" ;;
   *) exit 0 ;;
 esac
 EOF
@@ -350,6 +350,9 @@ chmod +x /usr/local/bin/logger
 $R --version v2.6.0 --allow-downtime >/tmp/r14.txt 2>&1
 check "success: staging gone"  "$(ls -d /tmp/staged-* 2>/dev/null | wc -l | tr -d ' ')" "0"
 check "recorded every server"  "$(grep -c 'outcome=deployed' /tmp/logged.txt)" "3"
+check "with what each serves"  "$(grep 'outcome=deployed' /tmp/logged.txt | grep -c 'index_version=2026.09-test')" "3"
+check_absent "but not the index's path, whose spaces split the line" 'index_location=' /tmp/logged.txt
+check_absent "nor the lock" 'api_lock=' /tmp/logged.txt
 check "recorded the run"       "$(grep -c 'exit=0' /tmp/logged.txt)" "1"
 check "names the operator"     "$(grep -c "by=$(id -un)" /tmp/logged.txt)" "4"
 
@@ -369,8 +372,11 @@ check "after an interrupt: staging gone" "$(ls -d /tmp/staged-* 2>/dev/null | wc
 
 section "15. rollout.sh status reads the fleet without changing it"
 reset_fleet
+: > /tmp/ssh.log
 $R status >/tmp/r16.txt 2>&1
 check "exit 0"            "$?" "0"
+check "the index from status" "$(grep -c '2026.09-test$' /tmp/r16.txt)" "3"
+check_absent "without a check" 'deploy.sh check' /tmp/ssh.log
 check "has a header"      "$(grep -c '^SERVER' /tmp/r16.txt)" "1"
 check "lists all three"   "$(grep -cE '^(patty|selma|rick) ' /tmp/r16.txt)" "3"
 check "shows haproxy"     "$(grep -c 'all_handlers=UP' /tmp/r16.txt)" "3"

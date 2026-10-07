@@ -24,4 +24,4 @@ NOTIFY_TO=unipept@ugent.be
 # Only for a server whose deploy.sh is too old to report a READY_TIMEOUT of its own. Each server
 # names its deadline in its environment file, where the index it reads is also described.
 #READY_TIMEOUT=900
-#REMOTE_DEPLOY=/opt/unipept-api/lib/deploy.sh
+#REMOTE_DEPLOY=/opt/unipept-api/deploy/server/deploy.sh

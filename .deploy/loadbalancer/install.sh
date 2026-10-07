@@ -34,7 +34,7 @@ readonly HERE
 readonly SOURCE="${HERE}/.."
 
 # shellcheck source=../lib.sh
-source "${SOURCE}/lib.sh"
+source "${SOURCE}/lib.sh" || exit 2
 
 readonly ROOT=/opt/unipept-rollout
 readonly CONFIG=/etc/unipept-rollout
@@ -113,7 +113,7 @@ conf_value() {
     )
 }
 
-install -d -m 0755 "$ROOT" "${ROOT}/lib" "${ROOT}/loadbalancer" "$CONFIG"
+install -d -m 0755 "$ROOT" "$CONFIG"
 
 # This host's own settings, kept out of the checkout: the inventory names the fleet and the
 # configuration names where failures are emailed, neither of which belongs in a repository.
@@ -145,12 +145,23 @@ install_config "${SOURCE}/servers.example.conf" "${CONFIG}/servers.conf" "$OPERA
 take_rollout_lock || die "$(rollout_lock_refused $?). Install once it has finished."
 
 # The same shape as the checkout, because rollout.sh resolves haproxy.sh as loadbalancer/haproxy.sh
-# relative to itself. The parts of lib.sh before lib.sh, and lib.sh before the scripts that load it,
-# so a rollout started meanwhile finds what the files beside it load.
-install -m 0644 "${SOURCE}/lib/"*.sh "${ROOT}/lib/"
-install -m 0644 "${SOURCE}/lib.sh" "${ROOT}/lib.sh"
-install -m 0755 "${SOURCE}/rollout.sh" "${ROOT}/rollout.sh"
-install -m 0755 "${HERE}/haproxy.sh" "${ROOT}/loadbalancer/haproxy.sh"
+# relative to itself, and haproxy.sh lib.sh one level up. Staged whole, then each entry swapped in
+# by a rename: nothing the checkout no longer has lingers. The parts of lib.sh before lib.sh, and
+# lib.sh before the scripts that load it, so a rollout started meanwhile finds what they load.
+staging="${ROOT}/.staging"
+rm -rf "${staging:?}"
+install -d -m 0755 "${staging}/lib" "${staging}/loadbalancer"
+install -m 0644 "${SOURCE}/lib/"*.sh "${staging}/lib/"
+install -m 0644 "${SOURCE}/lib.sh" "${staging}/lib.sh"
+install -m 0755 "${SOURCE}/rollout.sh" "${staging}/rollout.sh"
+install -m 0755 "${HERE}/haproxy.sh" "${staging}/loadbalancer/haproxy.sh"
+for entry in lib lib.sh loadbalancer rollout.sh; do
+    rm -rf "${ROOT:?}/${entry}.old"
+    [ ! -e "${ROOT}/${entry}" ] || mv "${ROOT}/${entry}" "${ROOT}/${entry}.old"
+    mv "${staging}/${entry}" "${ROOT}/${entry}"
+    rm -rf "${ROOT:?}/${entry}.old"
+done
+rmdir "$staging"
 log "installed the scripts in ${ROOT}"
 
 # The socket is the one thing a rollout cannot do without, and the only privilege it needs.
@@ -236,7 +247,7 @@ readonly AUDIT_SSH=(-n "${SSH_CONNECTION_BOUNDS[@]}")
 # Every server the inventory names, reached the way a rollout reaches it.
 ssh_user=$(conf_value SSH_USER)
 remote=$(conf_value REMOTE_DEPLOY)
-remote=${remote:-/opt/unipept-api/lib/deploy.sh}
+remote=${remote:-/opt/unipept-api/deploy/server/deploy.sh}
 
 while read -r name host _ _ _; do
     case ${name:-} in '' | \#*) continue ;; esac

@@ -116,7 +116,7 @@ check "exit non-zero"     "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says it cannot ssh" "$([ "$(grep -c 'cannot ssh' /tmp/i5.log)" -ge 1 ] && echo yes)" "yes"
 echo no-deploy > /tmp/fake-ssh-mode
 /deploy/loadbalancer/install.sh >/tmp/i6.log 2>&1
-check "says deploy.sh is absent" "$([ "$(grep -c 'has no /opt/unipept-api/lib/deploy.sh' /tmp/i6.log)" -ge 1 ] && echo yes)" "yes"
+check "says deploy.sh is absent" "$([ "$(grep -c 'has no /opt/unipept-api/deploy/server/deploy.sh' /tmp/i6.log)" -ge 1 ] && echo yes)" "yes"
 echo check-fails > /tmp/fake-ssh-mode
 /deploy/loadbalancer/install.sh >/tmp/i7.log 2>&1
 check "says the server is not ready" "$([ "$(grep -c 'is not ready' /tmp/i7.log)" -ge 1 ] && echo yes)" "yes"
@@ -196,9 +196,13 @@ check "and says a rollout holds it" "$(grep -c 'another rollout holds /run/lock/
 check "nothing was replaced"     "$(stat -c %Y /opt/unipept-rollout/rollout.sh)" "$(date -d '2000-01-01' +%s)"
 wait "$holder"
 touch -d "@${before}" /opt/unipept-rollout/rollout.sh
+# A part an earlier checkout had, and this one does not.
+touch /opt/unipept-rollout/lib/gone.sh
 /deploy/loadbalancer/install.sh >/tmp/i-lock.log 2>&1
 check_absent "once it has finished, the install is not refused" 'a rollout holds' /tmp/i-lock.log
 check "and replaces the files" "$([ "$(stat -c %Y /opt/unipept-rollout/rollout.sh)" -gt "$(date -d '2000-01-01' +%s)" ] && echo yes)" "yes"
+check "leaving nothing the checkout no longer has" "$(ls /opt/unipept-rollout/lib)" "$(ls /deploy/lib)"
+check "nor anything staged or moved aside" "$(ls /opt/unipept-rollout | tr '\n' ' ')" "lib lib.sh loadbalancer rollout.sh "
 
 section "a lock the install makes is one the operator can read"
 # Where no rollout has run yet, the install makes the lock, as root and with root's umask. A

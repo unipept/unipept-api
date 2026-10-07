@@ -14,7 +14,7 @@
 # haproxy.cfg and put the operator in the haproxy group.
 
 # shellcheck source=../lib.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib.sh" || exit 2
 
 : "${HAPROXY_SOCKET:=/run/haproxy/haproxy.sock}"
 

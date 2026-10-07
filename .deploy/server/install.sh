@@ -8,14 +8,14 @@
 # It installs no binary: deploy.sh does that, here and on every release after it.
 #
 # Flow:
-#   1. Check that every command it uses is installed, and that this runs as root.
+#   1. Check that every command it uses is installed, and that this runs as root. Take the API lock,
+#      so no deploy, rollback, start or stop runs while this changes the host.
 #   2. Create the unipept user, or give an account that already exists a login shell: the rollout
 #      runs the deploy over ssh, and sshd needs a shell to exec a remote command.
 #   3. Create /opt/unipept-api and its bin, etc and lib directories, owned by that user.
 #   4. Write etc/unipept-api.env from the example, or keep the file already there.
-#   5. Take the API lock, so no deploy runs from the files while they are replaced, and install
-#      deploy.sh, the checks it makes and lib.sh in lib/, the path the rollout calls over ssh, and
-#      the parts lib.sh loads in lib/lib/.
+#   5. Install deploy.sh, the checks it makes and lib.sh in lib/, the path the rollout calls over
+#      ssh, and the parts lib.sh loads in lib/lib/.
 #   6. Install the port redirect script and its system unit, both owned by root.
 #   7. Install the service unit in the service user's ~/.config/systemd/user.
 #   8. Enable and restart unipept-api-ports, so port 80 reaches the port the service binds.
@@ -38,6 +38,12 @@ readonly ENV_FILE="${ROOT}/etc/unipept-api.env"
 
 require flock getent install iptables loginctl setpriv systemctl useradd usermod
 [ "$(id -u)" -eq 0 ] || die "run this as root. It is the only step that needs it."
+
+# A deploy, rollback, start or stop running while this changes the host could load one release's
+# lib.sh into another's deploy.sh, or restart the service on a unit being replaced. So this holds the
+# API lock until the unit is enabled, and refuses, before it changes anything, while anything else
+# holds it. The service user can take the lock file this leaves: it is made 0644.
+take_api_lock || die "$(api_lock_refused $?). Install once it has finished."
 
 # A home directory, because a user unit lives in it. A real shell, because the rollout runs
 # `ssh unipept@host .../deploy.sh`, and sshd execs a remote command through the login shell:
@@ -75,11 +81,6 @@ fi
 
 # The rollout runs these over SSH as the service user, so they sit at a fixed path it owns.
 # Re-running install.sh is how they are updated.
-#
-# A deploy, rollback, start or stop running while they are replaced could load one release's lib.sh
-# into another's deploy.sh. So this holds the API lock while it replaces them, and refuses while
-# anything else holds it. The service user can take the lock file this leaves: it is made 0644.
-take_api_lock || die "$(api_lock_refused $?). Install once it has finished."
 
 # The parts of lib.sh before lib.sh, and lib.sh and checks.sh before deploy.sh. A deploy started
 # meanwhile loads them before it asks for the lock, so it then finds what it loads and is refused

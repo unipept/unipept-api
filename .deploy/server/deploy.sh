@@ -13,18 +13,17 @@
 #
 # Flow:
 #   The first argument selects what runs. The signal handlers are installed before it is read, so an
-#   interrupt always clears the staged file, and one after the swap rolls back.
+#   interrupt always clears what this run staged, and one after the swap rolls back.
 #
-#   deploy, rollback, stop and start change the service, and take the API lock first, refusing
-#   rather than waiting where something else holds it. A caller that holds it already, for a change
+#   deploy, rollback, stop and start change the service, and take the API lock before anything else,
+#   refusing rather than waiting where something else holds it. A caller that holds it already, for a change
 #   to the index this host serves, hands it down on descriptor 7 (see take_api_lock). check and
 #   status change nothing and take no lock, so both answer while something else holds it.
 #
 #   deploy:
 #     1. Parse the flags. --timeout defaults to READY_TIMEOUT in the environment file, so a host
 #        that loads slowly carries its own deadline; a value that is not seconds is refused.
-#     2. Take the API lock, then run the same checks as `check`. A host that is not ready installs
-#        nothing.
+#     2. Run the same checks as `check`. A host that is not ready installs nothing.
 #     3. Point `systemctl --user` at the user manager through XDG_RUNTIME_DIR.
 #     4. Take the binary: verify the checksum of the one at --from, or download the asset for this
 #        tag and variant into a temporary directory and verify that one.
@@ -276,10 +275,10 @@ download_asset() {
 # Whether the binary in place is the new one, which decides what an interrupt has to undo.
 swapped=false
 
-# Whether the staged file is this run's to clear: only a deploy's, once it holds the API lock. Every
-# deploy.sh on this host stages at the same path, and one refused the lock, or a check or a status
-# run meanwhile, must not clear the file of the deploy that holds it.
-staging=false
+# Whether this run holds the API lock, and so may clear the staged file. Every deploy.sh on this host
+# stages at the same path, and one refused the lock, or a check or a status run meanwhile, must not
+# clear the file of the deploy that holds it.
+locked=false
 
 # Runs on every exit, including a signal.
 #
@@ -304,7 +303,7 @@ on_signal() {
 }
 
 clean_staging() {
-    [ "$staging" = false ] || rm -f "$STAGED"
+    [ "$locked" = false ] || rm -f "$STAGED"
     [ -n "${DOWNLOAD_DIR:-}" ] && rm -rf "$DOWNLOAD_DIR"
     return 0
 }
@@ -439,8 +438,6 @@ do_deploy() {
     # Before anything else: a bad value is only used after the binary has been swapped, where
     # nothing would roll it back.
     timeout=$(resolve_timeout "$timeout")
-    take_api_lock || die "$(api_lock_refused $?)"
-    staging=true
 
     do_check ${from:+--from "$from"} >/dev/null || die "this host is not ready; run 'deploy.sh check' to see why"
     prepare_user_manager
@@ -510,8 +507,6 @@ do_rollback() {
     done
 
     timeout=$(resolve_timeout "$timeout")
-    # Held already where a failed deploy rolls itself back, and taken again on the same descriptor.
-    take_api_lock || die "$(api_lock_refused $?)"
 
     prepare_user_manager
     [ -f "$PREVIOUS" ] || die "no previous binary at $PREVIOUS"
@@ -547,7 +542,6 @@ rollback_to_previous() {
 }
 
 do_stop() {
-    take_api_lock || die "$(api_lock_refused $?)"
     prepare_user_manager
     log "stopping ${SERVICE}"
     systemctl --user stop "$SERVICE"
@@ -566,7 +560,6 @@ do_start() {
     done
 
     timeout=$(resolve_timeout "$timeout")
-    take_api_lock || die "$(api_lock_refused $?)"
     prepare_user_manager
 
     # A running process would keep what it read when it started: `start` would change nothing.
@@ -611,14 +604,15 @@ reported_version() {
 # The index's version and its OpenSearch index are `-` where its .version cannot be read or names no
 # index, so a .version of several lines never adds one here; `check` says why.
 do_status() {
-    local index index_version='-' opensearch_index='-'
+    local index version named index_version='-' opensearch_index='-'
 
     prepare_user_manager
 
     index=$(env_value INDEX_LOCATION "$ENV_FILE" || true)
-    if [ -n "$index" ] && [ -f "${index}/.version" ] && [ -r "${index}/.version" ]; then
-        index_version=$(version_in "${index}/.version")
-        opensearch_index=$(index_name "$index_version") || { index_version='-'; opensearch_index='-'; }
+    if [ -n "$index" ] && [ -f "${index}/.version" ] && [ -r "${index}/.version" ] &&
+        version=$(version_in "${index}/.version") && named=$(index_name "$version"); then
+        index_version=$version
+        opensearch_index=$named
     fi
 
     printf 'status_format=1\n'
@@ -628,7 +622,7 @@ do_status() {
     printf 'port=%s\n' "$(env_value PORT "$ENV_FILE" || true)"
     printf 'active=%s\n' "$(systemctl --user is-active "$SERVICE" || true)"
     printf 'index_location=%s\n' "$index"
-    printf 'index_version=%s\n' "${index_version:--}"
+    printf 'index_version=%s\n' "$index_version"
     printf 'opensearch_index=%s\n' "$opensearch_index"
     printf 'api_lock=%s\n' "$API_LOCK"
 }
@@ -642,6 +636,15 @@ trap 'on_signal INT' INT
 trap 'on_signal TERM' TERM
 trap 'on_signal HUP' HUP
 trap clean_staging EXIT
+
+# The commands that change the service take the API lock before they read their flags, so one that is
+# refused has done nothing.
+case $command in
+    deploy | rollback | stop | start)
+        take_api_lock || die "$(api_lock_refused $?)"
+        locked=true
+        ;;
+esac
 
 case $command in
     # A host with problems is a check's "no", exit 1. Said here, since do_check also answers the

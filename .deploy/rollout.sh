@@ -370,16 +370,16 @@ report_fleet_versions() {
 # wrong architecture matches its checksum and still cannot run, and learning that from the first
 # server means that server is already out of the pool.
 preflight() {
-    local lines=$1 name host port backends server failures=0 versions='' in_haproxy=true
+    local lines=$1 name host port backends server failures=0 versions=''
 
-    check_haproxy_backends "$lines" || { failures=$((failures + 1)); in_haproxy=false; }
+    check_haproxy_backends "$lines" || failures=$((failures + 1))
 
     while read -r name host port backends server; do
         [ -n "$name" ] || continue
-        # Only what HAProxy runs has a state to ask about; what it does not is reported above.
-        if [ "$in_haproxy" = true ]; then
-            check_server_up "$name" "${backends}/${server}" || failures=$((failures + 1))
+        if check_server_up "$name" "${backends}/${server}"; then
             check_backend_capacity "$backends" "$server" || [ "$ALLOW_DOWNTIME" = true ] || failures=$((failures + 1))
+        else
+            failures=$((failures + 1))
         fi
         check_server_health "$name" "$host" "$port" || failures=$((failures + 1))
 
@@ -876,6 +876,9 @@ do_status() {
     fi
     printf '\n' >&2
 
+    # Read whatever the inventory's problems, which are said rather than refused: this is what is
+    # run to find out what happened.
+    check_inventory_entries "$INVENTORY" || true
     inventory=$(read_inventory "$INVENTORY" "$ONLY")
 
     printf '%-10s %-22s %-28s %-10s %-10s %s\n' SERVER ADDRESS HAPROXY VERSION VARIANT INDEX
@@ -943,6 +946,8 @@ do_abort() {
 do_ready() {
     local wanted=("$@") inventory name host port backends server chosen=0 restored=0 refused=0
 
+    # A line the inventory cannot be read from is said, and the servers it can be are put back.
+    check_inventory_entries "$INVENTORY" || true
     inventory=$(read_inventory "$INVENTORY" "$ONLY")
     while read -r name host port backends server; do
         [ -n "$name" ] || continue

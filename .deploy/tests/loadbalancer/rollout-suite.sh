@@ -69,7 +69,15 @@ for ((i=0; i<${#args[@]}; i++)); do
     https://github.com/*) url=${args[i]} ;;
   esac
 done
-if [ -n "$upload" ]; then cat "$upload" >> /tmp/mail.txt; exit 0; fi
+# A server named in /tmp/maint-after-mail leaves the pool once the mail saying it is back is sent,
+# which is after the rollout put it back and before it turns to the next server.
+if [ -n "$upload" ]; then
+  cat "$upload" >> /tmp/mail.txt
+  if [ -f /tmp/maint-after-mail ] && grep -q "$(cat /tmp/maint-after-mail) is on" "$upload"; then
+    /work/loadbalancer/haproxy.sh maint "all_handlers,db_handlers/$(cat /tmp/maint-after-mail)" >/dev/null 2>&1
+  fi
+  exit 0
+fi
 # A server the deploy broke: healthy during preflight, not afterwards.
 for a in "$@"; do
   case $a in
@@ -214,10 +222,17 @@ check "check_server_ready passes on the report" "$(grep -c '^index_version=2026.
 one_check "REMOTE_DEPLOY=/nonexistent/deploy.sh check_server_ready patty patty"
 check "and fails where deploy.sh is not installed" "$?" "1"
 check "saying so" "$(grep -c 'check: patty has no /nonexistent/deploy.sh; run the server install there first' /tmp/one-check.log)" "1"
+cp /tmp/fake-deploy.sh /tmp/not-executable.sh && chmod 644 /tmp/not-executable.sh
+one_check "REMOTE_DEPLOY=/tmp/not-executable.sh check_server_ready patty patty"
+check "and where it cannot be run" "$?" "1"
+check "saying that instead" "$(grep -c 'check: patty cannot run /tmp/not-executable.sh' /tmp/one-check.log)" "1"
+rm -f /tmp/not-executable.sh
 $H maint all_handlers/selma >/dev/null 2>&1; $H maint all_handlers/rick >/dev/null 2>&1
 one_check "check_backend_capacity all_handlers,db_handlers patty"
 check "check_backend_capacity fails" "$?" "1"
-check "and says so" "$(grep -c 'patty is the only server UP in one of all_handlers, db_handlers' /tmp/one-check.log)" "1"
+check "and says so" "$(grep -c 'check: draining patty leaves all_handlers with no server UP' /tmp/one-check.log)" "1"
+one_check "check_backend_capacity all_handlers selma"
+check "but passes for a server already out, which leaves patty" "$?" "0"
 reset_fleet
 one_check "check_backend_capacity all_handlers,db_handlers patty"
 check "check_backend_capacity passes" "$?" "0"
@@ -260,7 +275,7 @@ section "6. the downtime guard refuses to empty the backend"
 /work/loadbalancer/haproxy.sh maint all_handlers/rick >/dev/null 2>&1
 $R --version v2.6.0 --only patty > /tmp/guard.txt 2>&1
 check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"
-check "says outage"    "$(grep -c 'is an outage' /tmp/guard.txt)" "1"
+check "says outage"    "$(grep -c 'check: draining patty leaves all_handlers with no server UP' /tmp/guard.txt)" "1"
 check "before the run, in the preflight" "$(grep -c 'nothing was touched' /tmp/guard.txt)" "1"
 check "patty still UP" "$(/work/loadbalancer/haproxy.sh state all_handlers/patty | cut -d' ' -f1)" "UP"
 
@@ -1053,8 +1068,8 @@ mv /work/loadbalancer/haproxy.real "$H"
 
 reset_fleet
 section "35. capacity is asked again before each drain"
-# Two servers, with the backup out of the pool: the preflight finds each can be spared. While patty
-# is being updated selma leaves the pool too, and by its turn patty is all the backends have left.
+# Two servers, with the backup out of the pool: the preflight finds each can be spared. Once patty is
+# updated and back it leaves the pool again, and by selma's turn selma is all the backends have left.
 cp /work/servers.conf /tmp/servers.keep
 printf 'patty patty 9101 all_handlers,db_handlers patty\nselma selma 9102 all_handlers,db_handlers selma\n' > /work/servers.conf
 $H maint all_handlers,db_handlers/rick >/dev/null 2>&1
@@ -1065,22 +1080,24 @@ for a in "${args[@]}"; do case $a in -o|BatchMode=yes|ConnectTimeout=10|ServerAl
 echo "SSH:$cmd" >> /tmp/ssh.log
 case "$cmd" in
   *"deploy.sh check"*) printf 'variant=hybrid\nport=80\nindex_version=2026.09-test\nproblems=0\n'; exit 0 ;;
-  *"deploy --from"*)   case "$cmd" in *patty*) /work/loadbalancer/haproxy.sh maint all_handlers,db_handlers/selma >/dev/null 2>&1 ;; esac; exit 0 ;;
+  *"deploy --from"*)   exit 0 ;;
   *status*)            printf 'version=2.6.0\nprevious=2.5.3\nvariant=hybrid\nport=80\nactive=active\n'; exit 0 ;;
 esac
 exit 0
 EOF
 chmod +x /usr/local/bin/ssh
 : > /tmp/ssh.log
+echo patty > /tmp/maint-after-mail
 $R --version v2.6.0 >/tmp/r42.txt 2>&1
 check "exit non-zero"          "$([ $? -ne 0 ] && echo yes)" "yes"
+rm -f /tmp/maint-after-mail
 check "the preflight passed"   "$(grep -c 'preflight passed' /tmp/r42.txt)" "1"
 check "and patty was updated"  "$(grep -c 'deploy --from' /tmp/ssh.log)" "1"
-check "then selma was refused" "$(grep -c 'check: selma is the only server UP in one of all_handlers, db_handlers' /tmp/r42.txt)" "1"
+check "then selma was refused" "$(grep -c 'check: draining selma leaves .* with no server UP' /tmp/r42.txt)" "2"
 check "and not drained"        "$(grep -c 'selma was not drained' /tmp/r42.txt)" "1"
 cp /tmp/servers.keep /work/servers.conf
 cp /tmp/ssh.keep /usr/local/bin/ssh
-$H ready all_handlers,db_handlers/selma >/dev/null 2>&1
+$H ready all_handlers,db_handlers/patty >/dev/null 2>&1
 $H ready all_handlers,db_handlers/rick >/dev/null 2>&1
 
 # The fake backends hold stdout open; without this a pipe on the outside never sees EOF.

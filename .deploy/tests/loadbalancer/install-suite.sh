@@ -117,6 +117,20 @@ check "exit non-zero"  "$([ $? -ne 0 ] && echo yes)" "yes"
 check "names the uri"  "$(grep -c 'db_handlers checks /private_api/metadata.json' /tmp/i4.log)" "1"
 cp /tmp/haproxy.cfg.keep /etc/haproxy/haproxy.cfg
 
+section "a socket HAProxy does not answer on is named, and no fragment written"
+# What a stopped HAProxy can leave behind: the socket file, with nothing listening on it.
+mv /run/haproxy/haproxy.sock /run/haproxy/live.sock
+socat UNIX-LISTEN:/run/haproxy/haproxy.sock,unlink-close=0 /dev/null >/dev/null 2>&1 &
+stale=$!
+for _ in $(seq 50); do [ -S /run/haproxy/haproxy.sock ] && break; sleep 0.1; done
+kill "$stale" 2>/dev/null; wait "$stale" 2>/dev/null
+rm -f /tmp/unipept-haproxy-fragment.cfg
+/deploy/loadbalancer/install.sh >/tmp/i4c.log 2>&1
+check "exit non-zero"  "$([ $? -ne 0 ] && echo yes)" "yes"
+check "says so"        "$(grep -c 'check: HAProxy does not answer on /run/haproxy/haproxy.sock' /tmp/i4c.log)" "1"
+check "and writes no fragment" "$([ -e /tmp/unipept-haproxy-fragment.cfg ] && echo written || echo none)" "none"
+mv -f /run/haproxy/live.sock /run/haproxy/haproxy.sock
+
 section "a socket only root can use is named"
 chmod 600 /run/haproxy/haproxy.sock
 /deploy/loadbalancer/install.sh >/tmp/i4b.log 2>&1

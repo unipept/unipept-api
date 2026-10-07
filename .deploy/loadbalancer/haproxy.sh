@@ -33,11 +33,10 @@ usage: haproxy.sh <command> <backend[,backend...]>/<server> [arguments]
   wait-empty <target> <secs>   wait until every backend reports no open sessions
   wait-up <target> <secs>      wait until every backend reports UP
   up-count <backend>           print how many servers in one backend are UP
-  least-up <backend[,...]>     print the smallest UP count across the backends
   is-backup <target>           exit 0 when the server is a backup in any of its backends
   servers                      print "backend/server" for every server HAProxy runs
 
-Every command but state, sessions, up-count, least-up and servers takes several backends at once.
+Every command but state, sessions, up-count and servers takes several backends at once.
 The socket path comes from HAPROXY_SOCKET.
 EOF
     exit 2
@@ -194,16 +193,6 @@ up_count() {
     '
 }
 
-# The thinnest of the backends, which is the one a drain empties first.
-least_up() {
-    local backend count least=''
-    for backend in ${1//,/ }; do
-        count=$(up_count "$backend")
-        if [ -z "$least" ] || [ "$count" -lt "$least" ]; then least=$count; fi
-    done
-    printf '%s\n' "${least:-0}"
-}
-
 # Whether HAProxy considers this server a backup, in any of the backends it sits in.
 #
 # Read from the `bck` field rather than from the inventory, so there is one source of truth for what a
@@ -279,7 +268,6 @@ case $command in
     wait-empty) [ $# -eq 2 ] || usage; wait_empty "$1" "$2" ;;
     wait-up) [ $# -eq 2 ] || usage; wait_up "$1" "$2" ;;
     up-count) up_count "$1" ;;
-    least-up) least_up "$1" ;;
     is-backup) is_backup "$1" ;;
     servers) servers ;;
     *) usage ;;

@@ -59,7 +59,7 @@ $H maint all_handlers,db_handlers/patty >/dev/null 2>&1
 check "maint in both"     "$($H states all_handlers,db_handlers/patty)" "all_handlers=MAINT db_handlers=MAINT "
 $H ready all_handlers,db_handlers/patty >/dev/null 2>&1
 $H wait-up all_handlers,db_handlers/patty 60 >/dev/null 2>&1; check "one wait-up covers both" "$?" "0"
-check "least-up across both" "$($H least-up all_handlers,db_handlers)" "3"
+check "back in both" "$($H up-count all_handlers) $($H up-count db_handlers)" "3 3"
 
 section "3c. a backend that does not hold the server is refused"
 $H drain all_handlers,nosuch/patty >/tmp/e4 2>&1; check "exit non-zero" "$([ $? -ne 0 ] && echo yes)" "yes"

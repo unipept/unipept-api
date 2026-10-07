@@ -50,7 +50,7 @@ readonly FRAGMENT=/tmp/unipept-haproxy-fragment.cfg
 readonly INVENTORY=${CONFIG}/servers.conf
 readonly HAPROXY=${HERE}/haproxy.sh
 
-require chown curl getent install sha256sum socat ssh scp flock logger usermod
+require chown curl getent install sha256sum socat ssh scp sudo flock logger usermod
 [ "$(id -u)" -eq 0 ] || die "run this as root. Rollouts themselves run as ${OPERATOR}."
 id "$OPERATOR" >/dev/null 2>&1 || die "there is no ${OPERATOR} account on this host"
 

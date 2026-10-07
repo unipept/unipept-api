@@ -61,11 +61,14 @@ check_inventory_entries() {
 }
 
 # The admin socket is how a rollout drains and restores a server, and the haproxy group is how the
-# operator reaches it.
+# operator reaches it. HAProxy has to answer on it too: a socket left behind by one that stopped is
+# still a socket.
 check_haproxy_socket() {
     local socket=$1 config=$2 mode
 
     [ -S "$socket" ] || { log "check: no HAProxy admin socket at ${socket}"; return 1; }
+    HAPROXY_SOCKET=$socket "$HAPROXY" servers >/dev/null \
+        || { log "check: HAProxy does not answer on ${socket}"; return 1; }
     mode=$(stat -c %a "$socket")
     case $mode in
         66* | 77*) ;;
@@ -86,13 +89,15 @@ check_haproxy_socket() {
 check_haproxy_backends() {
     local lines=$1 running name backends server backend missing=''
 
-    running=$("$HAPROXY" servers 2>/dev/null) \
-        || { log "check: HAProxy does not answer on ${HAPROXY_SOCKET}"; return 1; }
+    running=$("$HAPROXY" servers) || { log "check: HAProxy does not answer on ${HAPROXY_SOCKET}"; return 1; }
 
     while read -r name _ _ backends server _; do
         [ -n "$name" ] || continue
         for backend in ${backends//,/ }; do
-            printf '%s\n' "$running" | grep -qxF "${backend}/${server}" || missing="${missing}${backend}/${server} "
+            case $'\n'"${running}"$'\n' in
+                *$'\n'"${backend}/${server}"$'\n'*) ;;
+                *) missing="${missing}${backend}/${server} " ;;
+            esac
         done
     done <<<"$lines"
 
@@ -130,7 +135,7 @@ check_haproxy_health_uris() {
 check_server_up() {
     local name=$1 target=$2 states
 
-    states=$("$HAPROXY" states "$target" 2>/dev/null) \
+    states=$("$HAPROXY" states "$target") \
         || { log "check: HAProxy cannot say how it sees ${name}, ${target}"; return 1; }
     printf '%s' "$states" | grep -qE '^([[:alnum:]_.-]+=UP[^=]*)+$' \
         || { log "check: ${name} is ${states}"; return 1; }
@@ -163,8 +168,9 @@ check_server_ready() {
     report=$(on_host "$host" "${REMOTE_DEPLOY} check $*" 2>&1) || status=$?
     case $status in
         0) printf '%s\n' "$report" ;;
-        # What the remote shell answers for a command it cannot find or run.
-        126 | 127) log "check: ${name} has no ${REMOTE_DEPLOY}; run the server install there first"; return 1 ;;
+        # What the remote shell answers for a command it cannot find, and for one it cannot run.
+        127) log "check: ${name} has no ${REMOTE_DEPLOY}; run the server install there first"; return 1 ;;
+        126) log "check: ${name} cannot run ${REMOTE_DEPLOY}; run the server install there again"; return 1 ;;
         *)
             log "check: ${name} is not ready:"
             printf '%s\n' "$report" | sed 's/^/    /' >&2
@@ -182,13 +188,20 @@ check_fleet_index() {
         || { log "check: the fleet does not agree on an index: ${versions}; --allow-index-mismatch accepts that"; return 1; }
 }
 
-# Another server stays UP in every backend this one sits in, so draining it is not an outage. Asked
-# before the run and again before each drain, since capacity can move in between.
+# Another server stays UP in every backend this one sits in, so draining it is not an outage. A
+# backup counts: with the primaries out, it is what answers. Asked before the run and again before
+# each drain, since capacity can move in between.
 check_backend_capacity() {
-    local backends=$1 server=$2 thinnest
+    local backends=$1 server=$2 status=0 backend up state
 
-    thinnest=$("$HAPROXY" least-up "$backends" 2>/dev/null) \
-        || { log "check: HAProxy cannot say how many servers are UP in ${backends//,/, }"; return 1; }
-    [ "$thinnest" -gt 1 ] \
-        || { log "check: ${server} is the only server UP in one of ${backends//,/, }; draining it is an outage, which --allow-downtime accepts"; return 1; }
+    for backend in ${backends//,/ }; do
+        if ! up=$("$HAPROXY" up-count "$backend") || ! state=$("$HAPROXY" state "${backend}/${server}"); then
+            log "check: HAProxy cannot say which servers are UP in ${backend}"
+            return 1
+        fi
+        case $state in UP*) up=$((up - 1)) ;; esac
+        [ "$up" -ge 1 ] \
+            || { log "check: draining ${server} leaves ${backend} with no server UP; --allow-downtime accepts that"; status=1; }
+    done
+    return "$status"
 }

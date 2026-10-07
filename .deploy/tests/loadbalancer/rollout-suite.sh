@@ -160,6 +160,8 @@ $R --dry-run > /tmp/usage.txt 2>&1; check "exit 2" "$?" "2"
 $R --version > /tmp/usage2.txt 2>&1
 check "valueless --version exits 2" "$?" "2"
 check "and says usage" "$(grep -c 'usage:' /tmp/usage2.txt)" "1"
+$R --version v2.6.0 --inventory /work/servers.conf --dry-run > /tmp/usage3.txt 2>&1
+check "--inventory is a usage error" "$?" "2"
 
 section "4b. every server is reached, not just the first"
 # ssh reads stdin; without -n the first call would swallow the rest of the inventory.
@@ -458,9 +460,10 @@ $R --version v2.6.0 >/tmp/idx.txt 2>&1
 check "exit non-zero"        "$([ $? -ne 0 ] && echo yes)" "yes"
 check "says does not agree"  "$(grep -c 'does not agree on an index' /tmp/idx.txt)" "1"
 check "nothing drained"      "$(/work/loadbalancer/haproxy.sh state all_handlers/patty | cut -d' ' -f1)" "UP"
+check "says what to do"      "$(grep -c 'finish the database switch first' /tmp/idx.txt)" "1"
+# There is no flag to roll out over it.
 $R --version v2.6.0 --allow-index-mismatch >/tmp/idx2.txt 2>&1
-check "override proceeds"    "$(grep -c 'does not agree' /tmp/idx2.txt)" "1"
-check "and reached the servers" "$([ "$(grep -c '=== ' /tmp/idx2.txt)" -ge 1 ] && echo yes)" "yes"
+check "--allow-index-mismatch is a usage error" "$?" "2"
 
 reset_fleet
 section "14. staging is cleared on every path, and the run is recorded"

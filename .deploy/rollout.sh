@@ -138,8 +138,6 @@ usage: rollout.sh --version <tag> [options]
   --only <name>            one server from the inventory, rather than all of them
   --dry-run                say what would happen, change nothing
   --allow-downtime         proceed even when draining leaves a backend with no server UP
-  --allow-index-mismatch   proceed even when the fleet does not agree on an index version
-  --inventory <path>       inventory file, default servers.conf beside this script
 
   status                   read the fleet and change nothing: HAProxy state, version, variant and
                            index version per server, and what a rollout in progress is doing. What
@@ -165,7 +163,6 @@ VERSION=''
 ONLY=''
 DRY_RUN=false
 ALLOW_DOWNTIME=false
-ALLOW_INDEX_MISMATCH=false
 
 # name -> the status line that server reported after its deploy, for the closing summary.
 declare -A STATUS=()
@@ -211,10 +208,8 @@ while [ $# -gt 0 ]; do
         status | abort | ready) COMMAND=$1; shift; break ;;
         --version) [ $# -ge 2 ] || usage; VERSION=$2; shift 2 ;;
         --only) [ $# -ge 2 ] || usage; ONLY=$2; shift 2 ;;
-        --inventory) [ $# -ge 2 ] || usage; INVENTORY=$2; shift 2 ;;
         --dry-run) DRY_RUN=true; shift ;;
         --allow-downtime) ALLOW_DOWNTIME=true; shift ;;
-        --allow-index-mismatch) ALLOW_INDEX_MISMATCH=true; shift ;;
         *) usage ;;
     esac
 done
@@ -398,7 +393,7 @@ preflight() {
         TIMEOUT_OF[$name]=$asked
     done <<<"$lines"
 
-    check_fleet_index "$versions" || [ "$ALLOW_INDEX_MISMATCH" = true ] || failures=$((failures + 1))
+    check_fleet_index "$versions" || failures=$((failures + 1))
 
     [ "$failures" -eq 0 ] || die "${failures} preflight problem(s); nothing was touched"
     log "preflight passed: ${versions}"

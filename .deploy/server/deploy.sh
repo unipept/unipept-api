@@ -58,14 +58,8 @@
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
 
-# Beside this script once install.sh has placed both in /opt/unipept-api/lib, one level up in a
-# repository checkout.
 # shellcheck source=../lib.sh
-if [ -f "${HERE}/lib.sh" ]; then
-    source "${HERE}/lib.sh"
-else
-    source "${HERE}/../lib.sh"
-fi
+source "${HERE}/../lib.sh" || exit 2
 # The checks a server is held to, beside this script in a checkout and on a server alike. Missing
 # only where this script was copied on its own, which install.sh never does.
 [ -f "${HERE}/checks.sh" ] || die "there is no checks.sh beside ${HERE}/deploy.sh; run server/install.sh again"

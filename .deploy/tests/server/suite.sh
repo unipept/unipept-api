@@ -243,14 +243,6 @@ SERVICE_USER=unipept ROOT=/opt/unipept-api BINARY=/opt/unipept-api/bin/unipept-a
 source /opt/unipept-api/deploy/server/checks.sh
 $1 || exit 1" >/tmp/one-check.log 2>&1
 }
-# Passes on the host case above found ready, and fails on a host or an input made bad for it, saying
-# what is wrong.
-both_ways() {
-  local name=$1 good=$2 bad=$3 says=$4
-  one_check "$good"; check "${name} passes" "$?" "0"
-  one_check "$bad"; check "${name} fails" "$?" "1"
-  check "and says so" "$(grep -c -- "$says" /tmp/one-check.log)" "1"
-}
 mkdir -p /tmp/bad-index && chmod 755 /tmp/bad-index
 printf 'PORT=eighty\nVARIANT=mmap\n' > /tmp/bad.env && chmod 644 /tmp/bad.env
 total=$(awk '$1 == "MemTotal:" { print $2 * 1024 }' /proc/meminfo)

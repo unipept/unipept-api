@@ -185,13 +185,6 @@ on_host() { bash -c \"\$2\"; }
 source /work/loadbalancer/checks.sh
 $1 || exit 1" >/tmp/one-check.log 2>&1
 }
-both_ways() {
-  local name=$1 good=$2 bad=$3 says=$4
-  one_check "$good"; check "${name} passes" "$?" "0"
-  check "and prints nothing" "$(grep -c 'check:' /tmp/one-check.log)" "0"
-  one_check "$bad"; check "${name} fails" "$?" "1"
-  check "and says so" "$(grep -c -- "$says" /tmp/one-check.log)" "1"
-}
 printf 'patty patty 9101 all_handlers patty\npatty selma 9102 all_handlers selma\n' > /tmp/twice.conf
 sed 's#uri /health/database#uri /private_api/metadata.json#' /etc/haproxy/haproxy.cfg > /tmp/bad-haproxy.cfg
 good_line='patty patty 9101 all_handlers,db_handlers patty'
@@ -228,7 +221,7 @@ check "and says so" "$(grep -c 'patty is the only server UP in one of all_handle
 reset_fleet
 one_check "check_backend_capacity all_handlers,db_handlers patty"
 check "check_backend_capacity passes" "$?" "0"
-# check_fleet_index is rollout.sh's own, and case 13 runs it through a rollout.
+# check_fleet_index uses rollout.sh's distinct_values, so case 13 runs it through a rollout.
 rm -f /tmp/twice.conf /tmp/bad-haproxy.cfg
 
 section "4e. a backend HAProxy does not run is named, with the line the install's audit uses"

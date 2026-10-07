@@ -457,7 +457,7 @@ check "start clears it: exit 0" "$?" "0"
 check "back on the first" "$(as_user 'systemctl --user is-active unipept-api')" "active"
 rm -rf /srv/index-next
 
-section "the API lock: what changes the service is refused while another holds it"
+section "the API lock: what changes the service, or installs, is refused while another holds it"
 LOCK=/run/lock/unipept-api.lock
 # Held by another process, on a descriptor opened for reading as the scripts open it. `exec`, so the
 # kill below ends the process that holds it.
@@ -482,7 +482,15 @@ as_user "/opt/unipept-api/lib/deploy.sh status" >/tmp/l2.log 2>&1
 check "status answers meanwhile" "$(sed -n 's/^active=//p' /tmp/l2.log)" "active"
 check "the holder's staged binary left alone" "$(cat /opt/unipept-api/bin/unipept-api.new 2>/dev/null)" "staged"
 rm -f /opt/unipept-api/bin/unipept-api.new
+touch -d '2000-01-01' /opt/unipept-api/lib/deploy.sh
+$R/server/install.sh >/tmp/l7.log 2>&1
+check "install.sh: exit 2" "$?" "2"
+check "install.sh: says to wait" "$(grep -c "holds ${LOCK}; wait for it to finish. Install once it has finished." /tmp/l7.log)" "1"
+check "install.sh: deploy.sh not replaced" "$(stat -c %Y /opt/unipept-api/lib/deploy.sh)" "$(date -d '2000-01-01' +%s)"
 kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
+$R/server/install.sh >/tmp/l8.log 2>&1
+check "install.sh once it is free: exit 0" "$?" "0"
+check "and replaces deploy.sh" "$([ "$(stat -c %Y /opt/unipept-api/lib/deploy.sh)" != "$(date -d '2000-01-01' +%s)" ] && echo yes)" "yes"
 
 section "the API lock: a caller that holds it hands it down on descriptor 7"
 as_user "exec 7<${LOCK} && flock -n 7 && /opt/unipept-api/lib/deploy.sh stop && /opt/unipept-api/lib/deploy.sh start --timeout 30" >/tmp/l3.log 2>&1
@@ -509,20 +517,6 @@ check "says why" "$(grep -c "cannot create ${LOCK}" /tmp/l6.log)" "1"
 chmod 1777 /run/lock
 mv /tmp/api-lock.keep "$LOCK"
 check "still active" "$(as_user 'systemctl --user is-active unipept-api')" "active"
-
-section "the API lock: install.sh does not replace the scripts while another holds it"
-( flock -n 7 && exec sleep 30 ) 7<"$LOCK" &
-holder=$!
-for _ in $(seq 50); do ( flock -n 7 ) 7<"$LOCK" || break; sleep 0.1; done
-touch -d '2000-01-01' /opt/unipept-api/lib/deploy.sh
-$R/server/install.sh >/tmp/l7.log 2>&1
-check "exit 2" "$?" "2"
-check "says to wait" "$(grep -c "holds ${LOCK}; wait for it to finish. Install once it has finished." /tmp/l7.log)" "1"
-check "deploy.sh not replaced" "$(stat -c %Y /opt/unipept-api/lib/deploy.sh)" "$(date -d '2000-01-01' +%s)"
-kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
-$R/server/install.sh >/tmp/l8.log 2>&1
-check "once it is free: exit 0" "$?" "0"
-check "deploy.sh replaced" "$([ "$(stat -c %Y /opt/unipept-api/lib/deploy.sh)" != "$(date -d '2000-01-01' +%s)" ] && echo yes)" "yes"
 
 section "each failure on its own"
 # A missing index file.

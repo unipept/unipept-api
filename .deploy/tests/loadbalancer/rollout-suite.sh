@@ -216,20 +216,21 @@ both_ways check_haproxy_answers "check_haproxy_answers /run/haproxy/haproxy.sock
   "check_haproxy_answers /run/haproxy/absent.sock" "no HAProxy admin socket at"
 both_ways check_haproxy_answers "check_haproxy_answers /run/haproxy/haproxy.sock" \
   "check_haproxy_answers /tmp/mode.sock" "HAProxy does not answer on /tmp/mode.sock"
-both_ways check_haproxy_answers "check_haproxy_answers /run/haproxy/haproxy.sock" \
-  "check_haproxy_answers /run/haproxy/operator.sock" "is at level operator, and draining a server needs level admin"
+both_ways check_haproxy_level "check_haproxy_level /run/haproxy/haproxy.sock" \
+  "check_haproxy_level /run/haproxy/operator.sock" "is at level operator, and draining a server needs level admin"
 su outsider -s /bin/bash -c "source /work/lib.sh; HAPROXY=/work/loadbalancer/haproxy.sh; source /work/loadbalancer/checks.sh; check_haproxy_answers /tmp/closed.sock || exit 1" >/tmp/one-check.log 2>&1
 check "check_haproxy_answers fails for a user who cannot use the socket" "$?" "1"
 check "and says so" "$(grep -c 'check: outsider cannot use /tmp/closed.sock; join the haproxy group' /tmp/one-check.log)" "1"
 both_ways check_haproxy_socket_mode "check_haproxy_socket_mode /tmp/mode.sock /etc/haproxy/haproxy.cfg" \
-  "check_haproxy_socket_mode /tmp/closed.sock /etc/haproxy/haproxy.cfg" "the admin socket is mode 600, so only root can use it"
+  "check_haproxy_socket_mode /tmp/closed.sock /etc/haproxy/haproxy.cfg" "has group haproxy and mode 600, which the haproxy group cannot use"
 chmod 760 /tmp/mode.sock
 one_check "check_haproxy_socket_mode /tmp/mode.sock /etc/haproxy/haproxy.cfg"
 check "check_haproxy_socket_mode takes a group that can read and write" "$?" "0"
 chmod 660 /tmp/mode.sock; chgrp root /tmp/mode.sock
 one_check "check_haproxy_socket_mode /tmp/mode.sock /etc/haproxy/haproxy.cfg"
 check "check_haproxy_socket_mode fails for another group's socket" "$?" "1"
-check "and says so" "$(grep -c 'belongs to the group root, so the haproxy group cannot use it' /tmp/one-check.log)" "1"
+check "and says so" "$(grep -c 'has group root and mode 660, which the haproxy group cannot use' /tmp/one-check.log)" "1"
+check "and what to set" "$(grep -c 'stats socket /tmp/mode.sock mode 660 group haproxy level admin' /tmp/one-check.log)" "1"
 both_ways check_haproxy_backends "check_haproxy_backends patty all_handlers,db_handlers patty" \
   "check_haproxy_backends patty all_handlers,absent_backend patty" "HAProxy is not running absent_backend/patty, which the inventory names for patty$"
 both_ways check_haproxy_health_uris "check_haproxy_health_uris /tmp/commented-haproxy.cfg" \
@@ -241,7 +242,8 @@ $H ready db_handlers/selma >/dev/null 2>&1
 both_ways check_server_health "check_server_health patty 127.0.0.1 9101" \
   "check_server_health patty 127.0.0.1 9199" "does not answer /health/database"
 both_ways check_server_reachable "check_server_reachable patty patty" \
-  "on_host() { return 255; }; check_server_reachable patty patty" "cannot reach patty at patty over ssh"
+  "on_host() { echo 'Permission denied (publickey).' >&2; return 255; }; check_server_reachable patty patty" "cannot reach patty at patty over ssh"
+check "with what ssh said under it" "$(grep -c '^    Permission denied (publickey).' /tmp/one-check.log)" "1"
 both_ways check_server_ready "check_server_ready patty patty" \
   "FAKE_CHECK_FAILS='the index is missing' check_server_ready patty patty" "check: patty is not ready"
 check "with the server's own lines under it" "$(grep -c '^    check: the index is missing' /tmp/one-check.log)" "1"
@@ -284,6 +286,16 @@ check "for every server, once" "$(grep -c 'check: HAProxy is not running' /tmp/a
 check "and nothing else of HAProxy" "$(grep -c 'check: HAProxy cannot say\|^Error:.*not in every one of' /tmp/absent.txt)" "0"
 check "nothing was touched" "$(grep -c 'nothing was touched' /tmp/absent.txt)" "1"
 cp /tmp/servers.keep /work/servers.conf
+
+section "4f. a socket that will not take a drain stops the run before anything is fetched"
+: > /tmp/curl-args.log
+sed -i 's#^HAPROXY_SOCKET=.*#HAPROXY_SOCKET=/run/haproxy/operator.sock#' /work/rollout.conf
+$R --version v2.6.0 >/tmp/level.txt 2>&1
+check "exit 2"           "$?" "2"
+sed -i 's#^HAPROXY_SOCKET=.*#HAPROXY_SOCKET=/run/haproxy/haproxy.sock#' /work/rollout.conf
+check "names the level"  "$(grep -c 'check: /run/haproxy/operator.sock is at level operator' /tmp/level.txt)" "1"
+check "nothing was touched" "$(grep -c 'nothing was touched' /tmp/level.txt)" "1"
+check "nothing fetched"  "$(grep -c 'github.com' /tmp/curl-args.log)" "0"
 
 section "5. preflight refuses a fleet that is already down"
 /work/loadbalancer/haproxy.sh maint all_handlers/selma >/dev/null 2>&1

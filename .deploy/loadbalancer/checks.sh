@@ -76,19 +76,22 @@ check_inventory_entries() {
 }
 
 # The admin socket is how a rollout drains and restores a server. Whoever runs this has to be able to
-# use it, HAProxy has to answer on it — a socket left behind by one that stopped is still a socket —
-# and at the admin level, which every change of a server's state needs.
+# use it, and HAProxy has to answer on it: a socket left behind by one that stopped is still a socket.
 check_haproxy_answers() {
-    local socket=$1 level
+    local socket=$1
 
     [ -S "$socket" ] || { log "check: no HAProxy admin socket at ${socket}"; return 1; }
     [ -r "$socket" ] && [ -w "$socket" ] \
         || { log "check: $(id -un) cannot use ${socket}; join the haproxy group, and log in again"; return 1; }
-    if ! level=$(HAPROXY_SOCKET=$socket "$HAPROXY" level 2>/dev/null) \
-        || ! HAPROXY_SOCKET=$socket "$HAPROXY" servers >/dev/null 2>&1; then
-        log "check: HAProxy does not answer on ${socket}"
-        return 1
-    fi
+    HAPROXY_SOCKET=$socket "$HAPROXY" level >/dev/null 2>&1 \
+        || { log "check: HAProxy does not answer on ${socket}"; return 1; }
+}
+
+# Every change of a server's state is an admin command, so a socket at a lower level lets a rollout
+# read the fleet and refuses its first drain.
+check_haproxy_level() {
+    local socket=$1 level
+    level=$(HAPROXY_SOCKET=$socket "$HAPROXY" level 2>/dev/null) || true
     [ "$level" = admin ] \
         || { log "check: ${socket} is at level ${level:-unknown}, and draining a server needs level admin"; return 1; }
 }
@@ -100,19 +103,15 @@ check_haproxy_socket_mode() {
 
     read -r group mode < <(stat -c '%G %a' "$socket" 2>/dev/null) \
         || { log "check: cannot read the mode of ${socket}"; return 1; }
-    [ "$group" = haproxy ] \
-        || { log "check: ${socket} belongs to the group ${group}, so the haproxy group cannot use it"; return 1; }
     case ${mode: -2:1} in
-        6 | 7) ;;
-        *)
-            log "check: the admin socket is mode ${mode}, so only root can use it. In ${config}, change"
-            log "check:     stats socket ${socket} mode ${mode} level admin"
-            log "check: to  stats socket ${socket} mode 660 level admin"
-            log "check: and reload HAProxy. Do that now rather than during a rollout: a reload returns a"
-            log "check: draining server to rotation."
-            return 1
-            ;;
+        6 | 7) [ "$group" != haproxy ] || return 0 ;;
     esac
+    log "check: ${socket} has group ${group} and mode ${mode}, which the haproxy group cannot use. In"
+    log "check: ${config}, give the stats socket line"
+    log "check:     stats socket ${socket} mode 660 group haproxy level admin"
+    log "check: and reload HAProxy. Do that now rather than during a rollout: a reload returns a"
+    log "check: draining server to rotation."
+    return 1
 }
 
 # Every backend the inventory names for a server holds it in what HAProxy is actually running, which
@@ -182,8 +181,12 @@ check_server_health() {
 # Reached at all. Apart from check_server_ready, so a host that is not reached says so, rather than
 # that it is not ready.
 check_server_reachable() {
-    local name=$1 host=$2
-    on_host "$host" true 2>/dev/null || { log "check: cannot reach ${name} at ${host} over ssh"; return 1; }
+    local name=$1 host=$2 said
+    said=$(on_host "$host" true 2>&1) || {
+        log "check: cannot reach ${name} at ${host} over ssh:"
+        printf '%s\n' "$said" | sed 's/^/    /' >&2
+        return 1
+    }
 }
 
 # deploy.sh is installed there and its `check` passes, with any arguments given passed on to it. Its

@@ -362,10 +362,6 @@ report_fleet_versions() {
 preflight() {
     local lines=$1 name host port backends server failures=0 versions=''
 
-    # Every check below asks HAProxy, so one that cannot be asked is said once, before anything is
-    # staged.
-    check_haproxy_answers "$HAPROXY_SOCKET" || die "nothing was touched"
-
     while read -r name host port backends server; do
         [ -n "$name" ] || continue
         if check_haproxy_backends "$name" "$backends" "$server" && check_server_up "$name" "${backends}/${server}"; then
@@ -975,6 +971,11 @@ main() {
     # Read once and passed around, rather than re-read by each phase that wants it.
     local inventory
     check_inventory_entries "$INVENTORY" || die "the inventory, ${INVENTORY}, has the problems above"
+    # Everything from ordering the servers on asks HAProxy, so one that cannot be asked, or will not
+    # take a drain, is said once, before anything is fetched or staged.
+    if ! check_haproxy_answers "$HAPROXY_SOCKET" || ! check_haproxy_level "$HAPROXY_SOCKET"; then
+        die "nothing was touched"
+    fi
     inventory=$(read_inventory "$INVENTORY" "$ONLY")
 
     local -a servers=()

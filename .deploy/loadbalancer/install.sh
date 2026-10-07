@@ -24,8 +24,8 @@
 #      loadbalancer/ scripts and lib.sh relative to itself.
 #   5. Put the operator in the haproxy group, which is what reaches the admin socket.
 #   6. Check the inventory.
-#   7. Read the socket path out of haproxy.cfg, and check that HAProxy answers on it and that its
-#      mode lets that group use it.
+#   7. Take the socket rollout.conf names, or else the one haproxy.cfg opens, and check that HAProxy
+#      answers on it, at level admin, and that its group and mode let the haproxy group use it.
 #   8. Ask the socket what HAProxy is running. Report every server the inventory expects in a
 #      backend that is not there, and write the configuration to add to /tmp.
 #   9. Check the health route each of the two backends checks, in haproxy.cfg.
@@ -183,14 +183,17 @@ check_inventory_entries "$INVENTORY" || problems=$((problems + 1))
 
 inventory=$(read_inventory "$INVENTORY")
 
-# `|| true` because pipefail turns a missing haproxy.cfg into a fatal exit here, which
+# The socket rollouts use, which rollout.conf names; else the first haproxy.cfg opens. `|| true`
+# because pipefail turns a missing haproxy.cfg into a fatal exit here, which
 # check_haproxy_health_uris below exists to report.
-socket=$(sed -n 's/.*stats socket \([^ ]*\).*/\1/p' "$HAPROXY_CONFIG" 2>/dev/null | head -1 || true)
+socket=$(conf_value HAPROXY_SOCKET)
+[ -n "$socket" ] || socket=$(sed -n '/^[[:space:]]*#/d; s/.*stats socket \([^ ]*\).*/\1/p' "$HAPROXY_CONFIG" 2>/dev/null | head -1 || true)
 socket=${socket:-/run/haproxy/haproxy.sock}
 [ -r "$HAPROXY_CONFIG" ] || log "no ${HAPROXY_CONFIG} to read; assuming ${socket}"
 export HAPROXY_SOCKET=$socket
 
 if check_haproxy_answers "$socket"; then
+    check_haproxy_level "$socket" || problems=$((problems + 1))
     check_haproxy_socket_mode "$socket" "$HAPROXY_CONFIG" || problems=$((problems + 1))
 
     missing=0

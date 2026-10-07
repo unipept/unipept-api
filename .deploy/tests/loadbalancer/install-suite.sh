@@ -134,12 +134,22 @@ check "says so"        "$(grep -c 'check: HAProxy does not answer on /run/haprox
 check "and writes no fragment" "$([ -e /tmp/unipept-haproxy-fragment.cfg ] && echo written || echo none)" "none"
 mv -f /run/haproxy/live.sock /run/haproxy/haproxy.sock
 
+section "the socket rollout.conf names is the one audited, and a wrong level hides nothing else"
+cp /etc/unipept-rollout/rollout.conf /tmp/rollout.conf.keep
+sed -i 's#^HAPROXY_SOCKET=.*#HAPROXY_SOCKET=/run/haproxy/operator.sock#' /etc/unipept-rollout/rollout.conf
+chgrp haproxy /run/haproxy/operator.sock
+/deploy/loadbalancer/install.sh >/tmp/i4d.log 2>&1
+check "exit non-zero"  "$([ $? -ne 0 ] && echo yes)" "yes"
+check "names that socket's level" "$(grep -c 'check: /run/haproxy/operator.sock is at level operator' /tmp/i4d.log)" "1"
+check "and still compares the backends" "$(grep -c 'is in every backend it names' /tmp/i4d.log)" "1"
+cp /tmp/rollout.conf.keep /etc/unipept-rollout/rollout.conf
+
 section "a socket only root can use is named, and the backends are still compared"
 sed -i 's#all_handlers,db_handlers#all_handlers,absent_backend#' /etc/unipept-rollout/servers.conf
 chmod 600 /run/haproxy/haproxy.sock
 /deploy/loadbalancer/install.sh >/tmp/i4b.log 2>&1
 check "exit non-zero"  "$([ $? -ne 0 ] && echo yes)" "yes"
-check "says so"        "$(grep -c 'check: the admin socket is mode 600, so only root can use it' /tmp/i4b.log)" "1"
+check "says so"        "$(grep -c 'check: /run/haproxy/haproxy.sock has group haproxy and mode 600, which the haproxy group cannot use' /tmp/i4b.log)" "1"
 check "and names what is missing too" "$(grep -c 'check: HAProxy is not running absent_backend/patty' /tmp/i4b.log)" "1"
 sed -i 's#all_handlers,absent_backend#all_handlers,db_handlers#' /etc/unipept-rollout/servers.conf
 chmod 666 /run/haproxy/haproxy.sock

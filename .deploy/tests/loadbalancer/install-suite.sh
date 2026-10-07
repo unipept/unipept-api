@@ -213,7 +213,7 @@ section "the installed rollout can find haproxy.sh"
 # sort the backup as a primary.
 # What the checkout holds of what the load balancer runs, by its path in the install, which mirrors it.
 mirrored_files() {
-  { echo lib.sh; find /deploy/lib -name '*.sh' -printf 'lib/%f\n'; printf 'loadbalancer/%s\n' checks.sh haproxy.sh; echo rollout.sh; } | sort
+  { echo lib.sh; find /deploy/lib -name '*.sh' -printf 'lib/%f\n'; printf 'loadbalancer/%s\n' checks.sh haproxy.sh journal.sh state.sh; echo rollout.sh; } | sort
 }
 installed_files() { (cd /opt/unipept-rollout && find -L lib lib.sh loadbalancer rollout.sh -type f | sort); }
 check "the install mirrors the checkout, file for file" "$(installed_files)" "$(mirrored_files)"

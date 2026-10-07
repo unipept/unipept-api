@@ -19,9 +19,9 @@
 #   3. Write /etc/unipept-rollout/rollout.conf and servers.conf from the examples, or keep the ones
 #      already there.
 #   4. Take the rollout lock, so no rollout runs from the files while they are replaced. Install
-#      rollout.sh, loadbalancer/haproxy.sh and checks.sh, lib.sh and the parts it loads from lib/
-#      in /opt/unipept-rollout, in the shape of the checkout, because rollout.sh resolves the
-#      loadbalancer/ scripts and lib.sh relative to itself.
+#      rollout.sh, loadbalancer/ (haproxy.sh, checks.sh, journal.sh and state.sh), lib.sh and the
+#      parts it loads from lib/ in /opt/unipept-rollout, in the shape of the checkout, because
+#      rollout.sh resolves the loadbalancer/ scripts and lib.sh relative to itself.
 #   5. Put the operator in the haproxy group, which is what reaches the admin socket.
 #   6. Check the inventory.
 #   7. Take the socket rollout.conf names, or else the one haproxy.cfg opens, and check that HAProxy
@@ -166,7 +166,7 @@ install -m 0644 "${SOURCE}/lib/"*.sh "${release}/lib/"
 install -m 0644 "${SOURCE}/lib.sh" "${release}/lib.sh"
 install -m 0755 "${SOURCE}/rollout.sh" "${release}/rollout.sh"
 install -m 0755 "${HERE}/haproxy.sh" "${release}/loadbalancer/haproxy.sh"
-install -m 0644 "${HERE}/checks.sh" "${release}/loadbalancer/checks.sh"
+install -m 0644 "${HERE}/checks.sh" "${HERE}/journal.sh" "${HERE}/state.sh" "${release}/loadbalancer/"
 switch_release "$ROOT" "$release_id" lib lib.sh loadbalancer rollout.sh
 log "installed the scripts in ${ROOT}"
 

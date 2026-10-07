@@ -43,7 +43,10 @@ readonly HERE
 # shellcheck source=lib.sh
 source "${HERE}/lib.sh"
 
-readonly HAPROXY="${HERE}/loadbalancer/haproxy.sh"
+# Resolved through every link, so installed it is the haproxy.sh of the release this run started from,
+# however long the run, and not of whichever release an install puts in place meanwhile.
+HAPROXY="$(cd -P "${HERE}/loadbalancer" && pwd)/haproxy.sh"
+readonly HAPROXY
 
 # This host's own settings live outside the checkout, because the inventory names the fleet and the
 # configuration names where failures are emailed. Beside the script is the fallback, so running from

@@ -70,9 +70,9 @@ unknown_option() {
 # renamed over it, which is atomic, so each file a script opens from then on is the new release's,
 # and an install stopped part way leaves the one before in place. Each ENTRY of ROOT, what the
 # scripts are run and found by, is a link through it, release/ENTRY, made where it is not one
-# already. The release it replaces stays until the next, for a run that opened its script there and
-# a shell whose working directory is in it; every other entry of releases/ goes, what an install
-# stopped part way left among them.
+# already. The release it replaces stays until the next, for a run that resolved its paths into it;
+# every other entry of releases/ goes, what an install stopped part way left among them. A leftover
+# that cannot be removed is said and left, since the new release is in place by then.
 switch_release() {
     local root=$1 id=$2 entry before
     shift 2
@@ -86,7 +86,8 @@ switch_release() {
         rm -rf "${root:?}/${entry}"
         ln -s "release/${entry}" "${root}/${entry}"
     done
-    find "${root}/releases" -mindepth 1 -maxdepth 1 ! -name "$id" ! -name "${before#releases/}" -exec rm -rf {} +
+    find "${root}/releases" -mindepth 1 -maxdepth 1 ! -name "$id" ! -name "${before#releases/}" -exec rm -rf {} + \
+        || log "could not remove every old release in ${root}/releases (above); what is left there is unused"
 }
 
 # The ERR trap: a command that failed where nothing expected it to. Names the script, the command,

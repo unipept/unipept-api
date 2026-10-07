@@ -79,7 +79,7 @@ fi
 # What the run in progress is doing, for `status` to read and `abort` to signal. Beside the lock
 # rather than in it: the lock is opened for reading, so nothing can be written through it. Fixed, as
 # the lock is: set after the configuration, so nothing there changes it.
-readonly RUN_STATE="${ROLLOUT_LOCK%.lock}.state"
+readonly RUN_STATE=/run/lock/unipept-rollout.state
 
 export HAPROXY_SOCKET NOTIFY_TO NOTIFY_SMTP
 
@@ -222,9 +222,8 @@ require curl sha256sum socat ssh scp flock logger
 # lock to clear by hand.
 #
 # `status` and `abort` take nothing. Both exist to be run while a rollout is going: one reads, and
-# the other has to find the lock held to have anything to do. Taking it here meant `status` failed
-# during a rollout, which is the one time it is worth running — and the message below said to run
-# it.
+# the other has to find the lock held to have anything to do. Taking it would make `status` fail
+# during a rollout, the one time it is worth running, and the message below says to run it.
 #
 # loadbalancer/install.sh takes it too while it replaces the scripts, so a run never loads a mix of
 # two releases.
@@ -833,8 +832,9 @@ record_run() {
 
 # Makes the state file writable by this run before anything depends on it.
 #
-# Unlike the lock, this one is written, and the operator and root take it in turns: a file either
-# leaves behind at the default mode is one the other cannot rewrite. `note_phase` tolerates a failed
+# Unlike the lock, this one is written, and the operator and root take it in turns: the operator
+# cannot rewrite root's file at the default mode, and root cannot rewrite the operator's in sticky
+# /run/lock at any mode. `note_phase` tolerates a failed
 # write so a rollout is never lost to one, which is exactly why it has to be settled here instead —
 # a silent failure there leaves `status` and `abort` reading a phase that has moved on.
 prepare_run_state() {

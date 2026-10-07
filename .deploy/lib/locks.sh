@@ -3,7 +3,8 @@
 # The locks that keep the deploy scripts on one host from working on the same thing at once: the
 # rollout's own, which rollout.sh holds for a run and loadbalancer/install.sh while it replaces the
 # scripts a run loads; and the API's, which deploy.sh holds while it changes the service and
-# server/install.sh while it replaces deploy.sh. Uses die, from core.sh. Sourced through .deploy/lib.sh.
+# server/install.sh while it replaces the scripts, the unit and the port redirect. Needs nothing
+# else. Sourced through .deploy/lib.sh.
 
 # Where the locks are: in /run/lock, which every account can make a file in and nothing ages out.
 # Fixed, so every script that takes one names the same file. The API lock is taken by more than this
@@ -32,7 +33,6 @@ open_lock() {
     case $fd in
         7) { exec 7< "$lock"; } 2> /dev/null || return 3 ;;
         9) { exec 9< "$lock"; } 2> /dev/null || return 3 ;;
-        *) die "open_lock takes descriptor 7 or 9, not ${fd}" ;;
     esac
 }
 
@@ -59,7 +59,8 @@ rollout_lock_refused() {
 # A caller that holds it hands it down by leaving descriptor 7 open on it, and this then takes that
 # descriptor rather than open the file again: flock ties a lock to the open file, not to the process,
 # so a second open would conflict with the caller's own lock. On the descriptor handed down, flock
-# succeeds where the caller holds the lock, and takes it where nobody does.
+# succeeds where the caller holds the lock, and takes it where nobody does, for as long as the caller
+# keeps the descriptor open.
 take_api_lock() {
     [ /dev/fd/7 -ef "$API_LOCK" ] || open_lock 7 "$API_LOCK" || return
     flock -n 7
@@ -68,7 +69,7 @@ take_api_lock() {
 # What a script that could not take the API lock says, by why.
 api_lock_refused() {
     case $1 in
-        1) echo "a deploy, rollback, start or stop, or a change to the index this host serves, holds ${API_LOCK}; wait for it to finish" ;;
+        1) echo "a deploy, rollback, start or stop, an install, or a change to the index this host serves, holds ${API_LOCK}; wait for it to finish" ;;
         2) echo "cannot create ${API_LOCK}; /run/lock has to let every account make a file in it" ;;
         *) echo "cannot read ${API_LOCK}, which belongs to $(stat -c %U "$API_LOCK" 2> /dev/null || echo someone)" ;;
     esac

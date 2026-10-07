@@ -46,9 +46,8 @@ require chown curl getent install sha256sum socat ssh scp flock logger usermod
 [ "$(id -u)" -eq 0 ] || die "run this as root. Rollouts themselves run as ${OPERATOR}."
 id "$OPERATOR" >/dev/null 2>&1 || die "there is no ${OPERATOR} account on this host"
 
-# This runs as root, and sources rollout.conf for the audit. One that another user
-# could write would hand that user root, whoever owns it now, so it is refused rather than taken back
-# and read.
+# This runs as root, and sources rollout.conf for the audit. One that another user could write would
+# hand that user root, whoever owns it now, so it is refused rather than taken back and read.
 if [ -e "${CONFIG}/rollout.conf" ]; then
     case "$(stat -c '%U %A' "${CONFIG}/rollout.conf")" in
         "root -rw-r--r--" | "root -rw-------" | "root -r--r--r--" | "root -r--------") ;;

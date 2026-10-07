@@ -77,18 +77,19 @@ during an outage. `/health/database` reports the outage itself.
 
 `deploy`, `rollback`, `stop` and `start` hold `/run/lock/unipept-api.lock` while they run, and are
 refused rather than kept waiting while something else holds it; `server/install.sh` holds it while it
-replaces the scripts. `check` and `status` take none, so both answer meanwhile.
+replaces the scripts, the unit and the port redirect. `check` and `status` take none, so both answer
+meanwhile.
 
 Whatever changes the index a host serves has to keep a deploy out between its `stop` and its
 `start`. It takes the lock itself, on file descriptor 7, and runs `deploy.sh` with that descriptor
-still open; `deploy.sh` then takes the lock through it instead of being refused:
+still open; `deploy.sh` then takes the lock through it instead of being refused.
 
-The file is in `/run/lock`, which is emptied at boot, so it may not be there yet: make it, 0644 so
-every account can open it, then open it for reading. Opened to write, or to create once it is
-there, another account's file in sticky `/run/lock` is refused.
+`status` names the lock as `api_lock`. It is in `/run/lock`, which is emptied at boot, so it may not
+be there yet: make it, 0644 so every account can open it, then open it for reading. Opened to write,
+or to create once it is there, another account's file in sticky `/run/lock` is refused. So:
 
 ```bash
-lock=/run/lock/unipept-api.lock
+lock=$(/opt/unipept-api/lib/deploy.sh status | sed -n 's/^api_lock=//p')
 [ -e "$lock" ] || (umask 022 && : > "$lock") 2>/dev/null
 exec 7<"$lock" && flock -n 7 || exit 1
 /opt/unipept-api/lib/deploy.sh stop
@@ -110,7 +111,7 @@ caller refuses one it does not know.
 | `variant`, `port` | from the environment file |
 | `active` | what systemd says of the unit |
 | `index_location` | `INDEX_LOCATION` as configured |
-| `index_version` | the `.version` there, or `-` where it cannot be read |
+| `index_version` | the `.version` there, or `-` where it cannot be read or names no index |
 | `opensearch_index` | the OpenSearch index of that version, or `-` |
 | `api_lock` | the path of the API lock |
 

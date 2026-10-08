@@ -13,8 +13,8 @@
 # moment. Where something is missing, the fragment is written out and the operator applies it.
 #
 # Flow:
-#   1. Check that every command it uses is installed, that this runs as root, and that the operator
-#      account exists.
+#   1. Check that this runs as root, install socat where it is missing, and check that every other
+#      command it uses is installed and that the operator account exists.
 #   2. Refuse a rollout.conf anyone but root can write: this runs as root and sources it.
 #   3. Write /etc/unipept-rollout/rollout.conf and servers.conf from the examples, or keep the ones
 #      already there.
@@ -51,8 +51,15 @@ readonly FRAGMENT=/tmp/unipept-haproxy-fragment.cfg
 readonly INVENTORY=${CONFIG}/servers.conf
 readonly HAPROXY=${HERE}/haproxy.sh
 
-require chown curl getent install sha256sum socat ssh scp sudo flock logger usermod
 [ "$(id -u)" -eq 0 ] || die "run this as root. Rollouts themselves run as ${OPERATOR}."
+# haproxy.sh reaches HAProxy's runtime socket through socat, which a stock Ubuntu does not have. The
+# rest of what the scripts use is there already.
+if ! command -v socat >/dev/null; then
+    log "installing socat"
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq socat
+fi
+require chown curl getent install sha256sum socat ssh scp sudo flock logger usermod
 id "$OPERATOR" >/dev/null 2>&1 || die "there is no ${OPERATOR} account on this host"
 
 # This runs as root, and sources rollout.conf for the audit. One that another user could write would

@@ -12,10 +12,10 @@
 #
 # Flow:
 #   1. Load rollout.conf, parse the arguments, and take a lock, so only one rollout runs at a time.
-#   2. A subcommand instead of a rollout: `status` prints what a run in progress is doing and then
-#      the fleet; `abort` stops a run and waits for it to put its server back; `ready` returns
-#      servers to the pool. None needs a release. `status` and `abort` take no lock, because both
-#      are for running while a rollout is.
+#   2. A subcommand instead of a rollout, from loadbalancer/state.sh: `status` prints what a run in
+#      progress is doing and then the fleet; `abort` stops a run and waits for it to put its server
+#      back; `ready` returns servers to the pool. None needs a release. `status` and `abort` take no
+#      lock, because both are for running while a rollout is.
 #   3. Check the inventory, read it, and order the servers primaries first, backups last.
 #   4. --dry-run prints what each server holds and how the load balancer sees it, and stops.
 #   5. Phase 0: download the release on the load balancer, once per variant the fleet asks for, and
@@ -33,9 +33,9 @@
 #      server what actually happened, acts on the answer, and stops the run, so the servers after
 #      it are never touched.
 #   8. Phase 3: on every exit, including a signal. Clear the staging directory on every server it
-#      reached, write one journal line per server, and email if an update failed or a server is out
-#      of the pool — a server this run drained and never put back included, which is what an
-#      interrupted install leaves behind.
+#      reached, and through loadbalancer/journal.sh write one journal line per server and email if
+#      an update failed or a server is out of the pool — a server this run drained and never put
+#      back included, which is what an interrupted install leaves behind.
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly HERE
@@ -44,15 +44,21 @@ readonly HERE
 # shellcheck source=lib.sh
 source "${HERE}/lib.sh"
 
-# Resolved through every link, so installed it is the haproxy.sh and checks.sh of the release this
-# run started from, however long the run, and not of whichever release an install puts in place
+# Resolved through every link, so installed it is the loadbalancer/ scripts of the release this run
+# started from, however long the run, and not of whichever release an install puts in place
 # meanwhile.
 LOADBALANCER="$(cd -P "${HERE}/loadbalancer" && pwd)"
 readonly LOADBALANCER
 readonly HAPROXY="${LOADBALANCER}/haproxy.sh"
-[ -f "${LOADBALANCER}/checks.sh" ] || die "there is no checks.sh in ${LOADBALANCER}; run loadbalancer/install.sh again"
+for part in checks.sh journal.sh state.sh; do
+    [ -f "${LOADBALANCER}/${part}" ] || die "there is no ${part} in ${LOADBALANCER}; run loadbalancer/install.sh again"
+done
 # shellcheck source=loadbalancer/checks.sh
 source "${LOADBALANCER}/checks.sh"
+# shellcheck source=loadbalancer/journal.sh
+source "${LOADBALANCER}/journal.sh"
+# shellcheck source=loadbalancer/state.sh
+source "${LOADBALANCER}/state.sh"
 
 # This host's own settings live outside the checkout, because the inventory names the fleet and the
 # configuration names where failures are emailed. Beside the script is the fallback, so running from
@@ -93,40 +99,6 @@ readonly RUN_STATE=/run/lock/unipept-rollout.state
 
 export HAPROXY_SOCKET NOTIFY_TO NOTIFY_SMTP
 
-# Sends one message to the team, through the MTA this host already runs for HAProxy's email-alert.
-#
-# curl rather than mail or sendmail: neither is installed on a stock Ubuntu 24.04, and curl is
-# already required here. The hostname goes in the URL path so that EHLO does not announce a filename.
-#
-# Never fatal. A rollout that has just failed must not also fail at telling somebody.
-notify() {
-    local subject=$1 body=$2 message
-
-    if [ -z "${NOTIFY_TO:-}" ]; then
-        log "no NOTIFY_TO set, so nobody was emailed: ${subject}"
-        return 0
-    fi
-
-    message=$(mktemp)
-    {
-        printf 'From: %s\n' "${NOTIFY_FROM:-unipept-rollout@$(hostname -f 2>/dev/null || hostname)}"
-        printf 'To: %s\n' "$NOTIFY_TO"
-        printf 'Subject: %s\n\n' "$subject"
-        printf '%s\n' "$body"
-    } > "$message"
-
-    if curl -s --max-time 20 \
-        --url "smtp://${NOTIFY_SMTP:-127.0.0.1:25}/$(hostname -f 2>/dev/null || hostname)" \
-        --mail-from "${NOTIFY_FROM:-unipept-rollout@$(hostname -f 2>/dev/null || hostname)}" \
-        --mail-rcpt "$NOTIFY_TO" --upload-file "$message"; then
-        log "emailed ${NOTIFY_TO}: ${subject}"
-    else
-        log "could not email ${NOTIFY_TO}; the message was: ${subject}"
-    fi
-    rm -f "$message"
-    return 0
-}
-
 usage() {
     cat >&2 <<'EOF'
 usage: rollout.sh --version <tag> [options]
@@ -138,8 +110,6 @@ usage: rollout.sh --version <tag> [options]
   --only <name>            one server from the inventory, rather than all of them
   --dry-run                say what would happen, change nothing
   --allow-downtime         proceed even when draining leaves a backend with no server UP
-  --allow-index-mismatch   proceed even when the fleet does not agree on an index version
-  --inventory <path>       inventory file, default servers.conf beside this script
 
   status                   read the fleet and change nothing: HAProxy state, version, variant and
                            index version per server, and what a rollout in progress is doing. What
@@ -165,7 +135,6 @@ VERSION=''
 ONLY=''
 DRY_RUN=false
 ALLOW_DOWNTIME=false
-ALLOW_INDEX_MISMATCH=false
 
 # name -> the status line that server reported after its deploy, for the closing summary.
 declare -A STATUS=()
@@ -178,14 +147,6 @@ declare -A TIMEOUT_OF=()
 declare -A VERSION_BEFORE=()
 # Hosts that have a staging directory, so the cleanup reaches every one of them.
 STAGED_ON=''
-# Servers this run left out of the pool or down, which is what the team is told about.
-FAILED_UPDATE=''
-NEEDS_ATTENTION=''
-# Servers this run updated and put back, for the mail that closes it.
-UPDATED=''
-# The same servers, names only, for the record to iterate over.
-FAILED_NAMES=''
-DOWN_NAMES=''
 # Who to name in the record and the mail. SUDO_USER first, so a run through sudo names the person.
 readonly RUN_BY="${SUDO_USER:-$(id -un)}"
 STARTED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -211,10 +172,8 @@ while [ $# -gt 0 ]; do
         status | abort | ready) COMMAND=$1; shift; break ;;
         --version) [ $# -ge 2 ] || usage; VERSION=$2; shift 2 ;;
         --only) [ $# -ge 2 ] || usage; ONLY=$2; shift 2 ;;
-        --inventory) [ $# -ge 2 ] || usage; INVENTORY=$2; shift 2 ;;
         --dry-run) DRY_RUN=true; shift ;;
         --allow-downtime) ALLOW_DOWNTIME=true; shift ;;
-        --allow-index-mismatch) ALLOW_INDEX_MISMATCH=true; shift ;;
         *) usage ;;
     esac
 done
@@ -398,7 +357,7 @@ preflight() {
         TIMEOUT_OF[$name]=$asked
     done <<<"$lines"
 
-    check_fleet_index "$versions" || [ "$ALLOW_INDEX_MISMATCH" = true ] || failures=$((failures + 1))
+    check_fleet_index "$versions" || failures=$((failures + 1))
 
     [ "$failures" -eq 0 ] || die "${failures} preflight problem(s); nothing was touched"
     log "preflight passed: ${versions}"
@@ -595,37 +554,11 @@ resolve_failure() {
     die "stopped at ${name}; the servers after it were not touched"
 }
 
-# A server that took the release and went back into the pool.
-#
-# Mailed from here rather than left to HAProxy's email-alert, which fires on every state change in
-# every backend: eighteen messages for a fleet of three, none of them about the release.
-note_updated() {
-    local name=$1
-
-    UPDATED="${UPDATED}${name} "
-    notify "[unipept-rollout] ${name} is on ${VERSION}" \
-"${name} took ${VERSION#v} and is back in every backend it belongs to.
-
-  $(printf '%s' "${STATUS[$name]:-unknown}" | tr '\n' ' ')
-
-Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
-}
-
-# An update that failed but left the fleet serving. Worth an email, not an alarm.
-#
-# Two lists: one to read, one to iterate. Splitting "patty (serving 2.5.3)" on whitespace was logging
-# a journal line that claimed the server was called "2.5.3)".
-note_failed_update() {
-    FAILED_UPDATE="${FAILED_UPDATE}${1} (serving ${2:-unknown}) "
-    FAILED_NAMES="${FAILED_NAMES}${1} "
-}
-
-# A server nobody can route to. This is the case that has to reach a person.
-note_down() {
-    NEEDS_ATTENTION="${NEEDS_ATTENTION}${1} [${2}] "
-    DOWN_NAMES="${DOWN_NAMES}${1} "
-    # Left out of the pool, but said so. `finish` reports only what nothing else did.
-    CURRENT_TARGET=''
+# The lines of a server's `deploy.sh status` that the closing summary and the journal keep: what it
+# runs and serves. Not INDEX_LOCATION, whose spaces would split a journal line, nor the lock's path or
+# the format, which say nothing about the run.
+recorded() {
+    grep -E '^(version|previous|variant|port|active|index_version|opensearch_index)=' || true
 }
 
 # Installs the already-staged binary and verifies the result from here, rather than trusting what the
@@ -691,280 +624,9 @@ finish() {
 
     record_run "$status"
 
-    # Two texts for the one state, because a subcommand reaches it too. `ready` takes no --version
-    # and attempts no fleet, so the rollout wording mailed "A rollout of  left a server" and sent
-    # the operator looking for servers after it that were never part of the run. Keyed the way
-    # record_run is keyed: a run that set out to change something has a VERSION, and nothing else
-    # does.
-    if [ -n "$NEEDS_ATTENTION" ] && [ -n "$VERSION" ]; then
-        notify "[unipept-rollout] a server needs attention on $(hostname -s)" \
-"A rollout of ${VERSION} left a server that cannot be routed to.
-
-  ${NEEDS_ATTENTION}
-
-The servers after it were not attempted, so the rest of the fleet is untouched.
-
-To see the fleet:      ${HERE}/rollout.sh status
-To return a server:    ${HERE}/loadbalancer/haproxy.sh ready <backends>/<server>
-On the server itself:  ${REMOTE_DEPLOY} status
-
-Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
-    elif [ -n "$NEEDS_ATTENTION" ]; then
-        notify "[unipept-rollout] a server needs attention on $(hostname -s)" \
-"'rollout.sh ${COMMAND}' could not return a server to the pool.
-
-  ${NEEDS_ATTENTION}
-
-No rollout was running, so nothing else on the fleet was touched.
-
-To see the fleet:      ${HERE}/rollout.sh status
-To return a server:    ${HERE}/loadbalancer/haproxy.sh ready <backends>/<server>
-On the server itself:  ${REMOTE_DEPLOY} status
-
-Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
-    elif [ -n "$FAILED_UPDATE" ]; then
-        notify "[unipept-rollout] ${VERSION} was rolled back on $(hostname -s)" \
-"A rollout of ${VERSION} stopped and the fleet is serving its previous version.
-
-  ${FAILED_UPDATE}
-
-Every server is in the pool. The servers after the failure were not attempted, so the fleet is
-consistent only if this was the first one. Check with:
-
-  ${HERE}/rollout.sh status
-
-Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
-    elif [ -n "$UPDATED" ] && [ "$status" -eq 0 ]; then
-        # Keyed on a server having been updated, not on VERSION: --dry-run sets that too.
-        notify "[unipept-rollout] ${VERSION} deployed on $(hostname -s)" \
-"Every server this run set out to update is serving ${VERSION#v} and is back in rotation.
-
-  ${UPDATED}
-
-Run by ${RUN_BY} on $(hostname -f 2>/dev/null || hostname)."
-    fi
+    notify_outcome "$status"
     # Returns nothing of its own: the script exits with its own status whatever this returns, and a
     # non-zero return would trip the error trap and turn every "no" into an error.
-}
-
-# The lines of a server's `deploy.sh status` that the closing summary and the journal keep: what it
-# runs and serves. Not INDEX_LOCATION, whose spaces would split a journal line, nor the lock's path or
-# the format, which say nothing about the run.
-recorded() {
-    grep -E '^(version|previous|variant|port|active|index_version|opensearch_index)=' || true
-}
-
-# One journal line per server, so "who deployed what, when" has an answer that outlives a terminal.
-#
-# Only for a run that set out to change something. `status` and the recovery commands take no
-# --version, so recording them wrote `version= ... exit=0` and read back as a rollout of nothing.
-record_run() {
-    local status=$1 name
-
-    [ -n "$VERSION" ] || return 0
-
-    for name in "${!STATUS[@]}"; do
-        logger -t unipept-rollout -- \
-            "version=${VERSION} server=${name} by=${RUN_BY} from=${RUN_FROM:-local} outcome=deployed $(printf '%s' "${STATUS[$name]}" | tr '\n' ' ')"
-    done
-    for name in $FAILED_NAMES; do
-        logger -t unipept-rollout -- "version=${VERSION} server=${name} by=${RUN_BY} from=${RUN_FROM:-local} outcome=rolled-back"
-    done
-    for name in $DOWN_NAMES; do
-        logger -t unipept-rollout -- "version=${VERSION} server=${name} by=${RUN_BY} from=${RUN_FROM:-local} outcome=needs-attention"
-    done
-    logger -t unipept-rollout -- "version=${VERSION} by=${RUN_BY} from=${RUN_FROM:-local} exit=${status}"
-}
-
-# Makes the state file writable by this run before anything depends on it.
-#
-# Unlike the lock, this one is written, and the operator and root take it in turns: the operator
-# cannot rewrite root's file at the default mode, and root cannot rewrite the operator's in sticky
-# /run/lock at any mode. `note_phase` tolerates a failed
-# write so a rollout is never lost to one, which is exactly why it has to be settled here instead —
-# a silent failure there leaves `status` and `abort` reading a phase that has moved on.
-prepare_run_state() {
-    # Another account's file is replaced where this one may remove it, which root may: in sticky
-    # /run/lock, root's write to the operator's file is refused even where its mode allows it, and
-    # the failure would be silent. This run holds the lock, so no other run is using the file.
-    if [ -e "$RUN_STATE" ] && [ ! -O "$RUN_STATE" ]; then
-        rm -f "$RUN_STATE" 2>/dev/null || true
-    fi
-    if [ -e "$RUN_STATE" ] && [ ! -w "$RUN_STATE" ]; then
-        # Naming the owner because they are the only one who can clear it: /run/lock is sticky, so this
-        # account cannot remove a file it does not own however writable the directory looks.
-        die "${RUN_STATE} belongs to $(stat -c %U "$RUN_STATE" 2>/dev/null || echo someone), who has to remove it"
-    fi
-    # 0666 on creation, because the next run is as likely to be the other account. The load balancer
-    # carries operator logins only, and /run/lock is sticky, so nobody else can replace it.
-    if [ ! -e "$RUN_STATE" ]; then
-        (umask 0 && : > "$RUN_STATE") 2>/dev/null ||
-            die "cannot create ${RUN_STATE}; /run/lock has to let every account make a file in it"
-    fi
-}
-
-# Says what this run is doing, for `status` to read and `abort` to signal.
-#
-# Rewritten whole each time rather than appended to, so reading it never has to decide which of two
-# phases is the current one.
-note_phase() {
-    local phase=$1 server=${2:-}
-
-    {
-        printf 'pid=%s\n' "$$"
-        printf 'version=%s\n' "$VERSION"
-        printf 'phase=%s\n' "$phase"
-        printf 'server=%s\n' "$server"
-        printf 'started=%s\n' "$STARTED_AT"
-        printf 'by=%s\n' "$RUN_BY"
-    } > "$RUN_STATE" 2>/dev/null || true
-}
-
-# Whether a rollout is running, decided by the lock rather than by the state file.
-#
-# A run killed uncatchably leaves its state file behind, and nothing in the file can say so. The
-# lock cannot outlive the process that held it, so taking it is the test: if it can be taken, the
-# file is leftovers.
-a_run_is_in_progress() {
-    # No lock file, no run — and said without creating one. `flock` would make it, and a file this
-    # leaves behind as root is one the operator's next rollout has to work around.
-    [ -e "$ROLLOUT_LOCK" ] || return 1
-
-    # Opened for reading on a descriptor of its own for this one command, rather than by
-    # `flock <file>`, which opens it to create it: in sticky /run/lock that is refused on a file
-    # another account made, even to root. Not with `exec`, which would redirect this shell for good:
-    # `exec 8< file 2>/dev/null` sends stderr to /dev/null permanently.
-    #
-    # Taking the lock and letting go is the whole test. A failure for any other reason reads as a
-    # run in progress, which is the answer that refuses to act.
-    ! { flock -n 8; } 2>/dev/null 8< "$ROLLOUT_LOCK"
-}
-
-# Reads the fleet without changing any of it. What to reach for after a run stopped part way, or
-# when "which server is still out of the pool" needs an answer.
-do_status() {
-    local name host port backends server report inventory
-
-    # Before the fleet, because it changes what the fleet below means: a server out of the pool is
-    # expected while a rollout is working on it, and needs attention once nothing is.
-    if a_run_is_in_progress; then
-        if [ -f "$RUN_STATE" ]; then
-            log "a rollout of $(env_value version "$RUN_STATE") is $(env_value phase "$RUN_STATE")$(
-                s=$(env_value server "$RUN_STATE"); [ -n "$s" ] && printf ' %s' "$s")"
-            log "started $(env_value started "$RUN_STATE") by $(env_value by "$RUN_STATE"), pid $(env_value pid "$RUN_STATE")"
-            log "to stop it: ${HERE}/rollout.sh abort"
-        else
-            log "${ROLLOUT_LOCK} is held, but no state file says by what: a rollout starting, or loadbalancer/install.sh replacing these scripts"
-        fi
-    else
-        # Leftovers from a run that was killed uncatchably. Said rather than deleted: it names what
-        # was going on when the machine stopped, and the fleet below is what it left.
-        [ -f "$RUN_STATE" ] && log "no rollout is running; ${RUN_STATE} is from one that did not finish"
-        log "no rollout is running"
-    fi
-    printf '\n' >&2
-
-    # Read whatever the inventory's problems, which are said rather than refused: this is what is
-    # run to find out what happened.
-    check_inventory_entries "$INVENTORY" || true
-    inventory=$(read_inventory "$INVENTORY" "$ONLY")
-
-    printf '%-10s %-22s %-28s %-10s %-10s %s\n' SERVER ADDRESS HAPROXY VERSION VARIANT INDEX
-    while read -r name host port backends server; do
-        [ -n "$name" ] || continue
-        report=$(on_server "$host" status 2>/dev/null || true)
-        printf '%-10s %-22s %-28s %-10s %-10s %s\n' \
-            "$name" "${host}:${port}" \
-            "$("$HAPROXY" states "${backends}/${server}" 2>/dev/null || echo unreachable)" \
-            "$(printf '%s\n' "$report" | env_value version)" \
-            "$(printf '%s\n' "$report" | env_value variant)" \
-            "$(index=$(printf '%s\n' "$report" | env_value index_version); printf '%s\n' "${index:--}")"
-    done <<<"$inventory"
-}
-
-# Stops a rollout that is running, from anywhere.
-#
-# The run restores the server it drained through its own handlers, so this only has to reach them.
-# Ctrl-C cannot, from another terminal: the signal has to go to that process, and until the state
-# file existed there was nothing that said which one it is.
-do_abort() {
-    local pid
-
-    a_run_is_in_progress || die "no rollout is running; ${ROLLOUT_LOCK} is free"
-    [ -f "$RUN_STATE" ] || die "a rollout holds ${ROLLOUT_LOCK} but wrote no ${RUN_STATE}; find it with 'ps'"
-
-    pid=$(env_value pid "$RUN_STATE")
-    case ${pid:-} in
-        '' | *[!0-9]*) die "${RUN_STATE} names no pid to stop" ;;
-    esac
-    kill -0 "$pid" 2>/dev/null || die "pid ${pid} is not running, but the lock is held; find it with 'ps'"
-
-    log "stopping the rollout of $(env_value version "$RUN_STATE") started by $(env_value by "$RUN_STATE")"
-    kill -TERM "$pid" 2>/dev/null || die "could not signal ${pid}"
-
-    # Its children too, and this is the part that makes the signal land. A shell runs a trap when
-    # the command it is waiting on returns, and that command is an ssh running a deploy, which can
-    # be an hour on a host that reads its index. Ending the connection is what Ctrl-C does by
-    # signalling the whole foreground group: deploy.sh takes the HUP it is written for and rolls the
-    # server back, ssh returns, and the run's own handler puts the server in the pool.
-    local child
-    for child in $(ps -o pid= --ppid "$pid" 2>/dev/null); do
-        kill -TERM "$child" 2>/dev/null || true
-    done
-
-    # Until the lock is free, because that is when the run's own cleanup has finished. A server it
-    # had drained is put back by its handlers, not by this.
-    local waited=0
-    while a_run_is_in_progress; do
-        sleep 1
-        waited=$((waited + 1))
-        if [ "$waited" -ge 120 ]; then
-            die "the rollout has not stopped after ${waited}s; check 'rollout.sh status'"
-        fi
-    done
-    log "the rollout stopped. What it left is in 'rollout.sh status'"
-}
-
-# Returns named servers to the pool, or every server that can be.
-#
-# What the mail after a failure asks for. It names `haproxy.sh ready <backends>/<server>`, which
-# means reading the backend list out of the inventory by hand and, worse, going round
-# `return_to_pool`: that is the only thing holding a server to answering both routes, and a server
-# put back without it can take database traffic it cannot serve.
-do_ready() {
-    local wanted=("$@") inventory name host port backends server chosen=0 restored=0 refused=0
-
-    # A line the inventory cannot be read from is said, and the servers it can be are put back.
-    check_inventory_entries "$INVENTORY" || true
-    inventory=$(read_inventory "$INVENTORY" "$ONLY")
-    while read -r name host port backends server; do
-        [ -n "$name" ] || continue
-
-        if [ "${#wanted[@]}" -gt 0 ]; then
-            case " ${wanted[*]} " in *" ${name} "*) ;; *) continue ;; esac
-        fi
-        chosen=$((chosen + 1))
-
-        # Already serving traffic, so there is nothing to put back.
-        case $("$HAPROXY" states "${backends}/${server}") in
-            *MAINT* | *DRAIN*) ;;
-            *) log "${name} is already in the pool"; continue ;;
-        esac
-
-        if return_to_pool "$name" "$host" "$port" "${backends}/${server}"; then
-            restored=$((restored + 1))
-        else
-            refused=$((refused + 1))
-        fi
-    done <<<"$inventory"
-
-    if [ "${#wanted[@]}" -gt 0 ] && [ "$chosen" -ne "${#wanted[@]}" ]; then
-        die "the inventory does not name every one of: ${wanted[*]}"
-    fi
-
-    log "${restored} server(s) returned to the pool, ${refused} still out"
-    # One left out is this command's "no", exit 1, rather than a failed test the error trap reports.
-    [ "$refused" -eq 0 ] || exit 1
 }
 
 main() {

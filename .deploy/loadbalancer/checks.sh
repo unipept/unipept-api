@@ -217,7 +217,7 @@ check_server_ready() {
 check_fleet_index() {
     local versions=$1
     [ "$(distinct_values "$versions")" -le 1 ] \
-        || { log "check: the fleet does not agree on an index: ${versions}; --allow-index-mismatch accepts that"; return 1; }
+        || { log "check: the fleet does not agree on an index: ${versions}; finish the database switch first"; return 1; }
 }
 
 # Another server stays UP in every backend this one sits in, so draining it is not an outage. A

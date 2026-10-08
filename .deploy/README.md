@@ -13,6 +13,8 @@ holding copies.
 | `rollout.conf.example` | load balancer settings. Copy to `rollout.conf` |
 | `loadbalancer/haproxy.sh` | the HAProxy runtime API: drain, ready, wait |
 | `loadbalancer/checks.sh` | what the load balancer and the fleet have to be before a rollout drains a server: one function per check, run by the preflight and by the install's audit |
+| `loadbalancer/journal.sh` | what a rollout leaves for people: a journal line per server, and mail |
+| `loadbalancer/state.sh` | what a rollout in progress is doing, and `status`, `abort` and `ready` |
 | `server/unipept-api.service` | systemd **user** unit, installed at `~unipept/.config/systemd/user/` |
 | `server/unipept-api.env.example` | per-host configuration, installed at `/opt/unipept-api/etc/unipept-api.env` |
 | `server/install.sh` | prepares a host, and updates its scripts. The only step that needs root |
@@ -36,7 +38,7 @@ Both installs lay the scripts out as the checkout does, so each finds `lib.sh` b
 path in both. `server/install.sh` installs them as `/opt/unipept-api/deploy/lib.sh` and
 `/opt/unipept-api/deploy/lib/`, beside `deploy/server/deploy.sh` and its `checks.sh`.
 `loadbalancer/install.sh` installs them as `/opt/unipept-rollout/lib.sh` and
-`/opt/unipept-rollout/lib/`, beside `rollout.sh` and `loadbalancer/haproxy.sh` and its `checks.sh`.
+`/opt/unipept-rollout/lib/`, beside `rollout.sh` and `loadbalancer/`.
 All of it is root's.
 
 Each install builds a release whole in `releases/` and puts it in place with `switch_release` from
@@ -160,9 +162,11 @@ skips that, and can return a server for database traffic it cannot serve.
 A rollout runs in four phases, and the order is the point:
 
 1. **Claim** — one rollout at a time, and download the release once for the whole fleet.
-2. **Check** — every server, before any of them is touched: HAProxy state, both health routes, and
-   `deploy.sh check` with the real binary staged, so a build that cannot run on a host is found
-   before another host is drained. Every problem in the fleet is reported together.
+2. **Check** — every server, before any of them is touched: HAProxy runs it in every backend it
+   names and has it UP, it answers both health routes, the backends can spare it, and
+   `deploy.sh check` passes with the real binary staged, so a build that cannot run on a host is
+   found before another host is drained. The fleet has to agree on one index version. Every problem
+   in the fleet is reported together.
 3. **Update** — one server at a time. It leaves the pool, takes the binary, and returns to the pool
    before the next one starts. Each server is given the deadline it asked for in phase 2.
 4. **Finish** — always: staging cleared on every server, one journal line per server, and the mail.

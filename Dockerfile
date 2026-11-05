@@ -2,9 +2,10 @@
 # 24.04: the release builds on 24.04 and links its glibc.
 FROM ubuntu:24.04
 
-# The API verifies TLS certificates with the system store.
+# ca-certificates: the API verifies TLS certificates with the system store.
+# tini: the API does not handle SIGTERM as PID 1 while it loads the index.
 RUN apt-get update -qq \
- && apt-get install -y -qq --no-install-recommends ca-certificates \
+ && apt-get install -y -qq --no-install-recommends ca-certificates tini \
  && rm -rf /var/lib/apt/lists/*
 
 ARG BINARY
@@ -16,4 +17,4 @@ LABEL org.opencontainers.image.description="Unipept API"
 LABEL org.opencontainers.image.licenses=MIT
 LABEL org.opencontainers.image.version=${VERSION}
 
-ENTRYPOINT ["/usr/local/bin/unipept-api"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/unipept-api"]

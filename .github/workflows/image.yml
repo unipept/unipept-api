@@ -40,6 +40,18 @@ jobs:
       GH_TOKEN: ${{ github.token }}
 
     steps:
+      # A manual run pushes over a published tag, so it builds from the reviewed Dockerfile only.
+      - name: Check a manual run is on the default branch
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/${DEFAULT_BRANCH}" ]; then
+            echo "::error::run this workflow from ${DEFAULT_BRANCH}, not ${GITHUB_REF}"
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v7
 
@@ -51,7 +63,7 @@ jobs:
           version=${TAG#v}
           asset="unipept-api-${version}-x86_64-linux-gnu-${VARIANT}"
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --pattern SHA256SUMS
-          grep " ${asset}\$" SHA256SUMS | sha256sum --check
+          grep -F "  ${asset}" SHA256SUMS | sha256sum --check
           echo "ASSET=${asset}" >> "$GITHUB_ENV"
           echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY}:${version}-${VARIANT}" >> "$GITHUB_ENV"
 

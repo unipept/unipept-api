@@ -1,0 +1,69 @@
+# Pushes ghcr.io/unipept/unipept-api:<version>-<variant> for each variant of a published release.
+# release.yml calls it after the release; a manual run builds the images of an earlier release.
+name: Image
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, for example v2.7.1
+        type: string
+        required: true
+
+concurrency:
+  group: image-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    name: Image ${{ matrix.variant }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [mmap, preloaded, hybrid]
+    env:
+      TAG: ${{ inputs.tag }}
+      VARIANT: ${{ matrix.variant }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # The asset is the binary the release published, checked against the release's own checksums.
+      - name: Download the release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=${TAG#v}
+          asset="unipept-api-${version}-x86_64-linux-gnu-${VARIANT}"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --pattern SHA256SUMS
+          grep " ${asset}\$" SHA256SUMS | sha256sum --check
+          echo "ASSET=${asset}" >> "$GITHUB_ENV"
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY}:${version}-${VARIANT}" >> "$GITHUB_ENV"
+
+      - name: Build the image
+        run: docker build --build-arg "BINARY=${ASSET}" --build-arg "VERSION=${TAG#v}" --tag "$IMAGE" .
+
+      - name: Check the image runs
+        run: docker run --rm "$IMAGE" --version
+
+      - name: Push the image
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE"

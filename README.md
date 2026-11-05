@@ -54,14 +54,6 @@ A release publishes three of these builds: `preloaded` (no features), `mmap`, an
 with all three `preloaded-*` features). Each host selects one with `VARIANT` in its environment
 file.
 
-Each build is also an image, `ghcr.io/unipept/unipept-api:<version>-<variant>`, for example
-`2.7.1-hybrid`. It runs the release binary; the arguments follow the image name:
-
-```
-docker run --network host -v /mnt/data/uniprot-2026-02/suffix-array:/index:ro \
-  ghcr.io/unipept/unipept-api:2.7.1-hybrid -i /index -d http://localhost:9200 -p 8080
-```
-
 ```
 cargo build --release --features mmap
 ```
@@ -71,6 +63,16 @@ tell:
 
 ```
 Index storage backend: sa=mmap text=preloaded proteins=mmap mapping=mmap
+```
+
+Each build is also an image, `ghcr.io/unipept/unipept-api:<version>-<variant>`, for example
+`2.7.1-hybrid`. It runs the release binary; the arguments follow the image name. The stop timeout
+and the file limit are those of the systemd unit:
+
+```
+docker run --network host --stop-timeout 180 --ulimit nofile=65536 \
+  -v /mnt/data/uniprot-2026-02/suffix-array:/index:ro \
+  ghcr.io/unipept/unipept-api:2.7.1-hybrid -i /index -d http://localhost:9200 -p 8080
 ```
 
 ### Which one to use

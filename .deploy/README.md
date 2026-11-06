@@ -215,10 +215,12 @@ journalctl -t unipept-rollout            # who deployed what, when
 
 ## One caution
 
-`set server ... state` is a runtime change and this HAProxy has no `server-state-file`, so **reloading
-or restarting HAProxy during a rollout returns a draining server to rotation** mid-restart. The lock,
-held on `/run/lock/unipept-rollout.lock`, is the signal that a run is in progress: `./rollout.sh status`
-reads it.
+`set server ... state` is a runtime change. unipeptapi keeps it across a reload or restart: its
+`haproxy.cfg` (`api-servers/haproxy` in unipept-apps) loads a `server-state-file`, which
+`haproxy-save-state` writes from the runtime socket just before, through a systemd drop-in. **A reload
+that does not go through `systemctl`, or a load balancer without that drop-in, returns a draining
+server to rotation** mid-restart. The lock, held on `/run/lock/unipept-rollout.lock`, is the signal
+that a run is in progress: `./rollout.sh status` reads it.
 
 ## A user unit, so a deploy needs no privilege
 

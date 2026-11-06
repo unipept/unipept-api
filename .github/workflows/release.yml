@@ -151,3 +151,13 @@ jobs:
             --verify-tag \
             --generate-notes \
             dist/*
+
+  image:
+    name: Images
+    needs: release
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yml
+    with:
+      tag: ${{ github.ref_name }}

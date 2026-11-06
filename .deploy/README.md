@@ -187,12 +187,8 @@ one of those checks lands just after a restart.
 One message per server as it comes back, and one when the run is done: four for a fleet of three.
 A failure adds its own — a server left out of the pool, or an update that was rolled back.
 
-HAProxy mails on state changes too. At `email-alert level notice` that includes a rollout's own
-drain, maintenance and restore: eighteen messages for a fleet of three. `alert` drops those and
-keeps the ones worth waking up for, since a failed health check is alert and an empty backend emerg.
-
-Nothing here edits `haproxy.cfg`, so set that line yourself, on **every** backend with an
-`email-alert` block, and reload outside a rollout — a reload returns a draining server to rotation.
+HAProxy sends no mail. The Grafana alerts on unipeptapps report a server that fails its health
+check and a backend with no server left.
 
 ## A slow host sets its own deadline
 
@@ -219,10 +215,12 @@ journalctl -t unipept-rollout            # who deployed what, when
 
 ## One caution
 
-`set server ... state` is a runtime change and this HAProxy has no `server-state-file`, so **reloading
-or restarting HAProxy during a rollout returns a draining server to rotation** mid-restart. The lock,
-held on `/run/lock/unipept-rollout.lock`, is the signal that a run is in progress: `./rollout.sh status`
-reads it.
+`set server ... state` is a runtime change. unipeptapi keeps it across a reload or restart: its
+`haproxy.cfg` (`api-servers/haproxy` in unipept-apps) loads a `server-state-file`, which
+`haproxy-save-state` writes from the runtime socket just before, through a systemd drop-in. **A reload
+that does not go through `systemctl`, or a load balancer without that drop-in, returns a draining
+server to rotation** mid-restart. The lock, held on `/run/lock/unipept-rollout.lock`, is the signal
+that a run is in progress: `./rollout.sh status` reads it.
 
 ## A user unit, so a deploy needs no privilege
 

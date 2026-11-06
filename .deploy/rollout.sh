@@ -122,9 +122,7 @@ usage: rollout.sh --version <tag> [options]
 A server is drained from every backend its inventory line names, so routing the database
 endpoints to their own backend needs no change here beyond that list.
 
-One mail per server as it comes back, and one when the run is done. HAProxy mails on state changes
-too, unless `email-alert level` is alert, which is what the fragment loadbalancer/install.sh writes
-asks for.
+One mail per server as it comes back, and one when the run is done.
 EOF
     exit 2
 }

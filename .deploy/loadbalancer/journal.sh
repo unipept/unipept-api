@@ -17,7 +17,7 @@ UPDATED=''
 FAILED_NAMES=''
 DOWN_NAMES=''
 
-# Sends one message to the team, through the MTA this host already runs for HAProxy's email-alert.
+# Sends one message to the team, through the MTA on this host.
 #
 # curl rather than mail or sendmail: neither is installed on a stock Ubuntu 24.04, and curl is
 # already required here. The hostname goes in the URL path so that EHLO does not announce a filename.
@@ -52,9 +52,6 @@ notify() {
 }
 
 # A server that took the release and went back into the pool.
-#
-# Mailed from here rather than left to HAProxy's email-alert, which fires on every state change in
-# every backend: eighteen messages for a fleet of three, none of them about the release.
 note_updated() {
     local name=$1
 

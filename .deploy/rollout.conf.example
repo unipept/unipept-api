@@ -15,7 +15,7 @@ HAPROXY_SOCKET=/run/haproxy/haproxy.sock
 SSH_USER=unipept
 
 # Where a failed rollout writes to. Left empty, nobody is emailed and the failure is only in the
-# terminal and the journal. The same address HAProxy's own email-alert uses is the obvious choice.
+# terminal and the journal.
 NOTIFY_TO=unipept@ugent.be
 
 # Uncomment to depart from the defaults.

@@ -187,12 +187,8 @@ one of those checks lands just after a restart.
 One message per server as it comes back, and one when the run is done: four for a fleet of three.
 A failure adds its own — a server left out of the pool, or an update that was rolled back.
 
-HAProxy mails on state changes too. At `email-alert level notice` that includes a rollout's own
-drain, maintenance and restore: eighteen messages for a fleet of three. `alert` drops those and
-keeps the ones worth waking up for, since a failed health check is alert and an empty backend emerg.
-
-Nothing here edits `haproxy.cfg`, so set that line yourself, on **every** backend with an
-`email-alert` block, and reload outside a rollout — a reload returns a draining server to rotation.
+HAProxy sends no mail. The Grafana alerts on unipeptapps report a server that fails its health
+check and a backend with no server left.
 
 ## A slow host sets its own deadline
 

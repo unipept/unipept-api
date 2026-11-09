@@ -322,32 +322,31 @@ dependencies = [
 [[package]]
 name = "binary-traits"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#07ab4f2f834cf7f85d696a2d8fa210b95d611f99"
+source = "git+https://github.com/unipept/unipept-index.git#1f07896116d1e8a48501be6c34f18663ff38aec9"
 
 [[package]]
 name = "bindgen"
-version = "0.72.1"
+version = "0.73.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
+checksum = "787ef8ef523575546b106a58213d6e6b06198a05c2f757258c68a74273670cfa"
 dependencies = [
  "bitflags",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
  "log",
- "prettyplease",
+ "prettyplease 0.3.0",
  "proc-macro2",
  "quote",
  "regex",
  "rustc-hash",
- "shlex",
- "syn 2.0.117",
+ "shlex 2.0.1",
+ "syn 3.0.5",
 ]
 
 [[package]]
 name = "bitarray"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#07ab4f2f834cf7f85d696a2d8fa210b95d611f99"
+source = "git+https://github.com/unipept/unipept-index.git#1f07896116d1e8a48501be6c34f18663ff38aec9"
 dependencies = [
  "memory-hints",
 ]
@@ -416,7 +415,7 @@ dependencies = [
  "find-msvc-tools",
  "jobserver",
  "libc",
- "shlex",
+ "shlex 1.3.0",
 ]
 
 [[package]]
@@ -850,7 +849,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -876,7 +875,7 @@ dependencies = [
 [[package]]
 name = "fa-compression"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#07ab4f2f834cf7f85d696a2d8fa210b95d611f99"
+source = "git+https://github.com/unipept/unipept-index.git#1f07896116d1e8a48501be6c34f18663ff38aec9"
 
 [[package]]
 name = "fastrand"
@@ -1609,7 +1608,7 @@ dependencies = [
 [[package]]
 name = "libsais64-rs"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#07ab4f2f834cf7f85d696a2d8fa210b95d611f99"
+source = "git+https://github.com/unipept/unipept-index.git#1f07896116d1e8a48501be6c34f18663ff38aec9"
 dependencies = [
  "bindgen",
 ]
@@ -1671,7 +1670,7 @@ dependencies = [
 [[package]]
 name = "memory-hints"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#07ab4f2f834cf7f85d696a2d8fa210b95d611f99"
+source = "git+https://github.com/unipept/unipept-index.git#1f07896116d1e8a48501be6c34f18663ff38aec9"
 dependencies = [
  "libc",
  "memmap2",
@@ -1914,6 +1913,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "prettyplease"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bfe0f4c752e450fc2faf62654f1c134747922825d5b04ca717b8874f41a40c0"
+dependencies = [
+ "proc-macro2",
+ "syn 3.0.5",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1925,7 +1934,7 @@ dependencies = [
 [[package]]
 name = "protein-metadata"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#07ab4f2f834cf7f85d696a2d8fa210b95d611f99"
+source = "git+https://github.com/unipept/unipept-index.git#1f07896116d1e8a48501be6c34f18663ff38aec9"
 dependencies = [
  "binary-traits",
  "bytelines",
@@ -1938,7 +1947,7 @@ dependencies = [
 [[package]]
 name = "protein-text"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#07ab4f2f834cf7f85d696a2d8fa210b95d611f99"
+source = "git+https://github.com/unipept/unipept-index.git#1f07896116d1e8a48501be6c34f18663ff38aec9"
 dependencies = [
  "binary-traits",
  "bitarray",
@@ -2000,7 +2009,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2199,7 +2208,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2256,7 +2265,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2292,7 +2301,7 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 [[package]]
 name = "sa-builder"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#07ab4f2f834cf7f85d696a2d8fa210b95d611f99"
+source = "git+https://github.com/unipept/unipept-index.git#1f07896116d1e8a48501be6c34f18663ff38aec9"
 dependencies = [
  "binary-traits",
  "clap",
@@ -2306,7 +2315,7 @@ dependencies = [
 [[package]]
 name = "sa-index"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#07ab4f2f834cf7f85d696a2d8fa210b95d611f99"
+source = "git+https://github.com/unipept/unipept-index.git#1f07896116d1e8a48501be6c34f18663ff38aec9"
 dependencies = [
  "binary-traits",
  "bitarray",
@@ -2323,7 +2332,7 @@ dependencies = [
 [[package]]
 name = "sa-server"
 version = "0.1.0"
-source = "git+https://github.com/unipept/unipept-index.git#07ab4f2f834cf7f85d696a2d8fa210b95d611f99"
+source = "git+https://github.com/unipept/unipept-index.git#1f07896116d1e8a48501be6c34f18663ff38aec9"
 dependencies = [
  "axum",
  "binary-traits",
@@ -2553,6 +2562,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
+name = "shlex"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
+
+[[package]]
 name = "signal-hook-registry"
 version = "1.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2708,7 +2723,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3298,7 +3313,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3563,7 +3578,7 @@ dependencies = [
  "anyhow",
  "heck",
  "indexmap 2.13.0",
- "prettyplease",
+ "prettyplease 0.2.37",
  "syn 2.0.117",
  "wasm-metadata",
  "wit-bindgen-core",
@@ -3577,7 +3592,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c0f9bfd77e6a48eccf51359e3ae77140a7f50b1e2ebfe62422d8afdaffab17a"
 dependencies = [
  "anyhow",
- "prettyplease",
+ "prettyplease 0.2.37",
  "proc-macro2",
  "quote",
  "syn 2.0.117",

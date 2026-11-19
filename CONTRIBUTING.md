@@ -28,13 +28,9 @@ same checks locally:
 | Storage backend aliases | See [Storage backends](#storage-backends) |
 | Run Clippy | `RUSTUP_TOOLCHAIN=stable cargo clippy --workspace --all-targets --all-features -- -D warnings` |
 | Check formatting | `cargo fmt --all --check` |
-| Check the deploy scripts | `shellcheck -x $(git ls-files '*.sh')` |
 | Check documentation | `RUSTUP_TOOLCHAIN=stable RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --document-private-items` |
 
 The MSRV check needs the toolchain installed first: `rustup toolchain install 1.88.0`.
-
-A change to `.deploy/` also has container tests. CI runs them on PRs that change `.deploy/`. They
-are not a required check. See [`.deploy/tests/README.md`](.deploy/tests/README.md).
 
 ## Storage backends
 The storage features select a type for each index structure when the crate compiles. The README

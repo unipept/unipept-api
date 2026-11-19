@@ -67,7 +67,8 @@ Index storage backend: sa=mmap text=preloaded proteins=mmap mapping=mmap
 
 Each build is also an image, `ghcr.io/unipept/unipept-api:<version>-<variant>`, for example
 `2.7.1-hybrid`. It runs the release binary; the arguments follow the image name. The stop timeout
-and the file limit are those of the systemd unit:
+and the file limit are those of the production hosts, in unipept-apps'
+[`api-servers/api/compose.yaml`](https://github.com/unipept/unipept-apps/blob/main/api-servers/api/compose.yaml):
 
 ```
 docker run --network host --stop-timeout 180 --ulimit nofile=65536 \
@@ -105,9 +106,8 @@ default.
 ## Developing the Unipept API
 [`CONTRIBUTING.md`](CONTRIBUTING.md) lists the toolchains and the checks a PR must pass.
 
-The steps below start a development instance. A production host is deployed from
-[`.deploy/`](.deploy/), described on the wiki page
-[Deploying the Unipept API](https://github.com/unipept/unipept-api/wiki/Deploying-the-Unipept-API).
+The steps below start a development instance. The production hosts are deployed with the Ansible
+playbooks in [unipept-apps](https://github.com/unipept/unipept-apps/tree/main/ansible).
 
 You can use the included devcontainer in order to start working on this API.
 The devcontainer will automatically download the most recent version of the Unipept Index built from SwissProt.

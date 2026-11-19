@@ -1,15 +1,16 @@
 //! When the process stops serving.
 //!
-//! systemd sends SIGTERM on `systemctl restart` and waits `TimeoutStopSec` before it kills what is
-//! left. The default disposition for SIGTERM ends the process immediately, so without a handler
-//! every request still being answered is lost. Endpoints here run to a 150-second timeout, and a
-//! rolling deploy restarts each server in turn, so that is real work rather than a rare edge.
+//! Docker sends SIGTERM when it stops the container and waits the stop grace period before it
+//! kills what is left. The default disposition for SIGTERM ends the process immediately, so
+//! without a handler every request still being answered is lost. Endpoints here run to a
+//! 150-second timeout, and a rolling deploy restarts each server in turn, so that is real work
+//! rather than a rare edge.
 
 use tokio::signal::unix::{SignalKind, signal};
 
 /// Resolves when the process is asked to stop, naming the signal that asked.
 ///
-/// SIGTERM is what systemd sends, SIGINT what a terminal sends, and either one means the same
+/// SIGTERM is what Docker sends, SIGINT what a terminal sends, and either one means the same
 /// thing here.
 ///
 /// `axum::serve` polls this from a task it spawns, so the handlers are installed when serving

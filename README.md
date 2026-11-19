@@ -67,7 +67,8 @@ Index storage backend: sa=mmap text=preloaded proteins=mmap mapping=mmap
 
 Each build is also an image, `ghcr.io/unipept/unipept-api:<version>-<variant>`, for example
 `2.7.1-hybrid`. It runs the release binary; the arguments follow the image name. The stop timeout
-and the file limit are those of the systemd unit:
+and the file limit are those of the production hosts, in unipept-apps'
+[`api-servers/api/compose.yaml`](https://github.com/unipept/unipept-apps/blob/main/api-servers/api/compose.yaml):
 
 ```
 docker run --network host --stop-timeout 180 --ulimit nofile=65536 \

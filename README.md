@@ -105,9 +105,8 @@ default.
 ## Developing the Unipept API
 [`CONTRIBUTING.md`](CONTRIBUTING.md) lists the toolchains and the checks a PR must pass.
 
-The steps below start a development instance. A production host is deployed from
-[`.deploy/`](.deploy/), described on the wiki page
-[Deploying the Unipept API](https://github.com/unipept/unipept-api/wiki/Deploying-the-Unipept-API).
+The steps below start a development instance. The production hosts are deployed with the Ansible
+playbooks in [unipept-apps](https://github.com/unipept/unipept-apps/tree/main/ansible).
 
 You can use the included devcontainer in order to start working on this API.
 The devcontainer will automatically download the most recent version of the Unipept Index built from SwissProt.
